@@ -1,13 +1,113 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VELORA | Signup</title>
-</head>
-<body>
+<%- include("../partials/authHeader",{title:"Create Account"}) %>
 
-    <h1>User Signup</h1>
+<main class="flex-1 flex items-center justify-center py-16">
 
-</body>
-</html>
+    <div class="auth-card">
+
+        <h2 class="text-5xl font-medium text-center">
+            Create Account
+        </h2>
+
+        <p class="text-center text-gray-500 mt-5 leading-7">
+            Enter your details to join Velora.
+        </p>
+
+        <form action="/signup" method="POST" class="mt-10 space-y-6">
+
+            <div>
+                <label class="auth-label">
+                    Full Name
+                </label>
+                <input
+                    type="text"
+                    name="name"
+                    class="auth-input"
+                    placeholder="Enter your full name">
+            </div>
+
+            <div>
+                <label class="auth-label">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    name="email"
+                    class="auth-input"
+                    placeholder="Enter your email">
+
+            </div>
+
+            <div>
+                <label class="auth-label">
+                    Phone Number
+                </label>
+
+                <input
+                    type="text"
+                    name="phone"
+                    class="auth-input"
+                    placeholder="Enter your phone number">
+            </div>
+
+            <div>
+                <label class="auth-label">
+                    Password
+                </label>
+
+                <div class="relative">
+
+                    <input
+                        type="password"
+                        name="password"
+                        class="auth-input pr-12"
+                        placeholder="Password">
+
+                    <button
+                        type="button"
+                        class="absolute right-4 top-1/2 -translate-y-1/2">
+                        👁
+                    </button>
+
+                </div>
+            </div>
+
+            <div>
+
+                <label class="auth-label">
+                    Confirm Password
+                </label>
+
+                <div class="relative">
+
+                    <input
+                        type="password"
+                        name="confirmPassword"
+                        class="auth-input pr-12"
+                        placeholder="Confirm password">
+
+                    <button
+                        type="button"
+                        class="absolute right-4 top-1/2 -translate-y-1/2">
+                        👁
+                    </button>
+                </div>
+            </div>
+
+            <button class="primary-btn">
+                CREATE ACCOUNT
+            </button>
+
+        </form>
+        <p class="text-center mt-8 text-gray-500">
+            Already have an account?
+            <a
+                href="/login"
+                class="font-semibold text-black">
+                Sign in
+            </a>
+        </p>
+    </div>
+</main>
+
+<%- include("../partials/authFooter") %>

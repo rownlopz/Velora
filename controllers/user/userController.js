@@ -7,7 +7,9 @@ const loadSignup = (req,res)=>{
 }
 
 const loadLogin = (req, res)=>{
-    res.render("user/login");
+    res.render("user/login",{
+        title:"Login",
+    });
 };
 
 module.exports = {
