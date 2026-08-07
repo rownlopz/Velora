@@ -12,8 +12,29 @@ const loadLogin = (req, res)=>{
     });
 };
 
+const loadOtp = (req,res) => {
+    res.render("user/otp",{
+        title:"OTP Verification"
+    });
+}
+
+const loadForgotPassword = (req,res) =>{
+    res.render("user/forgot-password", {
+        title:"Forget Password"
+    });
+}
+
+const loadResetPassword = (req,res) =>{
+    res.render("user/reset-password",{
+        title:"Reset Password"
+    });
+}
+
 module.exports = {
     loadHome,
     loadSignup,
-    loadLogin
+    loadLogin,
+    loadOtp,
+    loadForgotPassword,
+    loadResetPassword
 };
