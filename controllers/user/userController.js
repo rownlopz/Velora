@@ -1,3 +1,11 @@
+const User = require("../../models/user/userModel");
+const OTP = require("../../models/user/otpModel");
+
+const generateOtp = require("../../utils/generateOtp");
+const sendOtpEmail = require("../../utils/sendOtpEmail");
+
+const { validateSignup } = require("../../helpers/validation");
+
 const loadHome = (req, res)=>{
     res.render("user/home");
 }
@@ -30,11 +38,68 @@ const loadResetPassword = (req,res) =>{
     });
 }
 
+const signup = async (req, res) => {
+   
+
+    try {
+        const error = validateSignup(req.body);
+        if (error) {
+            return res.send(error);
+        }
+
+        const {
+            fullName,
+            email,
+            phone,
+            password
+        } = req.body;
+
+        const existingUser = await User.findOne({
+            email: email.toLowerCase(),
+        });
+
+        if (existingUser) {
+            return res.send("Email already registered");
+        }
+
+        const otp = generateOtp();
+
+        await OTP.deleteMany({
+            email,
+            purpose: "VERIFY_EMAIL",
+        });
+
+        await OTP.create({
+
+            email,
+            otp,
+            purpose: "VERIFY_EMAIL",
+            expiresAt: new Date(Date.now() + 60 * 1000),
+        });
+        await sendOtpEmail(email, otp);
+
+        req.session.signupData = {
+            fullName,
+            email,
+            phone,
+            password,
+
+        };
+        return res.redirect("/otp");
+
+    } catch (error) {
+
+        console.log(error);
+        res.send("Something went wrong");
+    }
+};
+
 module.exports = {
     loadHome,
     loadSignup,
     loadLogin,
     loadOtp,
     loadForgotPassword,
-    loadResetPassword
+    loadResetPassword,
+    signup
 };
