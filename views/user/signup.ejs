@@ -12,7 +12,13 @@
             Enter your details to join Velora.
         </p>
 
-        <form action="/signup" method="POST" class="mt-10 space-y-6">
+        <% if (typeof errors !== 'undefined' && errors.general) { %>
+            <div class="mt-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm text-center">
+                <%= errors.general %>
+            </div>
+        <% } %>
+
+        <form id="signupForm" action="/signup" method="POST" class="mt-10 space-y-6" novalidate>
 
             <div>
                 <label class="auth-label">
@@ -21,84 +27,97 @@
                 <input
                     type="text"
                     name="fullName"
-                    class="auth-input"
+                    id="fullName"
+                    value="<%= typeof formData !== 'undefined' && formData.fullName ? formData.fullName : '' %>"
+                    class="auth-input <%= typeof errors !== 'undefined' && errors.fullName ? 'border-red-500' : '' %>"
                     placeholder="Enter your full name">
+                <p class="text-red-500 text-xs mt-1.5 error-msg" id="fullNameError">
+                    <%= typeof errors !== 'undefined' && errors.fullName ? errors.fullName : '' %>
+                </p>
             </div>
 
             <div>
                 <label class="auth-label">
                     Email Address
                 </label>
-
                 <input
                     type="email"
                     name="email"
-                    class="auth-input"
+                    id="email"
+                    value="<%= typeof formData !== 'undefined' && formData.email ? formData.email : '' %>"
+                    class="auth-input <%= typeof errors !== 'undefined' && errors.email ? 'border-red-500' : '' %>"
                     placeholder="Enter your email">
-
+                <p class="text-red-500 text-xs mt-1.5 error-msg" id="emailError">
+                    <%= typeof errors !== 'undefined' && errors.email ? errors.email : '' %>
+                </p>
             </div>
 
             <div>
                 <label class="auth-label">
                     Phone Number
                 </label>
-
                 <input
                     type="text"
                     name="phone"
-                    class="auth-input"
+                    id="phone"
+                    value="<%= typeof formData !== 'undefined' && formData.phone ? formData.phone : '' %>"
+                    class="auth-input <%= typeof errors !== 'undefined' && errors.phone ? 'border-red-500' : '' %>"
                     placeholder="Enter your phone number">
+                <p class="text-red-500 text-xs mt-1.5 error-msg" id="phoneError">
+                    <%= typeof errors !== 'undefined' && errors.phone ? errors.phone : '' %>
+                </p>
             </div>
 
             <div>
                 <label class="auth-label">
                     Password
                 </label>
-
                 <div class="relative">
-
                     <input
                         type="password"
                         name="password"
-                        class="auth-input pr-12"
+                        id="password"
+                        class="auth-input pr-12 <%= typeof errors !== 'undefined' && errors.password ? 'border-red-500' : '' %>"
                         placeholder="Password">
-
                     <button
                         type="button"
-                        class="absolute right-4 top-1/2 -translate-y-1/2">
+                        class="toggle-password absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black">
                         👁
                     </button>
-
                 </div>
+                <p class="text-red-500 text-xs mt-1.5 error-msg" id="passwordError">
+                    <%= typeof errors !== 'undefined' && errors.password ? errors.password : '' %>
+                </p>
             </div>
 
             <div>
-
                 <label class="auth-label">
                     Confirm Password
                 </label>
-
                 <div class="relative">
-
                     <input
                         type="password"
                         name="confirmPassword"
-                        class="auth-input pr-12"
+                        id="confirmPassword"
+                        class="auth-input pr-12 <%= typeof errors !== 'undefined' && errors.confirmPassword ? 'border-red-500' : '' %>"
                         placeholder="Confirm password">
-
                     <button
                         type="button"
-                        class="absolute right-4 top-1/2 -translate-y-1/2">
+                        class="toggle-password absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black">
                         👁
                     </button>
                 </div>
+                <p class="text-red-500 text-xs mt-1.5 error-msg" id="confirmPasswordError">
+                    <%= typeof errors !== 'undefined' && errors.confirmPassword ? errors.confirmPassword : '' %>
+                </p>
             </div>
 
-            <button class="primary-btn">
+            <button type="submit" class="primary-btn">
                 CREATE ACCOUNT
             </button>
 
         </form>
+
         <p class="text-center mt-8 text-gray-500">
             Already have an account?
             <a
@@ -109,5 +128,115 @@
         </p>
     </div>
 </main>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const signupForm = document.getElementById("signupForm");
+    const fullNameInput = document.getElementById("fullName");
+    const emailInput = document.getElementById("email");
+    const phoneInput = document.getElementById("phone");
+    const passwordInput = document.getElementById("password");
+    const confirmPasswordInput = document.getElementById("confirmPassword");
+
+    // Toggle password visibility
+    document.querySelectorAll(".toggle-password").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const input = btn.previousElementSibling;
+            if (input.type === "password") {
+                input.type = "text";
+            } else {
+                input.type = "password";
+            }
+        });
+    });
+
+    const showError = (input, errorEl, message) => {
+        input.classList.add("border-red-500");
+        errorEl.textContent = message;
+    };
+
+    const clearError = (input, errorEl) => {
+        input.classList.remove("border-red-500");
+        errorEl.textContent = "";
+    };
+
+    // Client-side validation on submit
+    signupForm.addEventListener("submit", (e) => {
+        let isValid = true;
+
+        // Full Name
+        const fullNameVal = fullNameInput.value.trim();
+        if (!fullNameVal) {
+            showError(fullNameInput, document.getElementById("fullNameError"), "Full name is required");
+            isValid = false;
+        } else if (fullNameVal.length < 2) {
+            showError(fullNameInput, document.getElementById("fullNameError"), "Full name must be at least 2 characters");
+            isValid = false;
+        } else if (!/^[a-zA-Z\s]+$/.test(fullNameVal)) {
+            showError(fullNameInput, document.getElementById("fullNameError"), "Full name can only contain letters and spaces");
+            isValid = false;
+        } else {
+            clearError(fullNameInput, document.getElementById("fullNameError"));
+        }
+
+        // Email
+        const emailVal = emailInput.value.trim();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailVal) {
+            showError(emailInput, document.getElementById("emailError"), "Email address is required");
+            isValid = false;
+        } else if (!emailRegex.test(emailVal)) {
+            showError(emailInput, document.getElementById("emailError"), "Please enter a valid email address");
+            isValid = false;
+        } else {
+            clearError(emailInput, document.getElementById("emailError"));
+        }
+
+        // Phone
+        const phoneVal = phoneInput.value.trim();
+        const phoneRegex = /^[0-9]{10}$/;
+        if (!phoneVal) {
+            showError(phoneInput, document.getElementById("phoneError"), "Phone number is required");
+            isValid = false;
+        } else if (!phoneRegex.test(phoneVal)) {
+            showError(phoneInput, document.getElementById("phoneError"), "Please enter a valid 10-digit phone number");
+            isValid = false;
+        } else {
+            clearError(phoneInput, document.getElementById("phoneError"));
+        }
+
+        // Password
+        const passwordVal = passwordInput.value;
+        if (!passwordVal) {
+            showError(passwordInput, document.getElementById("passwordError"), "Password is required");
+            isValid = false;
+        } else if (passwordVal.length < 8) {
+            showError(passwordInput, document.getElementById("passwordError"), "Password must be at least 8 characters");
+            isValid = false;
+        } else if (!/(?=.*[A-Za-z])(?=.*\d)/.test(passwordVal)) {
+            showError(passwordInput, document.getElementById("passwordError"), "Password must contain at least one letter and one number");
+            isValid = false;
+        } else {
+            clearError(passwordInput, document.getElementById("passwordError"));
+        }
+
+        // Confirm Password
+        const confirmVal = confirmPasswordInput.value;
+        if (!confirmVal) {
+            showError(confirmPasswordInput, document.getElementById("confirmPasswordError"), "Please confirm your password");
+            isValid = false;
+        } else if (passwordVal !== confirmVal) {
+            showError(confirmPasswordInput, document.getElementById("confirmPasswordError"), "Passwords do not match");
+            isValid = false;
+        } else {
+            clearError(confirmPasswordInput, document.getElementById("confirmPasswordError"));
+        }
+
+        if (!isValid) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
 
 <%- include("../partials/authFooter") %>

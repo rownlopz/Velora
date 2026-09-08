@@ -18,6 +18,14 @@ connectDB();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true}));
 app.use(sessionConfig);
+
+// Make session data available to all templates
+app.use((req, res, next) => {
+    res.locals.user = req.session.userId || null;
+    res.locals.admin = req.session.adminId || null;
+    next();
+});
+
 //ViewEngine
 app.set("view engine", "ejs");
 //Static Folder

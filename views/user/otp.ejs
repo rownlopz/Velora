@@ -1,11 +1,10 @@
-<%- include("../partials/authHeader",{title:"OTP Verification"}) %>
+<%- include("../partials/authHeader", { title: "OTP Verification" }) %>
 
-<main class="flex-1 flex items-center justify-center py-16">
+<main class="flex-1 flex items-center justify-center py-16 px-4">
 
     <div class="auth-card">
 
         <!-- Lock Icon -->
-
         <div class="flex justify-center">
             <div class="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center text-3xl">
                 🔒
@@ -13,7 +12,6 @@
         </div>
 
         <!-- Heading -->
-
         <h2 class="text-4xl font-medium text-center mt-6">
             Verification Required
         </h2>
@@ -21,53 +19,247 @@
         <p class="text-center text-gray-500 mt-4 leading-7">
             We've sent a 4-digit code to
             <br>
-            <span class="font-medium">
-                rowanlopez@gmail.com
+            <span class="font-medium text-black">
+                <%= typeof email !== 'undefined' && email ? email : '' %>
             </span>
         </p>
 
-        <!-- OTP -->
-
-        <form class="mt-10">
-            <div class="flex justify-center gap-4">
-                <input
-                    maxlength="1"
-                    class="w-16 h-16 border rounded-xl text-center text-2xl focus:border-black outline-none">
-                <input
-                    maxlength="1"
-                    class="w-16 h-16 border rounded-xl text-center text-2xl focus:border-black outline-none">
-                <input
-                    maxlength="1"
-                    class="w-16 h-16 border rounded-xl text-center text-2xl focus:border-black outline-none">
-                <input
-                    maxlength="1"
-                    class="w-16 h-16 border rounded-xl text-center text-2xl focus:border-black outline-none">
+        <!-- Status Alerts -->
+        <% if (typeof error !== 'undefined' && error) { %>
+            <div id="errorMessage" class="mt-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm text-center">
+                <%= error %>
             </div>
+        <% } else { %>
+            <div id="errorMessage" class="hidden mt-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm text-center"></div>
+        <% } %>
+
+        <div id="successMessage" class="hidden mt-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm text-center"></div>
+
+        <!-- OTP Form -->
+        <form id="otpForm" action="/otp" method="POST" class="mt-8">
+            <input type="hidden" name="otp" id="otpValue">
+
+            <div class="flex justify-center gap-3">
+                <input
+                    type="text"
+                    maxlength="1"
+                    inputmode="numeric"
+                    class="otp-digit w-14 h-16 border border-gray-300 rounded-xl text-center text-2xl font-semibold focus:border-black outline-none transition"
+                    autocomplete="off"
+                    required>
+                <input
+                    type="text"
+                    maxlength="1"
+                    inputmode="numeric"
+                    class="otp-digit w-14 h-16 border border-gray-300 rounded-xl text-center text-2xl font-semibold focus:border-black outline-none transition"
+                    autocomplete="off"
+                    required>
+                <input
+                    type="text"
+                    maxlength="1"
+                    inputmode="numeric"
+                    class="otp-digit w-14 h-16 border border-gray-300 rounded-xl text-center text-2xl font-semibold focus:border-black outline-none transition"
+                    autocomplete="off"
+                    required>
+                <input
+                    type="text"
+                    maxlength="1"
+                    inputmode="numeric"
+                    class="otp-digit w-14 h-16 border border-gray-300 rounded-xl text-center text-2xl font-semibold focus:border-black outline-none transition"
+                    autocomplete="off"
+                    required>
+            </div>
+
             <button
-                class="primary-btn mt-10">
+                type="submit"
+                id="verifyBtn"
+                class="primary-btn mt-8">
                 VERIFY CODE
             </button>
-
         </form>
-        <p class="text-center mt-8 text-gray-500">
+
+        <!-- Resend Section -->
+        <p class="text-center mt-8 text-gray-500 text-sm">
             Didn't receive the code?
         </p>
 
         <button
-            class="block mx-auto mt-2 text-black font-semibold">
+            type="button"
+            id="resendBtn"
+            disabled
+            class="block mx-auto mt-2 font-semibold text-gray-400 cursor-not-allowed transition">
             Resend Code
         </button>
 
-        <p class="text-center text-gray-400 text-sm mt-2">
-            01:00
+        <p id="timerContainer" class="text-center text-gray-400 text-sm mt-2">
+            <span id="timerText">01:00</span>
         </p>
         
         <a
             href="/signup"
-            class="block text-center mt-6 text-gray-500 hover:text-black">
+            class="block text-center mt-6 text-sm text-gray-500 hover:text-black transition">
             Change email address
         </a>
     </div>
 </main>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const digits = Array.from(document.querySelectorAll(".otp-digit"));
+    const otpValue = document.getElementById("otpValue");
+    const otpForm = document.getElementById("otpForm");
+    const resendBtn = document.getElementById("resendBtn");
+    const timerText = document.getElementById("timerText");
+    const errorMessage = document.getElementById("errorMessage");
+    const successMessage = document.getElementById("successMessage");
+
+    // Focus the first input box on load
+    if (digits.length > 0) {
+        digits[0].focus();
+    }
+
+    const syncOtpValue = () => {
+        otpValue.value = digits.map(input => input.value).join("");
+    };
+
+    digits.forEach((input, index) => {
+        // Handle input change
+        input.addEventListener("input", (e) => {
+            const val = e.target.value;
+            // Ensure only single numeric digit
+            if (!/^\d$/.test(val)) {
+                e.target.value = "";
+                syncOtpValue();
+                return;
+            }
+
+            syncOtpValue();
+
+            // Move focus to next input if not at the end
+            if (val && index < digits.length - 1) {
+                digits[index + 1].focus();
+            }
+        });
+
+        // Handle backspace and arrow navigation
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Backspace") {
+                if (!input.value && index > 0) {
+                    digits[index - 1].focus();
+                    digits[index - 1].value = "";
+                    syncOtpValue();
+                }
+            } else if (e.key === "ArrowLeft" && index > 0) {
+                digits[index - 1].focus();
+            } else if (e.key === "ArrowRight" && index < digits.length - 1) {
+                digits[index + 1].focus();
+            }
+        });
+
+        // Handle paste event (allows pasting full 4-digit code)
+        input.addEventListener("paste", (e) => {
+            e.preventDefault();
+            const pasted = (e.clipboardData || window.clipboardData).getData("text").trim();
+            if (/^\d{4}$/.test(pasted)) {
+                pasted.split("").forEach((char, idx) => {
+                    if (digits[idx]) {
+                        digits[idx].value = char;
+                    }
+                });
+                syncOtpValue();
+                digits[digits.length - 1].focus();
+            }
+        });
+    });
+
+    // Form submit validation
+    otpForm.addEventListener("submit", (e) => {
+        syncOtpValue();
+        if (otpValue.value.length !== 4) {
+            e.preventDefault();
+            errorMessage.textContent = "Please enter all 4 digits of the verification code.";
+            errorMessage.classList.remove("hidden");
+            successMessage.classList.add("hidden");
+        }
+    });
+
+    // 60-Second Countdown Timer
+    let countdownDuration = 60;
+    let timerInterval = null;
+
+    const startTimer = () => {
+        let remaining = countdownDuration;
+        resendBtn.disabled = true;
+        resendBtn.classList.remove("text-black", "hover:underline", "cursor-pointer");
+        resendBtn.classList.add("text-gray-400", "cursor-not-allowed");
+
+        timerText.textContent = "01:00";
+        timerText.classList.remove("hidden");
+
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            remaining -= 1;
+
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            timerText.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+            if (remaining <= 0) {
+                clearInterval(timerInterval);
+                timerText.textContent = "Code expired";
+                resendBtn.disabled = false;
+                resendBtn.classList.remove("text-gray-400", "cursor-not-allowed");
+                resendBtn.classList.add("text-black", "hover:underline", "cursor-pointer");
+            }
+        }, 1000);
+    };
+
+    startTimer();
+
+    // Resend Button Click Handler
+    resendBtn.addEventListener("click", async () => {
+        if (resendBtn.disabled) return;
+
+        try {
+            resendBtn.disabled = true;
+            resendBtn.textContent = "Sending...";
+
+            const response = await fetch("/resend-otp", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                successMessage.textContent = data.message || "A new code has been sent to your email.";
+                successMessage.classList.remove("hidden");
+                errorMessage.classList.add("hidden");
+
+                // Clear all input boxes and refocus first
+                digits.forEach(d => d.value = "");
+                syncOtpValue();
+                digits[0].focus();
+
+                // Restart timer
+                startTimer();
+            } else {
+                errorMessage.textContent = data.message || "Failed to resend code.";
+                errorMessage.classList.remove("hidden");
+                successMessage.classList.add("hidden");
+            }
+        } catch (err) {
+            console.error("Resend OTP request error:", err);
+            errorMessage.textContent = "Network error. Please try again.";
+            errorMessage.classList.remove("hidden");
+            successMessage.classList.add("hidden");
+        } finally {
+            resendBtn.textContent = "Resend Code";
+        }
+    });
+});
+</script>
 
 <%- include("../partials/authFooter") %>

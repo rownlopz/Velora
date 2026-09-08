@@ -2,13 +2,7 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
     {
-        firstName: {
-            type: String,
-            required: true,
-            trim: true,
-        },
-
-        lastName: {
+        fullName: {
             type: String,
             required: true,
             trim: true,
@@ -73,6 +67,7 @@ const userSchema = new mongoose.Schema(
         referralId: {
             type: String,
             unique: true,
+            sparse: true,
         },
 
         lastLogin: {
