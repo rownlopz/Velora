@@ -1,5 +1,5 @@
 const { validateSignup } = require("../../helpers/validation");
-const { signupUser, verifySignupOtp, resendSignupOtp } = require("../../services/user/userService");
+const { signupUser, verifySignupOtp, resendSignupOtp, loginUser, forgotPassword, verifyResetOtp, resetPassword } = require("../../services/user/userService");
 
 const loadHome = (req, res) => {
     res.render("user/home");
@@ -22,13 +22,17 @@ const loadLogin = (req, res) => {
 };
 
 const loadOtp = (req, res) => {
-    if (!req.session.signupData) {
+    const email =
+        req.session.signupData?.email ||
+        req.session.resetPasswordEmail;
+
+    if (!email) {
         return res.redirect("/signup");
     }
 
     res.render("user/otp", {
         title: "OTP Verification",
-        email: req.session.signupData.email,
+        email,
         error: null
     });
 };
@@ -103,18 +107,32 @@ const signup = async (req, res) => {
 const verifyOtp = async (req, res) => {
     try {
         const { otp } = req.body;
+
+        // Password reset OTP
+        if (req.session.resetPasswordEmail) {
+            const result = await verifyResetOtp({
+                email: req.session.resetPasswordEmail,
+                enteredOtp: otp
+            });
+
+            if (!result.success) {
+                return res.status(400).render("user/otp", {
+                    title: "OTP Verification",
+                    email: req.session.resetPasswordEmail,
+                    error: result.message
+                });
+            }
+
+            req.session.resetPasswordVerified = true;
+
+            return res.redirect("/reset-password");
+        }
+
+        // Signup OTP
         const signupData = req.session.signupData;
 
         if (!signupData) {
             return res.redirect("/signup");
-        }
-
-        if (!otp || !otp.trim()) {
-            return res.status(400).render("user/otp", {
-                title: "OTP Verification",
-                email: signupData.email,
-                error: "Please enter the verification code"
-            });
         }
 
         const result = await verifySignupOtp({
@@ -134,20 +152,175 @@ const verifyOtp = async (req, res) => {
         req.session.userId = result.user._id;
         delete req.session.signupData;
 
-        return req.session.save((err) => {
-            if (err) {
-                console.error("Session save error:", err);
-            }
-            return res.redirect("/");
-        });
+        return req.session.save(() => res.redirect("/"));
 
     } catch (error) {
         console.error("OTP Verification Error:", error);
-        return res.status(500).render("user/otp", {
-            title: "OTP Verification",
-            email: req.session.signupData ? req.session.signupData.email : "",
-            error: "Something went wrong. Please try again."
+        return res.status(500).send("Something went wrong");
+    }
+};
+
+const login = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).render("user/login", {
+                title: "Login",
+                errors: {
+                    general: "Email and password are required"
+                },
+                formData: { email }
+            });
+        }
+
+        const result = await loginUser({
+            email,
+            password
         });
+
+        if (!result.success) {
+            return res.status(400).render("user/login", {
+                title: "Login",
+                errors: {
+                    general: result.message
+                },
+                formData: { email }
+            });
+        }
+
+        req.session.userId = result.user._id;
+
+        return req.session.save(() => {
+            res.redirect("/");
+        });
+
+    } catch (error) {
+        console.error("Login Controller Error:", error);
+
+        return res.status(500).render("user/login", {
+            title: "Login",
+            errors: {
+                general: "Something went wrong. Please try again."
+            },
+            formData: {
+                email: req.body.email
+            }
+        });
+    }
+};
+
+const forgotPasswordController = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email || !email.trim()) {
+            return res.status(400).render("user/forgot-password", {
+                title: "Forgot Password",
+                errors: { email: "Email address is required" },
+                formData: { email }
+            });
+        }
+
+        const result = await forgotPassword({
+            email: email.trim()
+        });
+
+        if (!result.success) {
+            return res.status(400).render("user/forgot-password", {
+                title: "Forgot Password",
+                errors: { general: result.message },
+                formData: { email }
+            });
+        }
+
+        req.session.resetPasswordEmail = result.email;
+
+        return res.redirect("/otp");
+    } catch (error) {
+        console.error("Forgot Password Error:", error);
+        return res.status(500).send("Something went wrong");
+    }
+};
+
+const verifyResetOtpController = async (req, res) => {
+    try {
+        const email = req.session.resetPasswordEmail;
+        const { otp } = req.body;
+
+        if (!email) {
+            return res.redirect("/forgot-password");
+        }
+
+        const result = await verifyResetOtp({
+            email,
+            enteredOtp: otp
+        });
+
+        if (!result.success) {
+            return res.status(400).render("user/otp", {
+                title: "OTP Verification",
+                email,
+                error: result.message
+            });
+        }
+
+        req.session.resetPasswordVerified = true;
+
+        return res.redirect("/reset-password");
+    } catch (error) {
+        console.error("Reset OTP Error:", error);
+        return res.status(500).send("Something went wrong");
+    }
+};
+
+const resetPasswordController = async (req, res) => {
+    try {
+        const email = req.session.resetPasswordEmail;
+        const verified = req.session.resetPasswordVerified;
+        const { password, confirmPassword } = req.body;
+
+        if (!email || !verified) {
+            return res.redirect("/forgot-password");
+        }
+
+        if (!password || password.length < 8) {
+            return res.status(400).render("user/reset-password", {
+                title: "Reset Password",
+                errors: {
+                    password: "Password must be at least 8 characters"
+                }
+            });
+        }
+
+        if (password !== confirmPassword) {
+            return res.status(400).render("user/reset-password", {
+                title: "Reset Password",
+                errors: {
+                    confirmPassword: "Passwords do not match"
+                }
+            });
+        }
+
+        const result = await resetPassword({
+            email,
+            password
+        });
+
+        if (!result.success) {
+            return res.status(400).render("user/reset-password", {
+                title: "Reset Password",
+                errors: { general: result.message }
+            });
+        }
+
+        delete req.session.resetPasswordEmail;
+        delete req.session.resetPasswordVerified;
+
+        return res.redirect("/login");
+    } catch (error) {
+        console.error("Reset Password Error:", error);
+        return res.status(500).send("Something went wrong");
     }
 };
 
@@ -194,7 +367,11 @@ module.exports = {
     loadOtp,
     loadForgotPassword,
     loadResetPassword,
+    forgotPasswordController,
+    verifyResetOtpController,
+    resetPasswordController,
     signup,
+    login,
     verifyOtp,
     resendOtp
 };

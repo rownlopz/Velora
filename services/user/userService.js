@@ -179,8 +179,176 @@ const resendSignupOtp = async ({ email }) => {
     };
 };
 
+const loginUser = async ({ email, password }) => {
+    const normalizedEmail = email.toLowerCase().trim();
+
+     console.log("LOGIN EMAIL:", normalizedEmail);
+
+    const user = await User.findOne({
+        email: normalizedEmail
+    });
+
+    console.log("USER FOUND:", !!user);
+    console.log("PASSWORD EXISTS:", !!user?.password);
+
+    if (!user) {
+        return {
+            success: false,
+            message: "Invalid email or password"
+        };
+    }
+
+    if (!user.isActive) {
+        return {
+            success: false,
+            message: "Your account has been blocked"
+        };
+    }
+
+    if (!user.password) {
+        return {
+            success: false,
+            message: "Please use your Google account to login"
+        };
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+        password,
+        user.password
+    );
+
+    if (!isPasswordValid) {
+        return {
+            success: false,
+            message: "Invalid email or password"
+        };
+    }
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    return {
+        success: true,
+        user
+    };
+};
+
+const forgotPassword = async ({ email }) => {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({
+        email: normalizedEmail,
+        authProvider: "LOCAL"
+    });
+
+    if (!user) {
+        return {
+            success: false,
+            message: "No account found with this email"
+        };
+    }
+
+    const otp = generateOtp();
+
+    await OTP.deleteMany({
+        email: normalizedEmail,
+        purpose: "RESET_PASSWORD"
+    });
+
+    await OTP.create({
+        email: normalizedEmail,
+        otp,
+        purpose: "RESET_PASSWORD",
+        expiresAt: new Date(Date.now() + 60 * 1000)
+    });
+
+    await sendOtpEmail(normalizedEmail, otp);
+
+    return {
+        success: true,
+        email: normalizedEmail
+    };
+};
+
+const verifyResetOtp = async ({ email, enteredOtp }) => {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const otpRecord = await OTP.findOne({
+        email: normalizedEmail,
+        purpose: "RESET_PASSWORD",
+        isUsed: false
+    });
+
+    if (!otpRecord) {
+        return {
+            success: false,
+            message: "OTP not found or already used"
+        };
+    }
+
+    if (otpRecord.expiresAt < new Date()) {
+        return {
+            success: false,
+            message: "OTP has expired"
+        };
+    }
+
+    if (otpRecord.attempts >= 5) {
+        return {
+            success: false,
+            message: "Too many incorrect attempts"
+        };
+    }
+
+    if (Number(enteredOtp) !== otpRecord.otp) {
+        otpRecord.attempts += 1;
+        await otpRecord.save();
+
+        return {
+            success: false,
+            message: "Invalid OTP"
+        };
+    }
+
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+
+    return {
+        success: true
+    };
+};
+
+
+const resetPassword = async ({ email, password }) => {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await User.findOneAndUpdate(
+        { email: normalizedEmail },
+        { password: hashedPassword },
+        { new: true }
+    );
+
+    if (!user) {
+        return {
+            success: false,
+            message: "User not found"
+        };
+    }
+
+    return {
+        success: true
+    };
+};
+
+
 module.exports = {
     signupUser,
     verifySignupOtp,
-    resendSignupOtp
+    resendSignupOtp,
+    loginUser,
+    forgotPassword,
+    verifyResetOtp,
+    resetPassword
 };
