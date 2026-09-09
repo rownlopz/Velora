@@ -3,11 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
-</head>
-<body>
+    <title>Admin Dashboard</title>
 
-    <h1>Admin Dashboard</h1>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+
+    <div class="max-w-7xl mx-auto px-6 py-8">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">
+                    User Management
+                </h1>
+
+                <p class="text-gray-500 mt-1">
+                    Manage registered users
+                </p>
+            </div>
+
+            <a
+                href="/admin/logout"
+                class="px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800"
+            >
+                Logout
+            </a>
+        </div>
+
+
+        <!-- Search -->
+        <div class="bg-white p-5 rounded-xl shadow-sm mb-6">
+
+            <form
+                action="/admin/dashboard"
+                method="GET"
+                class="flex gap-3"
+            >
+
+                <input
+                    type="text"
+                    name="search"
+                    value="<%= search %>"
+                    placeholder="Search by name, email or phone..."
+                    class="flex-1 border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black"
+                >
+
+                <button
+                    type="submit"
+                    class="px-6 py-3 bg-black text-white rounded-lg"
+                >
+                    Search
+                </button>
+
+                <% if (search) { %>
+
+                    <a
+                        href="/admin/dashboard"
+                        class="px-6 py-3 border border-gray-300 rounded-lg flex items-center"
+                    >
+                        Clear
+                    </a>
+
+                <% } %>
+
+            </form>
+
+        </div>
+
+
+        <!-- User Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+
+            <table class="w-full">
+
+                <thead class="bg-gray-50 border-b">
+
+                    <tr>
+                        <th class="text-left px-6 py-4">Name</th>
+                        <th class="text-left px-6 py-4">Email</th>
+                        <th class="text-left px-6 py-4">Phone</th>
+                        <th class="text-left px-6 py-4">Status</th>
+                        <th class="text-left px-6 py-4">Action</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    <% if (users.length === 0) { %>
+
+                        <tr>
+                            <td
+                                colspan="5"
+                                class="text-center py-10 text-gray-500"
+                            >
+                                No users found
+                            </td>
+                        </tr>
+
+                    <% } %>
+
+
+                    <% users.forEach(user => { %>
+
+                        <tr class="border-b hover:bg-gray-50">
+
+                            <td class="px-6 py-4 font-medium">
+                                <%= user.fullName %>
+                            </td>
+
+                            <td class="px-6 py-4">
+                                <%= user.email %>
+                            </td>
+
+                            <td class="px-6 py-4">
+                                <%= user.phone || "-" %>
+                            </td>
+
+                            <td class="px-6 py-4">
+
+                                <% if (user.isActive) { %>
+
+                                    <span class="text-green-600 font-medium">
+                                        Active
+                                    </span>
+
+                                <% } else { %>
+
+                                    <span class="text-red-600 font-medium">
+                                        Blocked
+                                    </span>
+
+                                <% } %>
+
+                            </td>
+
+                            <td class="px-6 py-4">
+
+                                <form
+                                    action="/admin/users/<%= user._id %>/toggle-status"
+                                    method="POST"
+                                    onsubmit="return confirm(
+                                        'Are you sure you want to <%= user.isActive ? "block" : "unblock" %> this user?'
+                                    )"
+                                >
+
+                                    <button
+                                        type="submit"
+                                        class="px-4 py-2 border rounded-lg"
+                                    >
+                                        <%= user.isActive ? "Block" : "Unblock" %>
+                                    </button>
+
+                                </form>
+
+                            </td>
+
+                        </tr>
+
+                    <% }) %>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- Pagination -->
+        <% if (totalPages > 1) { %>
+
+            <div class="flex justify-center gap-2 mt-6">
+
+                <% for (let i = 1; i <= totalPages; i++) { %>
+
+                    <a
+                        href="/admin/dashboard?page=<%= i %>&search=<%= encodeURIComponent(search) %>"
+                        class="px-4 py-2 rounded-lg border
+                        <%= currentPage === i
+                            ? 'bg-black text-white'
+                            : 'bg-white text-black' %>"
+                    >
+                        <%= i %>
+                    </a>
+
+                <% } %>
+
+            </div>
+
+        <% } %>
+
+    </div>
 
 </body>
 </html>
