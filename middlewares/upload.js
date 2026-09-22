@@ -1,14 +1,7 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
-
-const AVATAR_DIR = path.join(__dirname, "..", "public", "uploads", "avatars");
-
-// Defensive: empty directories are not reliably preserved by git/zip tools,
-// so make sure this exists at startup rather than assuming it's on disk.
-if (!fs.existsSync(AVATAR_DIR)) {
-    fs.mkdirSync(AVATAR_DIR, { recursive: true });
-}
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../config/cloudinary");
 
 // Kept in sync with the file input's `accept` attribute in profile-edit.ejs
 // ("JPG, GIF or PNG") so the browser and the server never disagree about
@@ -16,13 +9,12 @@ if (!fs.existsSync(AVATAR_DIR)) {
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif"];
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, AVATAR_DIR);
-    },
-    filename: (req, file, cb) => {
-        const uniqueName = `${req.session.userId}-${Date.now()}${path.extname(file.originalname).toLowerCase()}`;
-        cb(null, uniqueName);
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: "velora/avatars",
+        allowed_formats: ["jpg", "jpeg", "png", "gif"],
+        public_id: (req, file) => `${req.session.userId}-${Date.now()}`
     },
 });
 
@@ -44,4 +36,19 @@ const uploadAvatar = multer({
     limits: { fileSize: 2 * 1024 * 1024 }, // 2MB, matches the "Max size of 2MB" text in the UI
 });
 
-module.exports = uploadAvatar;
+const handleAvatarUpload = (req, res, next) => {
+    uploadAvatar.single("avatar")(req, res, (err) => {
+        if (err) {
+            const message = err.code === "LIMIT_FILE_SIZE"
+                ? "Image must be smaller than 2MB."
+                : (err.message || "Image upload failed. Please try a different file.");
+            return res.redirect(`/profile/edit?uploadError=${encodeURIComponent(message)}`);
+        }
+        next();
+    });
+};
+
+module.exports = {
+    uploadAvatar,
+    handleAvatarUpload
+};

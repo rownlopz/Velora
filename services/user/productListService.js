@@ -9,7 +9,15 @@ const Category = require("../../models/product/categoryModel");
  */
 const parseListingQuery = (query) => {
     const search = (query.search || "").trim();
-    const categorySlug = (query.category || "").trim();
+    
+    const categories = (Array.isArray(query.category) ? query.category : (query.category || "").split(","))
+        .map(s => s.trim()).filter(Boolean);
+        
+    const sizes = (Array.isArray(query.size) ? query.size : (query.size || "").split(","))
+        .map(s => s.trim()).filter(Boolean);
+        
+    const colors = (Array.isArray(query.color) ? query.color : (query.color || "").split(","))
+        .map(s => s.trim()).filter(Boolean);
 
     const minPrice = query.minPrice !== undefined && query.minPrice !== "" ? Number(query.minPrice) : undefined;
     const maxPrice = query.maxPrice !== undefined && query.maxPrice !== "" ? Number(query.maxPrice) : undefined;
@@ -22,7 +30,9 @@ const parseListingQuery = (query) => {
 
     return {
         search,
-        categorySlug,
+        categories,
+        sizes,
+        colors,
         minPrice: Number.isFinite(minPrice) && minPrice >= 0 ? minPrice : undefined,
         maxPrice: Number.isFinite(maxPrice) && maxPrice >= 0 ? maxPrice : undefined,
         sort,
@@ -45,7 +55,7 @@ const SORT_STAGES = {
  * plain Product.find() can't do this alone.
  */
 const listProducts = async (filters, limit = 12) => {
-    const { search, categorySlug, minPrice, maxPrice, sort, page } = filters;
+    const { search, categories, sizes, colors, minPrice, maxPrice, sort, page } = filters;
     const skip = (page - 1) * limit;
 
     const pipeline = [];
@@ -56,24 +66,31 @@ const listProducts = async (filters, limit = 12) => {
     if (search) baseMatch.name = { $regex: search, $options: "i" };
     pipeline.push({ $match: baseMatch });
 
-    // Stage 2: category filter, resolved from the slug in the URL
-    if (categorySlug) {
-        const category = await Category.findOne({ slug: categorySlug, isDeleted: false });
-        // A slug that matches nothing (typo'd/old URL) should show an
-        // empty result set, not silently ignore the filter and show
-        // everything — match against an impossible ID.
-        pipeline.push({
-            $match: { categoryId: category ? category._id : new mongoose.Types.ObjectId() },
-        });
+    if (categories && categories.length > 0) {
+        const catDocs = await Category.find({ slug: { $in: categories }, isDeleted: false });
+        const catIds = catDocs.map(c => c._id);
+        if (catIds.length > 0) {
+            pipeline.push({ $match: { categoryId: { $in: catIds } } });
+        } else {
+            pipeline.push({ $match: { categoryId: new mongoose.Types.ObjectId() } });
+        }
     }
 
     // Stage 3: join active (non-blocked) variants to compute price + stock
+    const variantMatch = { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true };
+    if (sizes && sizes.length > 0) {
+        variantMatch.size = { $in: sizes };
+    }
+    if (colors && colors.length > 0) {
+        variantMatch.color = { $in: colors };
+    }
+
     pipeline.push({
         $lookup: {
             from: "variants",
             let: { productId: "$_id" },
             pipeline: [
-                { $match: { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true } },
+                { $match: variantMatch },
             ],
             as: "activeVariants",
         },
@@ -166,10 +183,32 @@ const getListingFilterOptions = async () => {
         },
     ]);
 
+    const [variantAttributes] = await Product.aggregate([
+        { $match: { isDeleted: false, status: "ACTIVE" } },
+        {
+            $lookup: {
+                from: "variants",
+                let: { productId: "$_id" },
+                pipeline: [{ $match: { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true } }],
+                as: "activeVariants",
+            },
+        },
+        { $unwind: "$activeVariants" },
+        {
+            $group: {
+                _id: null,
+                sizes: { $addToSet: "$activeVariants.size" },
+                colors: { $addToSet: "$activeVariants.color" },
+            },
+        },
+    ]);
+
     return {
         categories,
         priceMin: priceBounds ? priceBounds.minPrice : 0,
         priceMax: priceBounds ? priceBounds.maxPrice : 0,
+        availableSizes: variantAttributes ? variantAttributes.sizes.filter(Boolean).sort() : [],
+        availableColors: variantAttributes ? variantAttributes.colors.filter(Boolean).sort() : [],
     };
 };
 

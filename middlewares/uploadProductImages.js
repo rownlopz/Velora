@@ -1,13 +1,7 @@
 const multer = require("multer");
 const sharp = require("sharp");
-const path = require("path");
-const fs = require("fs");
-
-const PRODUCT_IMAGE_DIR = path.join(__dirname, "..", "public", "uploads", "products");
-
-if (!fs.existsSync(PRODUCT_IMAGE_DIR)) {
-    fs.mkdirSync(PRODUCT_IMAGE_DIR, { recursive: true });
-}
+const cloudinary = require("../config/cloudinary");
+const streamifier = require("streamifier");
 
 // Kept in sync with the accept attribute in the product form and with
 // middlewares/upload.js (avatar uploads), so allowed formats are
@@ -37,14 +31,6 @@ const uploadProductImages = multer({
     limits: { fileSize: MAX_FILE_SIZE, files: MAX_IMAGES },
 });
 
-/**
- * Resizes every buffered image in req.files down to a max of 1200x1600
- * (matches the Figma "Recommended size: 1200 x 1600px" note), converts
- * to JPEG for consistent, predictable storage, and writes each one to
- * disk. Adds `path` (the public URL) onto each file object so the
- * controller can read it the same way it reads req.file.filename for
- * avatars.
- */
 const resizeAndSaveProductImages = async (req, res, next) => {
     try {
         if (!req.files || req.files.length === 0) {
@@ -52,15 +38,27 @@ const resizeAndSaveProductImages = async (req, res, next) => {
         }
 
         for (const file of req.files) {
-            const filename = `product-${Date.now()}-${Math.round(Math.random() * 1e9)}.jpg`;
-            const outputPath = path.join(PRODUCT_IMAGE_DIR, filename);
-
-            await sharp(file.buffer)
+            const buffer = await sharp(file.buffer)
                 .resize(1200, 1600, { fit: "inside", withoutEnlargement: true })
                 .jpeg({ quality: 85 })
-                .toFile(outputPath);
+                .toBuffer();
 
-            file.savedPath = `/uploads/products/${filename}`;
+            const uploadPromise = new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: "velora/products",
+                        public_id: `product-${Date.now()}-${Math.round(Math.random() * 1e9)}`
+                    },
+                    (error, result) => {
+                        if (error) return reject(error);
+                        resolve(result);
+                    }
+                );
+                streamifier.createReadStream(buffer).pipe(stream);
+            });
+
+            const result = await uploadPromise;
+            file.savedPath = result.secure_url;
         }
 
         next();
@@ -69,4 +67,17 @@ const resizeAndSaveProductImages = async (req, res, next) => {
     }
 };
 
-module.exports = { uploadProductImages, resizeAndSaveProductImages };
+const handleProductImageUpload = (req, res, next) => {
+    uploadProductImages.array("images", 8)(req, res, (err) => {
+        if (err) {
+            const message = err.code === "LIMIT_FILE_SIZE" ? "Each image must be smaller than 5MB."
+                : err.code === "LIMIT_FILE_COUNT" ? "You can upload up to 8 images."
+                : (err.message || "Image upload failed. Please try again.");
+            req.session.productUploadError = message;
+            return res.redirect(req.get("Referer") || "/admin/products");
+        }
+        next();
+    });
+};
+
+module.exports = { uploadProductImages, handleProductImageUpload, resizeAndSaveProductImages };

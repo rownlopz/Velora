@@ -4,14 +4,13 @@ const passport = require("passport");
 
 const { userSessionConfig } = require("../../config/session");
 
+const { setUserLocals } = require("../../middlewares/sessionLocals");
+
 // Own session cookie for the user side (velora.user.sid) — completely
 // independent from the admin side's cookie, so a person can be logged
 // in as both a shopper and an admin in the same browser at once.
 router.use(userSessionConfig);
-router.use((req, res, next) => {
-    res.locals.user = req.session.userId || null;
-    next();
-});
+router.use(setUserLocals);
 
 const userController = require("../../controllers/user/userController");
 const profileController = require("../../controllers/user/profileController");
@@ -19,7 +18,7 @@ const addressController = require("../../controllers/user/addressController");
 const googleAuthController = require("../../controllers/user/googleAuthController");
 
 const { userAuth, isGuest } = require("../../middlewares/authMiddleware");
-const uploadAvatar = require("../../middlewares/upload");
+const { handleAvatarUpload } = require("../../middlewares/upload");
 
 const productController = require("../../controllers/user/productController");
 const cartController = require("../../controllers/user/cartController");
@@ -27,8 +26,9 @@ const wishlistController = require("../../controllers/user/wishlistController");
 
 // Protected User Routes
 router.get("/", userAuth, userController.loadHome);
-router.get("/products", productController.loadProductListing);
+router.get("/products", productController.loadProducts);
 router.get("/products/:slug", productController.loadProductDetail);
+router.get("/categories", productController.loadCategories);
 
 router.get("/cart", userAuth, cartController.loadCart);
 router.post("/cart/add", userAuth, cartController.addToCartController);
@@ -66,22 +66,7 @@ router.get("/auth/google/callback", googleAuthController.googleCallback);
 // Profile
 router.get("/profile", userAuth, profileController.loadProfile);
 router.get("/profile/edit", userAuth, profileController.loadEditProfile);
-router.post(
-    "/profile/edit",
-    userAuth,
-    (req, res, next) => {
-        uploadAvatar.single("avatar")(req, res, (err) => {
-            if (err) {
-                const message = err.code === "LIMIT_FILE_SIZE"
-                    ? "Image must be smaller than 2MB."
-                    : (err.message || "Image upload failed. Please try a different file.");
-                return res.redirect(`/profile/edit?uploadError=${encodeURIComponent(message)}`);
-            }
-            next();
-        });
-    },
-    profileController.updateProfileController
-);
+router.post("/profile/edit", userAuth, handleAvatarUpload, profileController.updateProfileController);
 
 router.get("/profile/change-password", userAuth, profileController.loadChangePassword);
 router.post("/profile/change-password", userAuth, profileController.changePasswordController);
@@ -89,6 +74,7 @@ router.post("/profile/change-password", userAuth, profileController.changePasswo
 router.get("/profile/change-email", userAuth, profileController.loadChangeEmail);
 router.post("/profile/change-email", userAuth, profileController.requestEmailChangeController);
 router.post("/profile/change-email/verify", userAuth, profileController.confirmEmailChangeController);
+router.post("/profile/change-email/resend-otp", userAuth, profileController.resendEmailChangeOtpController);
 
 // Address Management
 router.get("/addresses", userAuth, addressController.loadAddresses);

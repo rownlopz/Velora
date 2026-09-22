@@ -45,6 +45,13 @@
                     <% if (errors.otp) { %><p class="text-red-600 text-sm mt-1"><%= errors.otp %></p><% } %>
                 </div>
 
+                <div class="flex items-center justify-between mt-2">
+                    <p class="text-xs text-gray-500">Didn't receive the code?</p>
+                    <button type="button" id="resendBtn" disabled class="text-xs font-semibold text-black disabled:text-gray-400 cursor-not-allowed transition">
+                        Resend in <span id="timer">60</span>s
+                    </button>
+                </div>
+
                 <button type="submit" class="primary-btn">
                     CONFIRM EMAIL CHANGE
                 </button>
@@ -56,5 +63,58 @@
         </a>
     </div>
 </main>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const resendBtn = document.getElementById("resendBtn");
+        const timerSpan = document.getElementById("timer");
+
+        if (resendBtn && timerSpan) {
+            let timeLeft = 60;
+            const timerId = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(timerId);
+                    resendBtn.disabled = false;
+                    resendBtn.innerHTML = "Resend OTP";
+                    resendBtn.classList.remove("cursor-not-allowed", "text-gray-400");
+                } else {
+                    timerSpan.textContent = timeLeft;
+                }
+            }, 1000);
+
+            resendBtn.addEventListener("click", async () => {
+                if (resendBtn.disabled) return;
+                
+                resendBtn.disabled = true;
+                resendBtn.innerHTML = "Sending...";
+                resendBtn.classList.add("cursor-not-allowed", "text-gray-400");
+
+                try {
+                    const response = await fetch("/profile/change-email/resend-otp", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        alert(data.message || "Failed to resend OTP");
+                        resendBtn.disabled = false;
+                        resendBtn.innerHTML = "Resend OTP";
+                        resendBtn.classList.remove("cursor-not-allowed", "text-gray-400");
+                    }
+                } catch (err) {
+                    alert("Something went wrong");
+                    resendBtn.disabled = false;
+                    resendBtn.innerHTML = "Resend OTP";
+                    resendBtn.classList.remove("cursor-not-allowed", "text-gray-400");
+                }
+            });
+        }
+    });
+</script>
 
 <%- include("../partials/authFooter") %>

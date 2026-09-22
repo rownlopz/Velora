@@ -43,8 +43,12 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
 
             <!-- Image gallery with zoom -->
-            <div>
+            <!-- The outer div must be 'relative' so the zoomBox (which is
+                 position:fixed) can anchor correctly. We use position:fixed
+                 for the zoom result box so it can escape all clipping contexts. -->
+            <div id="gallerySection">
                 <div class="flex gap-4">
+                    <!-- Thumbnails -->
                     <div class="flex flex-col gap-3">
                         <% (product.images || []).forEach((img, i) => { %>
                             <button
@@ -57,14 +61,21 @@
                         <% }) %>
                     </div>
 
-                    <div id="zoomContainer" class="flex-1 aspect-[3/4] bg-gray-100 rounded-lg overflow-hidden relative cursor-zoom-in">
+                    <!-- Main image with lens -->
+                    <div id="zoomContainer" class="flex-1 aspect-[3/4] bg-gray-100 rounded-lg relative cursor-crosshair select-none">
                         <img
                             id="mainImage"
                             src="<%= (product.images && product.images[0]) || product.thumbnail || '' %>"
-                            class="w-full h-full object-cover transition-transform duration-150"
+                            class="w-full h-full object-cover rounded-lg block"
+                            draggable="false"
                         >
+                        <!-- The lens square that follows the cursor -->
+                        <div id="zoomLens" class="hidden absolute pointer-events-none" style="width:130px;height:160px;background:rgba(200,200,200,0.25);border:1px solid rgba(100,100,255,0.4);"></div>
                     </div>
                 </div>
+
+                <!-- Zoom result panel - positioned fixed so it escapes all CSS overflow clipping -->
+                <div id="zoomBox" style="display:none;position:fixed;width:430px;height:530px;background-color:#fff;background-repeat:no-repeat;border:1px solid #ddd;box-shadow:0 8px 40px rgba(0,0,0,0.18);border-radius:12px;z-index:9999;pointer-events:none;"></div>
             </div>
 
             <!-- Details -->
@@ -94,28 +105,38 @@
                 <form action="/cart/add" method="POST" class="mt-8" id="addToCartForm">
                     <input type="hidden" name="variantId" id="selectedVariantId" value="<%= defaultVariant._id %>">
 
-                    <% if (colors.length > 0) { %>
+                    <% if (sizes.length > 0) { %>
                         <div class="mb-5">
-                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Color</p>
-                            <div class="flex gap-2" id="colorOptions">
-                                <% colors.forEach(c => { %>
-                                    <button type="button" onclick="selectColor('<%= c %>')" data-color="<%= c %>"
-                                        class="color-btn px-4 py-2 border rounded-lg text-sm <%= c === defaultVariant.color ? 'border-black font-semibold' : 'border-gray-300' %>">
-                                        <%= c %>
+                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-900 mb-3">Select Size</p>
+                            <div class="flex flex-wrap gap-2" id="sizeOptions">
+                                <% sizes.forEach(s => { %>
+                                    <button type="button" onclick="selectSize('<%= s %>')" data-size="<%= s %>"
+                                        class="size-btn flex items-center justify-center min-w-[44px] h-[44px] px-2 border rounded-md text-sm transition-colors <%= s === defaultVariant.size ? 'border-black bg-black text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-black' %>">
+                                        <%= s %>
                                     </button>
                                 <% }) %>
                             </div>
                         </div>
                     <% } %>
 
-                    <% if (sizes.length > 0) { %>
+                    <% if (colors.length > 0) { %>
                         <div class="mb-5">
-                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Size</p>
-                            <div class="flex gap-2" id="sizeOptions">
-                                <% sizes.forEach(s => { %>
-                                    <button type="button" onclick="selectSize('<%= s %>')" data-size="<%= s %>"
-                                        class="size-btn px-4 py-2 border rounded-lg text-sm <%= s === defaultVariant.size ? 'border-black font-semibold' : 'border-gray-300' %>">
-                                        <%= s %>
+                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-900 mb-3">Color</p>
+                            <div class="flex gap-3" id="colorOptions">
+                                <% colors.forEach(c => { 
+                                    const bgMap = {
+                                        'black': 'bg-black', 'white': 'bg-white border-gray-300', 
+                                        'brown': 'bg-amber-800', 'yellow': 'bg-yellow-100', 
+                                        'gray': 'bg-gray-400', 'navy': 'bg-blue-900',
+                                        'red': 'bg-red-700', 'green': 'bg-emerald-700',
+                                        'blue': 'bg-blue-600', 'beige': 'bg-[#F5F5DC]',
+                                        'onyx black': 'bg-gray-900', 'charcoal grey': 'bg-gray-700'
+                                    };
+                                    const cssClass = bgMap[c.toLowerCase()] || 'bg-gray-200';
+                                %>
+                                    <button type="button" onclick="selectColor('<%= c %>')" data-color="<%= c %>"
+                                        class="color-btn w-7 h-7 rounded-full border <%= cssClass.includes('border') ? cssClass : cssClass + ' border-transparent' %> ring-1 transition-all <%= c === defaultVariant.color ? 'ring-black ring-offset-2' : 'ring-transparent' %>"
+                                        title="<%= c %>">
                                     </button>
                                 <% }) %>
                             </div>
@@ -237,9 +258,13 @@
     function selectColor(color) {
         selectedColor = color;
         document.querySelectorAll('.color-btn').forEach(b => {
-            b.classList.toggle('border-black', b.dataset.color === color);
-            b.classList.toggle('font-semibold', b.dataset.color === color);
-            b.classList.toggle('border-gray-300', b.dataset.color !== color);
+            if (b.dataset.color === color) {
+                b.classList.add('ring-black', 'ring-offset-2');
+                b.classList.remove('ring-transparent');
+            } else {
+                b.classList.remove('ring-black', 'ring-offset-2');
+                b.classList.add('ring-transparent');
+            }
         });
         refreshSelection();
     }
@@ -247,30 +272,81 @@
     function selectSize(size) {
         selectedSize = size;
         document.querySelectorAll('.size-btn').forEach(b => {
-            b.classList.toggle('border-black', b.dataset.size === size);
-            b.classList.toggle('font-semibold', b.dataset.size === size);
-            b.classList.toggle('border-gray-300', b.dataset.size !== size);
+            if (b.dataset.size === size) {
+                b.classList.add('border-black', 'bg-black', 'text-white');
+                b.classList.remove('border-gray-200', 'bg-white', 'text-gray-600', 'hover:border-black');
+            } else {
+                b.classList.remove('border-black', 'bg-black', 'text-white');
+                b.classList.add('border-gray-200', 'bg-white', 'text-gray-600', 'hover:border-black');
+            }
         });
         refreshSelection();
     }
 
     function setMainImage(src) {
-        document.getElementById('mainImage').src = src;
+        const mainImage = document.getElementById('mainImage');
+        mainImage.src = src;
+        document.getElementById('zoomBox').style.backgroundImage = `url('${src}')`;
+
+        // Update active thumbnail border
+        document.querySelectorAll('.thumb-btn').forEach(b => {
+            const thumbImg = b.querySelector('img');
+            if (thumbImg && thumbImg.src === mainImage.src) {
+                b.classList.replace('border-gray-200', 'border-black');
+            } else {
+                b.classList.replace('border-black', 'border-gray-200');
+            }
+        });
     }
 
-    // Zoom on hover: scales the image and shifts it to follow the cursor.
-    const zoomContainer = document.getElementById('zoomContainer');
-    const mainImage = document.getElementById('mainImage');
-    zoomContainer.addEventListener('mousemove', (e) => {
-        const rect = zoomContainer.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-        mainImage.style.transformOrigin = x + '% ' + y + '%';
-        mainImage.style.transform = 'scale(1.8)';
-    });
-    zoomContainer.addEventListener('mouseleave', () => {
-        mainImage.style.transform = 'scale(1)';
-    });
+    // === Flipkart-style lens + result box zoom ===
+    (function () {
+        const container = document.getElementById('zoomContainer');
+        const mainImg   = document.getElementById('mainImage');
+        const lens      = document.getElementById('zoomLens');
+        const box       = document.getElementById('zoomBox');
+
+        // Set initial background image on zoom result box
+        box.style.backgroundImage = `url('${mainImg.src}')`;
+
+        const LENS_W = lens.offsetWidth  || 130;
+        const LENS_H = lens.offsetHeight || 160;
+        const BOX_W  = 430;  // matches inline style width
+        const BOX_H  = 530;  // matches inline style height
+
+        container.addEventListener('mouseenter', () => {
+            lens.classList.remove('hidden');
+            box.style.display = 'block';
+        });
+
+        container.addEventListener('mouseleave', () => {
+            lens.classList.add('hidden');
+            box.style.display = 'none';
+        });
+
+        container.addEventListener('mousemove', (e) => {
+            const rect = container.getBoundingClientRect();
+
+            // --- Position the lens (clamped inside the image) ---
+            let lx = e.clientX - rect.left  - LENS_W / 2;
+            let ly = e.clientY - rect.top   - LENS_H / 2;
+            lx = Math.max(0, Math.min(lx, rect.width  - LENS_W));
+            ly = Math.max(0, Math.min(ly, rect.height - LENS_H));
+            lens.style.left = lx + 'px';
+            lens.style.top  = ly + 'px';
+
+            // --- Position the result box (fixed, to the right of the container) ---
+            box.style.left = (rect.right + 16) + 'px';
+            box.style.top  = rect.top + 'px';
+
+            // --- Calculate background to show the zoomed area ---
+            const cx = BOX_W / LENS_W;   // horizontal magnification
+            const cy = BOX_H / LENS_H;   // vertical magnification
+
+            box.style.backgroundSize     = (rect.width * cx) + 'px ' + (rect.height * cy) + 'px';
+            box.style.backgroundPosition = '-' + (lx * cx) + 'px -' + (ly * cy) + 'px';
+        });
+    })();
 </script>
 
 </body>

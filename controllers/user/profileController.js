@@ -4,6 +4,7 @@ const {
     changePassword,
     requestEmailChange,
     confirmEmailChange,
+    resendEmailChangeOtp,
 } = require("../../services/user/profileService");
 
 const { getAddresses } = require("../../services/user/addressService");
@@ -64,7 +65,7 @@ const updateProfileController = async (req, res) => {
         let avatarPath;
 
         if (req.file) {
-            avatarPath = `/uploads/avatars/${req.file.filename}`;
+            avatarPath = req.file.path;
         }
 
         const errors = validateProfileEdit({ fullName, phone });
@@ -220,6 +221,26 @@ const loadChangeEmail = async (req, res) => {
     res.render("user/change-email", { title: "Change Email", errors: {}, step: "request" });
 };
 
+const resendEmailChangeOtpController = async (req, res) => {
+    try {
+        const newEmail = req.session.pendingEmail;
+        if (!newEmail) {
+            return res.status(400).json({ success: false, message: "No pending email change found" });
+        }
+
+        const result = await resendEmailChangeOtp(req.session.userId, newEmail);
+
+        if (!result.success) {
+            return res.status(400).json({ success: false, message: result.message });
+        }
+
+        return res.json({ success: true, message: "OTP has been resent" });
+    } catch (error) {
+        console.error("Resend Email Change OTP Error:", error);
+        res.status(500).json({ success: false, message: "Something went wrong" });
+    }
+};
+
 module.exports = {
     loadProfile,
     loadEditProfile,
@@ -229,4 +250,5 @@ module.exports = {
     loadChangeEmail,
     requestEmailChangeController,
     confirmEmailChangeController,
+    resendEmailChangeOtpController,
 };

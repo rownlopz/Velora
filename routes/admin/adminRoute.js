@@ -3,19 +3,18 @@ const router = express.Router();
 
 const { adminSessionConfig } = require("../../config/session");
 
+const { setAdminLocals } = require("../../middlewares/sessionLocals");
+
 // Own session cookie for the admin side (velora.admin.sid) — see
 // userRoute.js for the matching setup on that side.
 router.use(adminSessionConfig);
-router.use((req, res, next) => {
-    res.locals.admin = req.session.adminId || null;
-    next();
-});
+router.use(setAdminLocals);
 
 const adminController = require("../../controllers/admin/adminController");
 const categoryController = require("../../controllers/admin/categoryController");
 const productController = require("../../controllers/admin/productController");
 const { adminAuth, isAdminGuest } = require("../../middlewares/authMiddleware");
-const { uploadProductImages, resizeAndSaveProductImages } = require("../../middlewares/uploadProductImages");
+const { handleProductImageUpload, resizeAndSaveProductImages } = require("../../middlewares/uploadProductImages");
 
 router.get("/login", isAdminGuest, adminController.loadLogin);
 router.post("/login", isAdminGuest, adminController.loginController);
@@ -30,23 +29,6 @@ router.post("/categories/:categoryId/edit", adminAuth, categoryController.update
 router.post("/categories/:categoryId/toggle-status", adminAuth, categoryController.toggleCategoryStatusController);
 router.post("/categories/:categoryId/delete", adminAuth, categoryController.deleteCategoryController);
 
-// Catches multer errors (too many files, wrong type, oversized file)
-// cleanly instead of letting them crash the request — same fix applied
-// to avatar upload in Week 13.
-const handleProductImageUpload = (req, res, next) => {
-    uploadProductImages.array("images", 8)(req, res, (err) => {
-        if (err) {
-            const message = err.code === "LIMIT_FILE_SIZE" ? "Each image must be smaller than 5MB."
-                : err.code === "LIMIT_FILE_COUNT" ? "You can upload up to 8 images."
-                : (err.message || "Image upload failed. Please try again.");
-            req.session.productUploadError = message;
-            // Express 5 removed res.redirect("back") — fall back to the
-            // Referer header manually, with a safe default if it's missing.
-            return res.redirect(req.get("Referer") || "/admin/products");
-        }
-        next();
-    });
-};
 
 router.get("/products", adminAuth, productController.loadProducts);
 router.get("/products/add", adminAuth, productController.loadAddProduct);

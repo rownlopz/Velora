@@ -52,7 +52,7 @@ const signupUser = async ({
         expiresAt: new Date(Date.now() + 60 * 1000)
     });
 
-    await sendOtpEmail(normalizedEmail, otp);
+    await sendOtpEmail(normalizedEmail, otp, "VERIFY_EMAIL");
 
     return {
         success: true,
@@ -171,7 +171,7 @@ const resendSignupOtp = async ({ email }) => {
         expiresAt: new Date(Date.now() + 60 * 1000)
     });
 
-    await sendOtpEmail(normalizedEmail, otp);
+    await sendOtpEmail(normalizedEmail, otp, "VERIFY_EMAIL");
 
     return {
         success: true,
@@ -264,7 +264,7 @@ const forgotPassword = async ({ email }) => {
         expiresAt: new Date(Date.now() + 60 * 1000)
     });
 
-    await sendOtpEmail(normalizedEmail, otp);
+    await sendOtpEmail(normalizedEmail, otp, "RESET_PASSWORD");
 
     return {
         success: true,

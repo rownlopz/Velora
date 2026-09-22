@@ -80,7 +80,7 @@ const requestEmailChange = async (userId, newEmail) => {
         expiresAt: new Date(Date.now() + 60 * 1000),
     });
 
-    await sendOtpEmail(normalizedEmail, otp);
+    await sendOtpEmail(normalizedEmail, otp, "CHANGE_EMAIL");
 
     return { success: true, email: normalizedEmail };
 };
@@ -125,10 +125,35 @@ const confirmEmailChange = async (userId, newEmail, enteredOtp) => {
     return { success: true, user };
 };
 
+// Step 3: resend the OTP for email change
+const resendEmailChangeOtp = async (userId, newEmail) => {
+    const user = await User.findById(userId);
+    if (!user) {
+        return { success: false, message: "User not found" };
+    }
+
+    const normalizedEmail = newEmail.toLowerCase().trim();
+    const otp = generateOtp();
+
+    await OTP.deleteMany({ email: normalizedEmail, purpose: "CHANGE_EMAIL" });
+
+    await OTP.create({
+        email: normalizedEmail,
+        otp,
+        purpose: "CHANGE_EMAIL",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+    });
+
+    await sendOtpEmail(normalizedEmail, otp, "CHANGE_EMAIL");
+
+    return { success: true, message: "OTP resent successfully" };
+};
+
 module.exports = {
     getProfile,
     updateProfile,
     changePassword,
     requestEmailChange,
     confirmEmailChange,
+    resendEmailChangeOtp,
 };

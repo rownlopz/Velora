@@ -1,30 +1,44 @@
 const { parseListingQuery, listProducts, getListingFilterOptions } = require("../../services/user/productListService");
 const { getProductDetail } = require("../../services/user/productDetailService");
 
-const loadProductListing = async (req, res) => {
+const loadProducts = async (req, res, next) => {
     try {
-        const filters = parseListingQuery(req.query);
-
-        const [listing, filterOptions] = await Promise.all([
-            listProducts(filters, 12),
-            getListingFilterOptions(),
-        ]);
+        const query = parseListingQuery(req.query);
+        const { products, totalProducts, totalPages, currentPage } = await listProducts(query, 12);
+        const { categories, priceMin, priceMax, availableSizes, availableColors } = await getListingFilterOptions();
 
         res.render("user/products", {
-            title: "Products",
-            products: listing.products,
-            totalProducts: listing.totalProducts,
-            totalPages: listing.totalPages,
-            currentPage: listing.currentPage,
-            filters,
-            categories: filterOptions.categories,
-            priceMin: filterOptions.priceMin,
-            priceMax: filterOptions.priceMax,
-            notice: req.query.notice || null,
+            filters: query,
+            products,
+            totalProducts,
+            totalPages,
+            currentPage,
+            categories,
+            priceMin,
+            priceMax,
+            availableSizes,
+            availableColors,
         });
     } catch (error) {
-        console.error("Load Product Listing Error:", error);
-        res.status(500).send("Something went wrong");
+        next(error);
+    }
+};
+
+const loadCategories = async (req, res, next) => {
+    try {
+        const Category = require("../../models/product/categoryModel");
+        const Product = require("../../models/product/productModel");
+        
+        const categories = await Category.find({ isDeleted: false, isActive: true }).sort({ name: 1 }).lean();
+        
+        for (const cat of categories) {
+            const product = await Product.findOne({ categoryId: cat._id, isDeleted: false, status: "ACTIVE" }).select("thumbnail").lean();
+            cat.image = product ? product.thumbnail : "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg";
+        }
+
+        res.render("user/categories", { categories });
+    } catch (error) {
+        next(error);
     }
 };
 
@@ -59,4 +73,8 @@ const loadProductDetail = async (req, res) => {
     }
 };
 
-module.exports = { loadProductListing, loadProductDetail };
+module.exports = {
+    loadProducts,
+    loadCategories,
+    loadProductDetail,
+};

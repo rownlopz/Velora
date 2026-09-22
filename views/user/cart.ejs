@@ -53,14 +53,16 @@
                                     <p class="text-amber-600 text-xs mt-2">Only <%= item.variant.stock %> left &mdash; reduce quantity to continue.</p>
                                 <% } %>
 
-                                <div class="flex items-center gap-4 mt-3">
-                                    <form action="/cart/<%= item.variantId %>/decrement" method="POST">
-                                        <button type="submit" class="w-7 h-7 border border-gray-300 rounded-md text-sm" <%= !item.isAvailable ? 'disabled' : '' %>>&minus;</button>
-                                    </form>
-                                    <span class="text-sm w-4 text-center"><%= item.quantity %></span>
-                                    <form action="/cart/<%= item.variantId %>/increment" method="POST">
-                                        <button type="submit" class="w-7 h-7 border border-gray-300 rounded-md text-sm" <%= !item.isAvailable ? 'disabled' : '' %>>+</button>
-                                    </form>
+                                <div class="flex items-center gap-6 mt-4">
+                                    <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                        <form action="/cart/<%= item.variantId %>/decrement" method="POST">
+                                            <button type="submit" class="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-black transition-colors" <%= !item.isAvailable ? 'disabled' : '' %>>&minus;</button>
+                                        </form>
+                                        <span class="text-sm w-8 text-center font-medium"><%= item.quantity %></span>
+                                        <form action="/cart/<%= item.variantId %>/increment" method="POST">
+                                            <button type="submit" class="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-black transition-colors" <%= !item.isAvailable ? 'disabled' : '' %>>+</button>
+                                        </form>
+                                    </div>
 
                                     <form action="/cart/<%= item.variantId %>/remove" method="POST" class="ml-2">
                                         <button type="submit" class="text-xs text-gray-400 hover:text-red-600 underline">Remove</button>
