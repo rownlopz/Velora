@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VELORA Admin - <%= title %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+</head>
+
+<body class="bg-[#FAFAF8]">
+
+    <div class="flex">
+
+        <%- include("partials/sidebar", { active: "products" }) %>
+
+        <div class="flex-1 min-w-0">
+
+            <%- include("partials/topbar") %>
+
+            <main class="px-8 py-8 max-w-6xl">
+
+                <p class="text-xs text-gray-400 uppercase tracking-widest mb-2">
+                    Products / <%= isEdit ? "Edit Product" : "Add Product" %>
+                </p>
+
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900"><%= title %></h1>
+                        <p class="text-gray-500 mt-1">Refine specifications and visual assets for this product.</p>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <a href="/admin/products" class="h-11 px-5 border border-gray-300 rounded-lg text-sm font-semibold flex items-center">Discard</a>
+                        <button type="submit" form="productForm" class="h-11 px-5 bg-black text-white rounded-lg text-sm font-semibold">
+                            <%= isEdit ? "Save Product" : "Create Product" %>
+                        </button>
+                    </div>
+                </div>
+
+                <% if (error) { %>
+                    <div class="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
+                        <%= error %>
+                    </div>
+                <% } %>
+
+                <form
+                    id="productForm"
+                    action="<%= isEdit ? '/admin/products/' + product._id + '/edit' : '/admin/products/add' %>"
+                    method="POST"
+                    enctype="multipart/form-data"
+                    onsubmit="return validateBeforeSubmit()"
+                >
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                        <!-- Left column -->
+                        <div class="lg:col-span-2 space-y-6">
+
+                            <!-- General Information -->
+                            <div class="bg-white p-6 rounded-xl border border-gray-200">
+                                <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">General Information</p>
+
+                                <label class="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Product Name</label>
+                                <input type="text" name="name" value="<%= product.name || '' %>" required
+                                    class="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black mb-5">
+
+                                <label class="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Description</label>
+                                <textarea name="description" rows="4"
+                                    class="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black"><%= product.description || '' %></textarea>
+                            </div>
+
+                            <!-- Product Variants -->
+                            <div class="bg-white p-6 rounded-xl border border-gray-200">
+                                <div class="flex justify-between items-center mb-4">
+                                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400">Product Variants</p>
+                                    <button type="button" onclick="addVariantRow()" class="text-xs font-semibold underline">+ Add Variant</button>
+                                </div>
+
+                                <div id="variantRows" class="space-y-4">
+                                    <% variants.forEach((v, i) => { %>
+                                        <div class="variant-row border border-gray-200 rounded-lg p-4 relative">
+                                            <button type="button" onclick="this.closest('.variant-row').remove()" class="absolute top-3 right-3 text-gray-300 hover:text-red-600 text-sm">&times;</button>
+
+                                            <div class="grid grid-cols-3 gap-3 mb-3">
+                                                <div>
+                                                    <label class="block text-[11px] text-gray-400 uppercase mb-1">Color</label>
+                                                    <input type="text" name="variants[<%= i %>][color]" value="<%= v.color || '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] text-gray-400 uppercase mb-1">Size</label>
+                                                    <input type="text" name="variants[<%= i %>][size]" value="<%= v.size || '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] text-gray-400 uppercase mb-1">SKU</label>
+                                                    <input type="text" name="variants[<%= i %>][sku]" value="<%= v.sku || '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                </div>
+                                            </div>
+
+                                            <div class="grid grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-[11px] text-gray-400 uppercase mb-1">Regular Price</label>
+                                                    <input type="number" step="0.01" min="0" name="variants[<%= i %>][regularPrice]" value="<%= v.regularPrice || '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] text-gray-400 uppercase mb-1">Sale Price</label>
+                                                    <input type="number" step="0.01" min="0" name="variants[<%= i %>][salePrice]" value="<%= v.salePrice || '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] text-gray-400 uppercase mb-1">Stock</label>
+                                                    <input type="number" min="0" name="variants[<%= i %>][stock]" value="<%= v.stock !== undefined ? v.stock : '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <% }) %>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right column -->
+                        <div class="space-y-6">
+
+                            <!-- Product Media -->
+                            <div class="bg-white p-6 rounded-xl border border-gray-200">
+                                <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Product Media</p>
+
+                                <div id="imagePreviewGrid" class="grid grid-cols-3 gap-2 mb-3">
+                                    <% (product.images || []).forEach((img, i) => { %>
+                                        <div class="relative aspect-square rounded-lg overflow-hidden bg-gray-100 existing-image-tile">
+                                            <img src="<%= img %>" class="w-full h-full object-cover">
+                                            <% if (i === 0) { %><span class="absolute top-1 left-1 bg-black text-white text-[9px] px-1.5 py-0.5 rounded">PRIMARY</span><% } %>
+                                            <input type="hidden" name="existingImages" value="<%= img %>">
+                                            <button type="button" onclick="this.closest('.existing-image-tile').remove()" class="absolute top-1 right-1 w-5 h-5 bg-black/60 text-white rounded-full text-xs">&times;</button>
+                                        </div>
+                                    <% }) %>
+                                </div>
+
+                                <div id="newImagePreviewGrid" class="grid grid-cols-3 gap-2 mb-3"></div>
+
+                                <label for="imageInput" class="block border-2 border-dashed border-gray-300 rounded-lg py-6 text-center text-xs text-gray-400 cursor-pointer hover:border-black transition">
+                                    Drop to upload or click to select<br>
+                                    <span class="text-[10px]">Recommended 1200 &times; 1600px. JPG, PNG, GIF, WEBP. Max 5MB each. Minimum 3 total images.</span>
+                                </label>
+                                <input type="file" id="imageInput" name="images" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="hidden">
+                            </div>
+
+                            <!-- Classification -->
+                            <div class="bg-white p-6 rounded-xl border border-gray-200">
+                                <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Classification</p>
+
+                                <label class="block text-[11px] text-gray-400 uppercase mb-1">Category</label>
+                                <select name="categoryId" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-black mb-4">
+                                    <option value="">Select a category</option>
+                                    <% categories.forEach(cat => { %>
+                                        <option value="<%= cat._id %>" <%= (product.categoryId && (product.categoryId._id || product.categoryId).toString() === cat._id.toString()) ? 'selected' : '' %>>
+                                            <%= cat.name %>
+                                        </option>
+                                    <% }) %>
+                                </select>
+
+                                <label class="block text-[11px] text-gray-400 uppercase mb-1">Brand</label>
+                                <input type="text" name="brand" value="<%= product.brand || '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-black mb-4">
+
+                                <label class="block text-[11px] text-gray-400 uppercase mb-1">Tags (comma separated)</label>
+                                <input type="text" name="tags" value="<%= Array.isArray(product.tags) ? product.tags.join(', ') : (product.tags || '') %>" placeholder="silk, ss24, minimalist" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-black">
+                            </div>
+
+                        </div>
+                    </div>
+                </form>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="cropModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg">
+            <p class="text-sm font-semibold mb-4">Crop image (<span id="cropCounter"></span>)</p>
+            <div class="max-h-[60vh] overflow-hidden">
+                <img id="cropImageEl" class="max-w-full">
+            </div>
+            <div class="flex justify-end gap-3 mt-5">
+                <button type="button" onclick="skipCurrentImage()" class="px-4 py-2 border border-gray-300 rounded-lg text-sm">Skip this image</button>
+                <button type="button" onclick="applyCrop()" class="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold">Use this crop</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script>
+        // ---- Dynamic variant rows ----
+        let variantIndex = <%= variants.length %>;
+        function addVariantRow() {
+            const container = document.getElementById('variantRows');
+            const row = document.createElement('div');
+            row.className = 'variant-row border border-gray-200 rounded-lg p-4 relative';
+            row.innerHTML = `
+                <button type="button" onclick="this.closest('.variant-row').remove()" class="absolute top-3 right-3 text-gray-300 hover:text-red-600 text-sm">&times;</button>
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                    <div><label class="block text-[11px] text-gray-400 uppercase mb-1">Color</label>
+                        <input type="text" name="variants[${variantIndex}][color]" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"></div>
+                    <div><label class="block text-[11px] text-gray-400 uppercase mb-1">Size</label>
+                        <input type="text" name="variants[${variantIndex}][size]" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"></div>
+                    <div><label class="block text-[11px] text-gray-400 uppercase mb-1">SKU</label>
+                        <input type="text" name="variants[${variantIndex}][sku]" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"></div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div><label class="block text-[11px] text-gray-400 uppercase mb-1">Regular Price</label>
+                        <input type="number" step="0.01" min="0" name="variants[${variantIndex}][regularPrice]" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"></div>
+                    <div><label class="block text-[11px] text-gray-400 uppercase mb-1">Sale Price</label>
+                        <input type="number" step="0.01" min="0" name="variants[${variantIndex}][salePrice]" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"></div>
+                    <div><label class="block text-[11px] text-gray-400 uppercase mb-1">Stock</label>
+                        <input type="number" min="0" name="variants[${variantIndex}][stock]" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"></div>
+                </div>`;
+            container.appendChild(row);
+            variantIndex++;
+        }
+
+        // ---- Image select -> crop queue -> preview ----
+        const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+        const MAX_SIZE = 5 * 1024 * 1024;
+        let cropQueue = [];
+        let cropQueueIndex = 0;
+        let cropper = null;
+        let croppedFiles = []; // File objects that will actually be submitted
+
+        document.getElementById('imageInput').addEventListener('change', (e) => {
+            const files = Array.from(e.target.files).filter(f => {
+                if (!ALLOWED_TYPES.includes(f.type)) { alert(f.name + ': unsupported file type'); return false; }
+                if (f.size > MAX_SIZE) { alert(f.name + ': larger than 5MB'); return false; }
+                return true;
+            });
+            if (files.length === 0) return;
+
+            cropQueue = files;
+            cropQueueIndex = 0;
+            openCropModal();
+        });
+
+        function openCropModal() {
+            if (cropQueueIndex >= cropQueue.length) {
+                document.getElementById('cropModal').classList.add('hidden');
+                return;
+            }
+            const file = cropQueue[cropQueueIndex];
+            document.getElementById('cropCounter').textContent = (cropQueueIndex + 1) + ' of ' + cropQueue.length;
+
+            const img = document.getElementById('cropImageEl');
+            img.src = URL.createObjectURL(file);
+
+            document.getElementById('cropModal').classList.remove('hidden');
+
+            if (cropper) cropper.destroy();
+            img.onload = () => {
+                cropper = new Cropper(img, { aspectRatio: 3 / 4, viewMode: 1 });
+            };
+        }
+
+        function applyCrop() {
+            cropper.getCroppedCanvas({ width: 1200, height: 1600 }).toBlob((blob) => {
+                const originalName = cropQueue[cropQueueIndex].name.replace(/\.[^.]+$/, '.jpg');
+                const croppedFile = new File([blob], originalName, { type: 'image/jpeg' });
+                croppedFiles.push(croppedFile);
+                addPreviewTile(URL.createObjectURL(croppedFile));
+
+                cropQueueIndex++;
+                openCropModal();
+                syncFileInput();
+            }, 'image/jpeg', 0.9);
+        }
+
+        function skipCurrentImage() {
+            cropQueueIndex++;
+            openCropModal();
+        }
+
+        function addPreviewTile(url) {
+            const grid = document.getElementById('newImagePreviewGrid');
+            const tile = document.createElement('div');
+            tile.className = 'relative aspect-square rounded-lg overflow-hidden bg-gray-100';
+            tile.innerHTML = `<img src="${url}" class="w-full h-full object-cover">
+                <span class="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 rounded">NEW</span>`;
+            grid.appendChild(tile);
+        }
+
+        // Replaces the file input's FileList with our cropped versions,
+        // so the actual form submission sends the CROPPED images, not
+        // the raw originals the admin first selected.
+        function syncFileInput() {
+            const dataTransfer = new DataTransfer();
+            croppedFiles.forEach(f => dataTransfer.items.add(f));
+            document.getElementById('imageInput').files = dataTransfer.files;
+        }
+
+        function validateBeforeSubmit() {
+            const existingCount = document.querySelectorAll('.existing-image-tile').length;
+            const totalImages = existingCount + croppedFiles.length;
+            if (totalImages < 3) {
+                alert('Please add at least 3 product images (currently ' + totalImages + ').');
+                return false;
+            }
+            if (document.querySelectorAll('.variant-row').length === 0) {
+                alert('Please add at least one product variant.');
+                return false;
+            }
+            return true;
+        }
+    </script>
+
+</body>
+</html>

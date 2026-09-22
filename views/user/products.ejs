@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Products | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
+
+<%- include("../partials/storeHeader") %>
+
+<%
+    // Builds a query string carrying forward every CURRENT filter,
+    // overridden by whatever is passed in `overrides`. This is what
+    // keeps search + category + price + sort + page all active together
+    // when only one of them changes (e.g. clicking page 2 must not lose
+    // the active search or price filter).
+    function buildQuery(overrides) {
+        const params = {
+            search: filters.search,
+            category: filters.categorySlug,
+            minPrice: filters.minPrice !== undefined ? filters.minPrice : '',
+            maxPrice: filters.maxPrice !== undefined ? filters.maxPrice : '',
+            sort: filters.sort,
+            page: filters.page,
+            ...overrides,
+        };
+        const qs = Object.entries(params)
+            .filter(([, v]) => v !== '' && v !== undefined && v !== null)
+            .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+            .join('&');
+        return '/products?' + qs;
+    }
+%>
+
+<main class="flex-1">
+    <div class="max-w-screen-xl mx-auto px-6 md:px-10 py-10">
+
+        <h1 class="text-3xl font-medium">
+            <%= filters.search ? 'Search Results' : 'All Products' %>
+        </h1>
+
+        <% if (typeof notice !== 'undefined' && notice) { %>
+            <div class="mt-4 p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm">
+                <%= notice %>
+            </div>
+        <% } %>
+
+        <p class="text-gray-400 text-sm mt-1">
+            <% if (filters.search) { %>
+                Showing <%= totalProducts %> results for "<%= filters.search %>"
+            <% } else { %>
+                Showing <%= totalProducts %> products
+            <% } %>
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-10 mt-8">
+
+            <!-- Filters sidebar -->
+            <aside>
+                <form action="/products" method="GET" class="space-y-8">
+                    <input type="hidden" name="sort" value="<%= filters.sort %>">
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Search</label>
+                        <input
+                            type="text"
+                            name="search"
+                            value="<%= filters.search %>"
+                            placeholder="Search products..."
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-black"
+                        >
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Categories</p>
+                        <ul class="space-y-2 text-sm">
+                            <li>
+                                <a href="<%= buildQuery({ category: '', page: 1 }) %>" class="<%= !filters.categorySlug ? 'font-semibold text-black' : 'text-gray-500 hover:text-black' %>">
+                                    All Categories
+                                </a>
+                            </li>
+                            <% categories.forEach(cat => { %>
+                                <li>
+                                    <a href="<%= buildQuery({ category: cat.slug, page: 1 }) %>" class="<%= filters.categorySlug === cat.slug ? 'font-semibold text-black' : 'text-gray-500 hover:text-black' %>">
+                                        <%= cat.name %>
+                                    </a>
+                                </li>
+                            <% }) %>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+                            Price Range<% if (priceMax > 0) { %> (&#8377;<%= priceMin %> &ndash; &#8377;<%= priceMax %>)<% } %>
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <input type="number" name="minPrice" value="<%= filters.minPrice !== undefined ? filters.minPrice : '' %>" placeholder="Min" min="0"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                            <span class="text-gray-300">&ndash;</span>
+                            <input type="number" name="maxPrice" value="<%= filters.maxPrice !== undefined ? filters.maxPrice : '' %>" placeholder="Max" min="0"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full h-11 bg-black text-white rounded-lg text-xs font-semibold uppercase tracking-widest">
+                        Apply Filters
+                    </button>
+
+                    <% if (filters.search || filters.categorySlug || filters.minPrice !== undefined || filters.maxPrice !== undefined) { %>
+                        <a href="/products" class="block text-center text-xs font-semibold uppercase tracking-widest underline text-gray-400">
+                            Clear All
+                        </a>
+                    <% } %>
+                </form>
+            </aside>
+
+            <!-- Results -->
+            <div>
+                <div class="flex justify-end mb-6">
+                    <form action="/products" method="GET">
+                        <input type="hidden" name="search" value="<%= filters.search %>">
+                        <input type="hidden" name="category" value="<%= filters.categorySlug %>">
+                        <input type="hidden" name="minPrice" value="<%= filters.minPrice !== undefined ? filters.minPrice : '' %>">
+                        <input type="hidden" name="maxPrice" value="<%= filters.maxPrice !== undefined ? filters.maxPrice : '' %>">
+                        <select name="sort" onchange="this.form.submit()" class="border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-black bg-white">
+                            <option value="newest" <%= filters.sort === 'newest' ? 'selected' : '' %>>Newest</option>
+                            <option value="price-asc" <%= filters.sort === 'price-asc' ? 'selected' : '' %>>Price: Low to High</option>
+                            <option value="price-desc" <%= filters.sort === 'price-desc' ? 'selected' : '' %>>Price: High to Low</option>
+                            <option value="name-asc" <%= filters.sort === 'name-asc' ? 'selected' : '' %>>Name: A to Z</option>
+                            <option value="name-desc" <%= filters.sort === 'name-desc' ? 'selected' : '' %>>Name: Z to A</option>
+                        </select>
+                    </form>
+                </div>
+
+                <% if (products.length === 0) { %>
+                    <div class="text-center py-24 text-gray-400">
+                        <p>No products match these filters.</p>
+                        <a href="/products" class="underline text-sm mt-2 inline-block">Clear filters</a>
+                    </div>
+                <% } else { %>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                        <% products.forEach(p => { %>
+                            <div>
+                                <div class="aspect-[3/4] bg-gray-100 overflow-hidden mb-3 relative">
+                                    <% if (p.thumbnail) { %>
+                                        <img src="<%= p.thumbnail %>" alt="<%= p.name %>" class="w-full h-full object-cover">
+                                    <% } %>
+                                    <% if (p.totalStock === 0) { %>
+                                        <span class="absolute top-2 left-2 bg-black text-white text-[10px] px-2 py-1 uppercase tracking-widest">Out of Stock</span>
+                                    <% } %>
+                                </div>
+                                <p class="text-sm font-medium"><%= p.name %></p>
+                                <% if (p.brand) { %><p class="text-xs text-gray-400"><%= p.brand %></p><% } %>
+                                <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
+                                <% if (p.totalReviews > 0) { %>
+                                    <p class="text-xs text-gray-400 mt-0.5">&#9733; <%= p.averageRating.toFixed(1) %> (<%= p.totalReviews %>)</p>
+                                <% } %>
+                            </div>
+                        <% }) %>
+                    </div>
+
+                    <% if (totalPages > 1) { %>
+                        <div class="flex justify-center gap-2 mt-12">
+                            <% for (let i = 1; i <= totalPages; i++) { %>
+                                <a href="<%= buildQuery({ page: i }) %>"
+                                    class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm <%= currentPage === i ? 'bg-black text-white border-black' : 'border-gray-200 text-black' %>">
+                                    <%= i %>
+                                </a>
+                            <% } %>
+                        </div>
+                    <% } %>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</main>
+
+<%- include("../partials/storeFooter") %>
+
+</body>
+</html>

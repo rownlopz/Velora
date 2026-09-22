@@ -1,0 +1,90 @@
+<%- include("../partials/authHeader", { title: isEdit ? "Edit Address" : "Add Address" }) %>
+
+<main class="flex-1 flex items-center justify-center py-16 px-4">
+    <div class="auth-card">
+
+        <h2 class="text-4xl font-medium text-center">
+            <%= isEdit ? "Edit Address" : "Add Address" %>
+        </h2>
+
+        <% if (errors.general) { %>
+            <div class="mt-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm text-center">
+                <%= errors.general %>
+            </div>
+        <% } %>
+
+        <form action="<%= isEdit ? '/addresses/' + address._id + '/edit' : '/addresses/add' %>" method="POST" class="mt-8 space-y-5">
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="auth-label">First Name</label>
+                    <input type="text" name="firstName" value="<%= address.firstName || '' %>" class="auth-input">
+                    <% if (errors.firstName) { %><p class="text-red-600 text-sm mt-1"><%= errors.firstName %></p><% } %>
+                </div>
+                <div>
+                    <label class="auth-label">Last Name</label>
+                    <input type="text" name="lastName" value="<%= address.lastName || '' %>" class="auth-input">
+                    <% if (errors.lastName) { %><p class="text-red-600 text-sm mt-1"><%= errors.lastName %></p><% } %>
+                </div>
+            </div>
+
+            <div>
+                <label class="auth-label">Address Line 1</label>
+                <input type="text" name="addressLine1" value="<%= address.addressLine1 || '' %>" class="auth-input">
+                <% if (errors.addressLine1) { %><p class="text-red-600 text-sm mt-1"><%= errors.addressLine1 %></p><% } %>
+            </div>
+
+            <div>
+                <label class="auth-label">Address Line 2 (Optional)</label>
+                <input type="text" name="addressLine2" value="<%= address.addressLine2 || '' %>" class="auth-input">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="auth-label">City</label>
+                    <input type="text" name="city" value="<%= address.city || '' %>" class="auth-input">
+                    <% if (errors.city) { %><p class="text-red-600 text-sm mt-1"><%= errors.city %></p><% } %>
+                </div>
+                <div>
+                    <label class="auth-label">State</label>
+                    <input type="text" name="state" value="<%= address.state || '' %>" class="auth-input">
+                    <% if (errors.state) { %><p class="text-red-600 text-sm mt-1"><%= errors.state %></p><% } %>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="auth-label">Pincode</label>
+                    <input type="text" name="pinCode" value="<%= address.pinCode || '' %>" class="auth-input">
+                    <% if (errors.pinCode) { %><p class="text-red-600 text-sm mt-1"><%= errors.pinCode %></p><% } %>
+                </div>
+                <div>
+                    <label class="auth-label">Country</label>
+                    <input type="text" name="country" value="<%= address.country || '' %>" class="auth-input">
+                    <% if (errors.country) { %><p class="text-red-600 text-sm mt-1"><%= errors.country %></p><% } %>
+                </div>
+            </div>
+
+            <div>
+                <label class="auth-label">Phone Number</label>
+                <input type="text" name="phone" value="<%= address.phone || '' %>" class="auth-input">
+                <% if (errors.phone) { %><p class="text-red-600 text-sm mt-1"><%= errors.phone %></p><% } %>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="isDefault" <%= address.isDefault ? 'checked' : '' %>>
+                Set as default shipping address
+            </label>
+
+            <button type="submit" class="primary-btn">
+                <%= isEdit ? "SAVE ADDRESS" : "ADD ADDRESS" %>
+            </button>
+        </form>
+
+        <a href="/addresses" class="block text-center mt-6 text-sm text-gray-500 hover:text-black transition">
+            Cancel
+        </a>
+    </div>
+</main>
+
+<%- include("../partials/authFooter") %>

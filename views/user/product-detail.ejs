@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= product.name %> | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
+
+<%- include("../partials/storeHeader") %>
+
+<%
+    // Group variants by color/size so the page can offer selectable
+    // options rather than a flat list, and so we can tell at a glance
+    // whether a specific combination is in stock.
+    const colors = [...new Set(variants.map(v => v.color).filter(Boolean))];
+    const sizes = [...new Set(variants.map(v => v.size).filter(Boolean))];
+
+    // A representative variant for the default price/discount shown
+    // before the shopper picks anything — the cheapest in-stock one.
+    const inStockVariants = variants.filter(v => v.stock > 0);
+    const defaultVariant = (inStockVariants.length ? inStockVariants : variants)
+        .slice().sort((a, b) => (a.salePrice || a.regularPrice) - (b.salePrice || b.regularPrice))[0];
+
+    const discountPercent = defaultVariant.salePrice
+        ? Math.round(((defaultVariant.regularPrice - defaultVariant.salePrice) / defaultVariant.regularPrice) * 100)
+        : 0;
+%>
+
+<main class="flex-1">
+    <div class="max-w-screen-xl mx-auto px-6 md:px-10 py-8">
+
+        <!-- Breadcrumbs -->
+        <p class="text-xs text-gray-400 mb-6">
+            <a href="/products" class="hover:text-black">Products</a>
+            <% if (product.categoryId) { %>
+                &nbsp;/&nbsp;<a href="/products?category=<%= product.categoryId.slug || '' %>" class="hover:text-black"><%= product.categoryId.name || 'Category' %></a>
+            <% } %>
+            &nbsp;/&nbsp;<span class="text-gray-600"><%= product.name %></span>
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+
+            <!-- Image gallery with zoom -->
+            <div>
+                <div class="flex gap-4">
+                    <div class="flex flex-col gap-3">
+                        <% (product.images || []).forEach((img, i) => { %>
+                            <button
+                                type="button"
+                                onclick="setMainImage('<%= img %>')"
+                                class="w-16 h-20 rounded-md overflow-hidden border <%= i === 0 ? 'border-black' : 'border-gray-200' %> thumb-btn"
+                            >
+                                <img src="<%= img %>" class="w-full h-full object-cover">
+                            </button>
+                        <% }) %>
+                    </div>
+
+                    <div id="zoomContainer" class="flex-1 aspect-[3/4] bg-gray-100 rounded-lg overflow-hidden relative cursor-zoom-in">
+                        <img
+                            id="mainImage"
+                            src="<%= (product.images && product.images[0]) || product.thumbnail || '' %>"
+                            class="w-full h-full object-cover transition-transform duration-150"
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <!-- Details -->
+            <div>
+                <h1 class="text-3xl font-medium"><%= product.name %></h1>
+                <% if (product.brand) { %><p class="text-gray-400 text-sm mt-1"><%= product.brand %></p><% } %>
+
+                <% if (totalReviews > 0) { %>
+                    <div class="flex items-center gap-2 mt-3 text-sm">
+                        <span class="text-amber-500">&#9733; <%= averageRating %></span>
+                        <span class="text-gray-400">(<%= totalReviews %> review<%= totalReviews === 1 ? '' : 's' %>)</span>
+                    </div>
+                <% } %>
+
+                <div id="priceBlock" class="flex items-center gap-3 mt-5">
+                    <span id="displayPrice" class="text-2xl font-medium">
+                        &#8377;<%= (defaultVariant.salePrice || defaultVariant.regularPrice).toLocaleString('en-IN') %>
+                    </span>
+                    <% if (defaultVariant.salePrice) { %>
+                        <span id="regularPriceStrike" class="text-gray-400 line-through text-sm">&#8377;<%= defaultVariant.regularPrice.toLocaleString('en-IN') %></span>
+                        <span id="discountBadge" class="text-emerald-600 text-sm font-semibold"><%= discountPercent %>% OFF</span>
+                    <% } %>
+                </div>
+
+                <p class="text-gray-500 mt-6 leading-7 text-sm"><%= product.description %></p>
+
+                <form action="/cart/add" method="POST" class="mt-8" id="addToCartForm">
+                    <input type="hidden" name="variantId" id="selectedVariantId" value="<%= defaultVariant._id %>">
+
+                    <% if (colors.length > 0) { %>
+                        <div class="mb-5">
+                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Color</p>
+                            <div class="flex gap-2" id="colorOptions">
+                                <% colors.forEach(c => { %>
+                                    <button type="button" onclick="selectColor('<%= c %>')" data-color="<%= c %>"
+                                        class="color-btn px-4 py-2 border rounded-lg text-sm <%= c === defaultVariant.color ? 'border-black font-semibold' : 'border-gray-300' %>">
+                                        <%= c %>
+                                    </button>
+                                <% }) %>
+                            </div>
+                        </div>
+                    <% } %>
+
+                    <% if (sizes.length > 0) { %>
+                        <div class="mb-5">
+                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Size</p>
+                            <div class="flex gap-2" id="sizeOptions">
+                                <% sizes.forEach(s => { %>
+                                    <button type="button" onclick="selectSize('<%= s %>')" data-size="<%= s %>"
+                                        class="size-btn px-4 py-2 border rounded-lg text-sm <%= s === defaultVariant.size ? 'border-black font-semibold' : 'border-gray-300' %>">
+                                        <%= s %>
+                                    </button>
+                                <% }) %>
+                            </div>
+                        </div>
+                    <% } %>
+
+                    <p id="stockMessage" class="text-sm mb-5 <%= defaultVariant.stock === 0 ? 'text-red-500' : defaultVariant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600' %>">
+                        <%= defaultVariant.stock === 0 ? 'Out of stock' : defaultVariant.stock <= 5 ? `Only ${defaultVariant.stock} left in stock` : 'In stock' %>
+                    </p>
+
+                    <div class="flex gap-3">
+                        <button type="submit" id="addToCartBtn" <%= totalStock === 0 ? 'disabled' : '' %>
+                            class="flex-1 h-14 bg-black text-white rounded-xl font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+                            <%= totalStock === 0 ? 'Out of Stock' : 'Add to Cart' %>
+                        </button>
+                        <button type="button" onclick="document.getElementById('wishlistForm').requestSubmit()" class="h-14 px-6 border border-gray-300 rounded-xl font-semibold">
+                            &hearts;
+                        </button>
+                    </div>
+                </form>
+                <form id="wishlistForm" action="/wishlist/add" method="POST" class="hidden">
+                    <input type="hidden" name="variantId" id="wishlistVariantId" value="<%= defaultVariant._id %>">
+                </form>
+            </div>
+        </div>
+
+        <!-- Reviews -->
+        <section class="mt-20 pt-10 border-t border-gray-200 max-w-3xl">
+            <h2 class="text-2xl font-medium mb-6">Customer Reviews</h2>
+
+            <% if (reviews.length === 0) { %>
+                <p class="text-gray-400 text-sm">No reviews yet for this product.</p>
+            <% } else { %>
+                <div class="space-y-6">
+                    <% reviews.forEach(r => { %>
+                        <div class="border-b border-gray-100 pb-6">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="font-semibold text-sm"><%= r.name %>
+                                        <% if (r.isVerifiedPurchase) { %><span class="text-emerald-600 text-xs ml-2">Verified Purchase</span><% } %>
+                                    </p>
+                                    <p class="text-amber-500 text-sm mt-1"><%= '&#9733;'.repeat(r.rating) %></p>
+                                </div>
+                                <p class="text-xs text-gray-400"><%= new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) %></p>
+                            </div>
+                            <p class="text-gray-600 text-sm mt-2"><%= r.comment %></p>
+                        </div>
+                    <% }) %>
+                </div>
+            <% } %>
+        </section>
+
+        <!-- Related products -->
+        <% if (relatedProducts.length > 0) { %>
+            <section class="mt-16 pt-10 border-t border-gray-200">
+                <h2 class="text-2xl font-medium mb-6">You Might Also Like</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <% relatedProducts.forEach(p => { %>
+                        <a href="/products/<%= p.slug %>">
+                            <div class="aspect-[3/4] bg-gray-100 overflow-hidden mb-3">
+                                <% if (p.thumbnail) { %><img src="<%= p.thumbnail %>" class="w-full h-full object-cover"><% } %>
+                            </div>
+                            <p class="text-sm font-medium"><%= p.name %></p>
+                            <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
+                        </a>
+                    <% }) %>
+                </div>
+            </section>
+        <% } %>
+
+    </div>
+</main>
+
+<%- include("../partials/storeFooter") %>
+
+<script>
+    // All variants for this product, embedded so color/size selection
+    // can look up the matching variant client-side without a page
+    // reload. This is ONLY for UI responsiveness — the actual stock,
+    // price, and availability are re-verified server-side when the
+    // form is submitted, never trusted from this data alone.
+    const VARIANTS = <%- JSON.stringify(variants.map(v => ({
+        _id: v._id, color: v.color, size: v.size, stock: v.stock,
+        regularPrice: v.regularPrice, salePrice: v.salePrice,
+    }))) %>;
+
+    let selectedColor = "<%= defaultVariant.color %>";
+    let selectedSize = "<%= defaultVariant.size %>";
+
+    function findMatchingVariant() {
+        return VARIANTS.find(v => v.color === selectedColor && v.size === selectedSize) || VARIANTS[0];
+    }
+
+    function refreshSelection() {
+        const variant = findMatchingVariant();
+        if (!variant) return;
+
+        document.getElementById('selectedVariantId').value = variant._id;
+        document.getElementById('wishlistVariantId').value = variant._id;
+
+        const priceEl = document.getElementById('displayPrice');
+        priceEl.textContent = '\u20b9' + (variant.salePrice || variant.regularPrice).toLocaleString('en-IN');
+
+        const stockEl = document.getElementById('stockMessage');
+        const btn = document.getElementById('addToCartBtn');
+        if (variant.stock === 0) {
+            stockEl.textContent = 'Out of stock';
+            stockEl.className = 'text-sm mb-5 text-red-500';
+            btn.disabled = true;
+            btn.textContent = 'Out of Stock';
+        } else {
+            stockEl.textContent = variant.stock <= 5 ? ('Only ' + variant.stock + ' left in stock') : 'In stock';
+            stockEl.className = 'text-sm mb-5 ' + (variant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600');
+            btn.disabled = false;
+            btn.textContent = 'Add to Cart';
+        }
+    }
+
+    function selectColor(color) {
+        selectedColor = color;
+        document.querySelectorAll('.color-btn').forEach(b => {
+            b.classList.toggle('border-black', b.dataset.color === color);
+            b.classList.toggle('font-semibold', b.dataset.color === color);
+            b.classList.toggle('border-gray-300', b.dataset.color !== color);
+        });
+        refreshSelection();
+    }
+
+    function selectSize(size) {
+        selectedSize = size;
+        document.querySelectorAll('.size-btn').forEach(b => {
+            b.classList.toggle('border-black', b.dataset.size === size);
+            b.classList.toggle('font-semibold', b.dataset.size === size);
+            b.classList.toggle('border-gray-300', b.dataset.size !== size);
+        });
+        refreshSelection();
+    }
+
+    function setMainImage(src) {
+        document.getElementById('mainImage').src = src;
+    }
+
+    // Zoom on hover: scales the image and shifts it to follow the cursor.
+    const zoomContainer = document.getElementById('zoomContainer');
+    const mainImage = document.getElementById('mainImage');
+    zoomContainer.addEventListener('mousemove', (e) => {
+        const rect = zoomContainer.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        mainImage.style.transformOrigin = x + '% ' + y + '%';
+        mainImage.style.transform = 'scale(1.8)';
+    });
+    zoomContainer.addEventListener('mouseleave', () => {
+        mainImage.style.transform = 'scale(1)';
+    });
+</script>
+
+</body>
+</html>

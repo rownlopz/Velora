@@ -4,10 +4,87 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
 </head>
-<body>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
 
-    <h1>VELORA HOME</h1>
+<%- include("../partials/storeHeader", { active: "home" }) %>
+
+<main class="flex-1">
+
+    <!-- Hero -->
+    <section class="max-w-screen-xl mx-auto px-6 md:px-10 pt-10 pb-16">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-stretch">
+
+            <div class="flex flex-col justify-center py-10">
+                <p class="uppercase tracking-widest text-xs text-gray-400 mb-4">Spring Summer 2026</p>
+                <h1 class="text-5xl md:text-6xl font-medium leading-tight">
+                    The Poetry of Essentialism.
+                </h1>
+                <p class="text-gray-500 mt-6 leading-7 max-w-md">
+                    A curation of sculptural silhouettes and noble materials, designed for the quiet moments of modern life.
+                </p>
+                <a href="/products" class="inline-block mt-8 h-14 px-8 leading-[3.5rem] bg-black text-white rounded-none text-xs font-semibold tracking-widest uppercase w-fit">
+                    Discover Collection
+                </a>
+            </div>
+
+            <div class="rounded-none overflow-hidden bg-[#7d7a68] min-h-[420px]">
+                <img
+                    src="https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=900&q=80"
+                    alt="Spring Summer 2026 collection"
+                    class="w-full h-full object-cover">
+            </div>
+        </div>
+    </section>
+
+    <!-- New This Week -->
+    <section class="max-w-screen-xl mx-auto px-6 md:px-10 py-10 border-t border-gray-200">
+        <div class="flex justify-between items-end mb-8">
+            <div>
+                <h2 class="text-2xl font-medium">New This Week</h2>
+                <p class="text-gray-400 text-sm mt-1">Latest arrivals from the atelier.</p>
+            </div>
+            <a href="/products" class="text-xs font-semibold uppercase tracking-widest underline">View All</a>
+        </div>
+
+        <% if (newProducts.length === 0) { %>
+            <p class="text-gray-400 text-sm">New arrivals are on their way &mdash; check back soon.</p>
+        <% } else { %>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <% newProducts.forEach(p => { %>
+                    <a href="/products/<%= p.slug %>">
+                        <div class="aspect-[3/4] bg-gray-100 overflow-hidden mb-3">
+                            <% if (p.thumbnail) { %><img src="<%= p.thumbnail %>" alt="<%= p.name %>" class="w-full h-full object-cover"><% } %>
+                        </div>
+                        <p class="text-sm font-medium"><%= p.name %></p>
+                        <% if (p.brand) { %><p class="text-xs text-gray-400 mt-0.5"><%= p.brand %></p><% } %>
+                        <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
+                    </a>
+                <% }) %>
+            </div>
+        <% } %>
+    </section>
+
+    <!-- Manifesto -->
+    <section class="border-t border-gray-200">
+        <div class="max-w-screen-md mx-auto px-6 py-20 text-center">
+            <p class="text-2xl mb-6">&#10022;</p>
+            <blockquote class="text-3xl font-medium leading-snug">
+                "True luxury is not about excess; it is about the perfection of the essential."
+            </blockquote>
+            <p class="text-gray-500 mt-6 leading-7 text-sm max-w-lg mx-auto">
+                Founded on the principles of architectural precision and uncompromising material quality,
+                VELORA exists to provide a sanctuary of style in a world of noise.
+                Each piece is a testament to the hands that crafted it.
+            </p>
+            <p class="mt-6 text-xs font-semibold uppercase tracking-widest cursor-not-allowed" title="Coming soon">Our Manifesto</p>
+        </div>
+    </section>
+
+</main>
+
+<%- include("../partials/storeFooter") %>
 
 </body>
 </html>

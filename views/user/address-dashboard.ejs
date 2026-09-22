@@ -1,0 +1,60 @@
+<%- include("../partials/authHeader", { title: "My Addresses" }) %>
+
+<main class="flex-1 py-16 px-4">
+    <div class="max-w-3xl mx-auto">
+
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-4xl font-medium">Address Management</h2>
+            <a href="/addresses/add" class="primary-btn text-center inline-block px-6" style="width:auto;">
+                + Add Address
+            </a>
+        </div>
+
+        <% if (addresses.length === 0) { %>
+            <div class="auth-card max-w-3xl text-center py-16">
+                <p class="text-gray-500">You haven't saved any addresses yet.</p>
+            </div>
+        <% } else { %>
+            <div class="space-y-4">
+                <% addresses.forEach(addr => { %>
+                    <div class="auth-card max-w-3xl flex justify-between items-start">
+                        <div>
+                            <p class="font-semibold text-lg">
+                                <%= addr.firstName %> <%= addr.lastName %>
+                                <% if (addr.isDefault) { %>
+                                    <span class="ml-2 text-xs bg-black text-white px-2 py-0.5 rounded-full align-middle">Default</span>
+                                <% } %>
+                            </p>
+                            <p class="text-gray-500 mt-2">
+                                <%= addr.addressLine1 %><% if (addr.addressLine2) { %>, <%= addr.addressLine2 %><% } %>
+                                <br>
+                                <%= addr.city %>, <%= addr.state %> - <%= addr.pinCode %>
+                                <br>
+                                <%= addr.country %>
+                                <br>
+                                Phone: <%= addr.phone %>
+                            </p>
+                        </div>
+
+                        <div class="flex flex-col gap-2 shrink-0 ml-6">
+                            <a href="/addresses/<%= addr._id %>/edit" class="secondary-btn text-center px-6 text-sm" style="width:auto; height:auto; padding-top:0.6rem; padding-bottom:0.6rem;">
+                                Edit
+                            </a>
+                            <form action="/addresses/<%= addr._id %>/delete" method="POST" onsubmit="return confirm('Delete this address?');">
+                                <button type="submit" class="secondary-btn text-center px-6 text-sm text-red-600 border-red-200 hover:bg-red-50" style="width:100%; height:auto; padding-top:0.6rem; padding-bottom:0.6rem;">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } %>
+
+        <a href="/profile" class="block text-center mt-8 text-sm text-gray-500 hover:text-black transition">
+            Back to Profile
+        </a>
+    </div>
+</main>
+
+<%- include("../partials/authFooter") %>

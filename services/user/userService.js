@@ -182,19 +182,21 @@ const resendSignupOtp = async ({ email }) => {
 const loginUser = async ({ email, password }) => {
     const normalizedEmail = email.toLowerCase().trim();
 
-     console.log("LOGIN EMAIL:", normalizedEmail);
-
     const user = await User.findOne({
         email: normalizedEmail
     });
-
-    console.log("USER FOUND:", !!user);
-    console.log("PASSWORD EXISTS:", !!user?.password);
 
     if (!user) {
         return {
             success: false,
             message: "Invalid email or password"
+        };
+    }
+
+    if (user.role !== "USER") {
+        return {
+            success: false,
+            message: "This account cannot sign in from the user portal."
         };
     }
 

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Information | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
+
+<%- include("../partials/storeHeader") %>
+
+<main class="flex-1">
+    <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-14">
+
+        <h1 class="text-3xl font-medium">Account Information</h1>
+        <p class="text-gray-400 text-sm mt-2">Manage your personal details and delivery addresses.</p>
+
+        <% if (errors.general) { %>
+            <div class="mt-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
+                <%= errors.general %>
+            </div>
+        <% } %>
+
+        <div class="mt-10 grid grid-cols-1 md:grid-cols-[180px_1fr] gap-12">
+
+            <!-- Sidebar -->
+            <aside class="text-sm">
+                <ul class="space-y-4">
+                    <li class="font-semibold border-l-2 border-black pl-3 -ml-3">Profile Details</li>
+                    <li class="text-gray-300 cursor-not-allowed" title="Coming soon">Order History</li>
+                    <li class="text-gray-300 cursor-not-allowed" title="Coming soon">Referral Page</li>
+                    <li class="text-gray-300 cursor-not-allowed" title="Coming soon">Wishlist</li>
+                    <li class="text-gray-300 cursor-not-allowed" title="Coming soon">Coupons</li>
+                    <li class="pt-4"><a href="/logout" class="text-red-600 hover:underline">Sign Out</a></li>
+                </ul>
+            </aside>
+
+            <!-- Main content -->
+            <div>
+
+                <!-- Personal Details -->
+                <section>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">Personal Details</p>
+
+                    <form action="/profile/edit" method="POST" enctype="multipart/form-data" class="space-y-6">
+
+                        <div class="flex items-center gap-4">
+                            <div class="relative shrink-0">
+                                <div id="avatarPreviewContainer" class="w-16 h-16 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xl font-semibold text-gray-500">
+                                    <% if (user.avatar) { %>
+                                        <img src="<%= user.avatar %>" alt="Profile photo" class="w-full h-full object-cover">
+                                    <% } else { %>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4.5 5-6 8-6s6.5 1.5 8 6"/></svg>
+                                    <% } %>
+                                </div>
+                                <label for="avatarInput" class="absolute -bottom-1 -right-1 w-6 h-6 bg-black rounded-full flex items-center justify-center text-white cursor-pointer">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+                                </label>
+                                <input type="file" id="avatarInput" name="avatar" accept="image/jpeg,image/png,image/gif" class="hidden">
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium">Profile Photo</p>
+                                <p class="text-xs text-gray-400 mt-0.5" id="avatarHelpText">JPG, GIF or PNG. Max size of 2MB.</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="auth-label">Full Name</label>
+                                <input type="text" name="fullName" value="<%= user.fullName || '' %>" class="auth-input">
+                                <% if (errors.fullName) { %><p class="text-red-600 text-sm mt-1"><%= errors.fullName %></p><% } %>
+                            </div>
+                            <div>
+                                <label class="auth-label">Phone Number</label>
+                                <input type="text" name="phone" value="<%= user.phone || '' %>" class="auth-input">
+                                <% if (errors.phone) { %><p class="text-red-600 text-sm mt-1"><%= errors.phone %></p><% } %>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="auth-label">Email Address</label>
+                            <input type="email" value="<%= user.email %>" disabled class="auth-input bg-gray-50 text-gray-400">
+
+                            <% if (user.authProvider === 'GOOGLE') { %>
+                                <p class="text-xs text-gray-400 mt-2">
+                                    This email is managed by your Google account and cannot be changed here.
+                                </p>
+                            <% } else { %>
+                                <p class="text-xs text-gray-400 mt-2">
+                                    Want to use a different email? <a href="/profile/change-email" class="underline text-gray-600">Change it here</a> — we'll verify it with a code first.
+                                </p>
+                            <% } %>
+                        </div>
+
+                        <button type="submit" class="h-12 px-8 bg-black text-white rounded-xl text-xs font-semibold uppercase tracking-widest">
+                            Save Changes
+                        </button>
+                    </form>
+                </section>
+
+                <hr class="my-10 border-gray-200">
+
+                <!-- Password Management -->
+                <section>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">Password Management</p>
+
+                    <% if (user.authProvider === 'GOOGLE') { %>
+                        <p class="text-sm text-gray-400">
+                            Your account signs in with Google, so there's no VELORA password to manage.
+                        </p>
+                    <% } else { %>
+                        <p class="text-sm text-gray-500 mb-4">
+                            Keep your account secure by updating your password from time to time.
+                        </p>
+                        <a href="/profile/change-password" class="inline-block h-12 px-8 leading-[2.9rem] border border-gray-300 rounded-xl text-xs font-semibold uppercase tracking-widest hover:bg-gray-50 transition">
+                            Change Password
+                        </a>
+                    <% } %>
+                </section>
+
+                <hr class="my-10 border-gray-200">
+
+                <!-- Saved Addresses -->
+                <section>
+                    <div class="flex justify-between items-center mb-6">
+                        <p class="text-xs font-semibold uppercase tracking-widest text-gray-400">Saved Addresses</p>
+                        <a href="/addresses/add" class="text-xs font-semibold uppercase tracking-widest underline">+ Add New</a>
+                    </div>
+
+                    <% if (addresses.length === 0) { %>
+                        <p class="text-sm text-gray-400">No addresses saved yet.</p>
+                    <% } else { %>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <% addresses.forEach(addr => { %>
+                                <div class="border border-gray-200 rounded-xl p-5">
+                                    <div class="flex justify-between items-start">
+                                        <p class="font-semibold text-sm"><%= addr.firstName %> <%= addr.lastName %></p>
+                                        <% if (addr.isDefault) { %>
+                                            <span class="text-[10px] bg-black text-white px-2 py-0.5 rounded-full uppercase tracking-widest">Default</span>
+                                        <% } %>
+                                    </div>
+                                    <p class="text-sm text-gray-500 mt-2 leading-6">
+                                        <%= addr.addressLine1 %><% if (addr.addressLine2) { %>, <%= addr.addressLine2 %><% } %>
+                                        <br>
+                                        <%= addr.city %><% if (addr.state) { %>, <%= addr.state %><% } %>
+                                    </p>
+
+                                    <div class="flex gap-4 mt-4 pt-4 border-t border-gray-100 text-xs font-semibold uppercase tracking-widest">
+                                        <a href="/addresses/<%= addr._id %>/edit" class="hover:underline">Edit</a>
+                                        <% if (!addr.isDefault) { %>
+                                            <form action="/addresses/<%= addr._id %>/set-default" method="POST">
+                                                <input type="hidden" name="redirectTo" value="profile-edit">
+                                                <button type="submit" class="hover:underline">Set as Default</button>
+                                            </form>
+                                        <% } %>
+                                        <form action="/addresses/<%= addr._id %>/delete" method="POST" onsubmit="return confirm('Remove this address?');">
+                                            <button type="submit" class="hover:underline text-red-600">Remove</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        </div>
+                    <% } %>
+                </section>
+
+            </div>
+        </div>
+    </div>
+</main>
+
+<%- include("../partials/storeFooter") %>
+
+<script>
+    // Gives the user immediate visual confirmation that a file was picked,
+    // before they click "Save Changes". Previously the file input had no
+    // feedback at all, so a successful selection looked identical to no
+    // selection — this is purely a preview; the actual validation and
+    // upload still happen on the server exactly as before.
+    (function () {
+        var input = document.getElementById("avatarInput");
+        var previewContainer = document.getElementById("avatarPreviewContainer");
+        var helpText = document.getElementById("avatarHelpText");
+        var defaultHelpText = helpText ? helpText.textContent : "";
+
+        // Kept in sync with middlewares/upload.js (jpg, jpeg, png, gif / 2MB)
+        var ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif"];
+        var MAX_SIZE = 2 * 1024 * 1024;
+
+        if (!input || !previewContainer) return;
+
+        input.addEventListener("change", function (e) {
+            var file = e.target.files[0];
+            if (!file) return;
+
+            if (ALLOWED_TYPES.indexOf(file.type) === -1) {
+                if (helpText) {
+                    helpText.textContent = "Only JPG, PNG, or GIF images are allowed.";
+                    helpText.classList.add("text-red-600");
+                }
+                input.value = "";
+                return;
+            }
+
+            if (file.size > MAX_SIZE) {
+                if (helpText) {
+                    helpText.textContent = "Image must be smaller than 2MB.";
+                    helpText.classList.add("text-red-600");
+                }
+                input.value = "";
+                return;
+            }
+
+            if (helpText) {
+                helpText.textContent = defaultHelpText;
+                helpText.classList.remove("text-red-600");
+            }
+
+            var url = URL.createObjectURL(file);
+            previewContainer.innerHTML = '<img src="' + url + '" alt="Profile photo" class="w-full h-full object-cover">';
+        });
+    })();
+</script>
+
+</body>
+</html>

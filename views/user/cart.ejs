@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopping Bag | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
+
+<%- include("../partials/storeHeader") %>
+
+<main class="flex-1">
+    <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
+
+        <h1 class="text-3xl font-medium">Shopping Bag</h1>
+        <p class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> in your bag</p>
+
+        <% if (typeof notice !== 'undefined' && notice) { %>
+            <div class="mt-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm"><%= notice %></div>
+        <% } %>
+
+        <% if (items.length === 0) { %>
+            <div class="text-center py-24">
+                <p class="text-gray-400">Your bag is empty.</p>
+                <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Continue Shopping</a>
+            </div>
+        <% } else { %>
+
+            <div class="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-10 mt-8">
+
+                <!-- Items -->
+                <div class="space-y-6">
+                    <% items.forEach(item => { %>
+                        <div class="flex gap-4 pb-6 border-b border-gray-100 <%= !item.isAvailable ? 'opacity-60' : '' %>">
+                            <div class="w-20 h-24 bg-gray-100 rounded-md overflow-hidden shrink-0">
+                                <% if (item.product && item.product.thumbnail) { %>
+                                    <img src="<%= item.product.thumbnail %>" class="w-full h-full object-cover">
+                                <% } %>
+                            </div>
+
+                            <div class="flex-1">
+                                <p class="font-medium"><%= item.product ? item.product.name : 'Product unavailable' %></p>
+                                <% if (item.variant) { %>
+                                    <p class="text-xs text-gray-400 mt-1">
+                                        <%= [item.variant.color, item.variant.size].filter(Boolean).join(' / ') %>
+                                    </p>
+                                <% } %>
+
+                                <% if (!item.isAvailable) { %>
+                                    <p class="text-red-500 text-xs mt-2">This item is no longer available and won't be included in your total.</p>
+                                <% } else if (item.stockExceeded) { %>
+                                    <p class="text-amber-600 text-xs mt-2">Only <%= item.variant.stock %> left &mdash; reduce quantity to continue.</p>
+                                <% } %>
+
+                                <div class="flex items-center gap-4 mt-3">
+                                    <form action="/cart/<%= item.variantId %>/decrement" method="POST">
+                                        <button type="submit" class="w-7 h-7 border border-gray-300 rounded-md text-sm" <%= !item.isAvailable ? 'disabled' : '' %>>&minus;</button>
+                                    </form>
+                                    <span class="text-sm w-4 text-center"><%= item.quantity %></span>
+                                    <form action="/cart/<%= item.variantId %>/increment" method="POST">
+                                        <button type="submit" class="w-7 h-7 border border-gray-300 rounded-md text-sm" <%= !item.isAvailable ? 'disabled' : '' %>>+</button>
+                                    </form>
+
+                                    <form action="/cart/<%= item.variantId %>/remove" method="POST" class="ml-2">
+                                        <button type="submit" class="text-xs text-gray-400 hover:text-red-600 underline">Remove</button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <p class="text-sm font-medium">
+                                <% if (item.isAvailable) { %>
+                                    &#8377;<%= item.currentPrice.toLocaleString('en-IN') %>
+                                <% } else { %>
+                                    &mdash;
+                                <% } %>
+                            </p>
+                        </div>
+                    <% }) %>
+
+                    <a href="/products" class="text-sm text-gray-500 hover:text-black inline-block">&larr; Continue Shopping</a>
+                </div>
+
+                <!-- Order Summary -->
+                <div>
+                    <div class="bg-white border border-gray-200 rounded-xl p-6">
+                        <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Summary</p>
+
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-500">Subtotal</span>
+                            <span>&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
+                        </div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-500">Estimated Shipping</span>
+                            <span class="text-gray-400">Calculated at checkout</span>
+                        </div>
+
+                        <div class="border-t border-gray-200 mt-4 pt-4 flex justify-between font-medium">
+                            <span>Total</span>
+                            <span>&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
+                        </div>
+
+                        <span
+                            class="block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold <%= hasUnavailableItems ? 'opacity-40 cursor-not-allowed' : 'cursor-not-allowed opacity-70' %>"
+                            title="Checkout isn't part of this week's build"
+                        >
+                            <%= hasUnavailableItems ? 'Resolve unavailable items to continue' : 'Proceed to Checkout' %>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</main>
+
+<%- include("../partials/storeFooter") %>
+
+</body>
+</html>

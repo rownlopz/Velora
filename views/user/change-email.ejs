@@ -1,0 +1,60 @@
+<%- include("../partials/authHeader", { title: "Change Email" }) %>
+
+<main class="flex-1 flex items-center justify-center py-16 px-4">
+    <div class="auth-card">
+
+        <h2 class="text-4xl font-medium text-center">
+            Change Email
+        </h2>
+
+        <% if (typeof errors !== 'undefined' && errors.general) { %>
+            <div class="mt-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm text-center">
+                <%= errors.general %>
+            </div>
+        <% } %>
+
+        <% if (step === "request") { %>
+            <p class="text-center text-gray-500 mt-4 leading-7">
+                Enter your new email address. We'll send a verification code to confirm it.
+            </p>
+
+            <form action="/profile/change-email" method="POST" class="mt-8 space-y-6">
+                <div>
+                    <label class="auth-label">New Email Address</label>
+                    <input type="email" name="newEmail" class="auth-input">
+                    <% if (errors.newEmail) { %>
+                        <p class="text-red-600 text-sm mt-1"><%= errors.newEmail %></p>
+                    <% } %>
+                </div>
+
+                <button type="submit" class="primary-btn">
+                    SEND VERIFICATION CODE
+                </button>
+            </form>
+        <% } else { %>
+            <p class="text-center text-gray-500 mt-4 leading-7">
+                We've sent a code to
+                <br>
+                <span class="font-medium text-black"><%= newEmail %></span>
+            </p>
+
+            <form action="/profile/change-email/verify" method="POST" class="mt-8 space-y-6">
+                <div>
+                    <label class="auth-label">Verification Code</label>
+                    <input type="text" name="otp" maxlength="4" inputmode="numeric" class="auth-input text-center tracking-[0.5em]">
+                    <% if (errors.otp) { %><p class="text-red-600 text-sm mt-1"><%= errors.otp %></p><% } %>
+                </div>
+
+                <button type="submit" class="primary-btn">
+                    CONFIRM EMAIL CHANGE
+                </button>
+            </form>
+        <% } %>
+
+        <a href="/profile" class="block text-center mt-6 text-sm text-gray-500 hover:text-black transition">
+            Cancel
+        </a>
+    </div>
+</main>
+
+<%- include("../partials/authFooter") %>

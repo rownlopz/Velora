@@ -1,0 +1,62 @@
+<script>
+    window.addEventListener("pageshow", function(event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
+</script>
+<aside class="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
+    <div class="px-6 py-6 border-b border-gray-100">
+        <h1 class="text-xl font-bold tracking-wide">VELORA</h1>
+        <p class="text-xs text-gray-400 mt-0.5">Admin Console</p>
+    </div>
+
+    <nav class="flex-1 px-4 py-6 space-y-1 text-sm">
+        <span class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 cursor-not-allowed" title="Coming soon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Dashboard
+        </span>
+
+        <span class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 cursor-not-allowed" title="Coming soon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
+            Orders
+        </span>
+
+        <a href="/admin/products" class="flex items-center gap-3 px-3 py-2.5 rounded-lg <%= typeof active !== 'undefined' && active === 'products' ? 'font-semibold text-black border-r-2 border-black bg-gray-50' : 'text-gray-500 hover:bg-gray-50' %>">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.9 7.3 12 2 3.1 7.3a1 1 0 0 0-.5.9v7.6a1 1 0 0 0 .5.9L12 22l8.9-5.3a1 1 0 0 0 .5-.9V8.2a1 1 0 0 0-.5-.9Z"/></svg>
+            Products
+        </a>
+
+        <a href="/admin/categories" class="flex items-center gap-3 px-3 py-2.5 rounded-lg <%= typeof active !== 'undefined' && active === 'categories' ? 'font-semibold text-black border-r-2 border-black bg-gray-50' : 'text-gray-500 hover:bg-gray-50' %>">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.6 12 21.2a2 2 0 0 1-2.8 0l-8-8A2 2 0 0 1 1 11.7V4a1 1 0 0 1 1-1h7.7a2 2 0 0 1 1.4.6l8 8a2 2 0 0 1 0 2.8Z"/><circle cx="6.5" cy="6.5" r="1"/></svg>
+            Categories
+        </a>
+
+        <span class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 cursor-not-allowed" title="Coming soon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            Offers
+        </span>
+
+        <span class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 cursor-not-allowed" title="Coming soon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="10" rx="1"/><path d="M3 10h18"/></svg>
+            Banners
+        </span>
+
+        <a href="/admin/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg <%= typeof active !== 'undefined' && active === 'customers' ? 'font-semibold text-black border-r-2 border-black bg-gray-50' : 'text-gray-500 hover:bg-gray-50' %>">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Customers
+        </a>
+    </nav>
+
+    <div class="px-4 py-6 border-t border-gray-100 space-y-1 text-sm">
+        <span class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 cursor-not-allowed" title="Coming soon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+            Settings
+        </span>
+
+        <span class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 cursor-not-allowed" title="Coming soon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>
+            Support
+        </span>
+    </div>
+</aside>

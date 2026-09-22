@@ -1,8 +1,19 @@
-const { validateSignup } = require("../../helpers/validation");
+const { validateSignup, validateResetPassword } = require("../../helpers/validation");
 const { signupUser, verifySignupOtp, resendSignupOtp, loginUser, forgotPassword, verifyResetOtp, resetPassword } = require("../../services/user/userService");
 
-const loadHome = (req, res) => {
-    res.render("user/home");
+const { listProducts } = require("../../services/user/productListService");
+
+const loadHome = async (req, res) => {
+    try {
+        const { products } = await listProducts(
+            { search: "", categorySlug: "", minPrice: undefined, maxPrice: undefined, sort: "newest", page: 1 },
+            4
+        );
+        res.render("user/home", { newProducts: products });
+    } catch (error) {
+        console.error("Load Home Error:", error);
+        res.render("user/home", { newProducts: [] });
+    }
 };
 
 const loadSignup = (req, res) => {
@@ -22,9 +33,12 @@ const loadLogin = (req, res) => {
 };
 
 const loadOtp = (req, res) => {
+    const flow = req.session.otpFlow;
+
     const email =
-        req.session.signupData?.email ||
-        req.session.resetPasswordEmail;
+        flow === "SIGNUP" ? req.session.signupData?.email :
+        flow === "RESET_PASSWORD" ? req.session.resetPasswordEmail :
+        null;
 
     if (!email) {
         return res.redirect("/signup");
@@ -87,6 +101,15 @@ const signup = async (req, res) => {
         // Store temporary signup data in session
         req.session.signupData = result.signupData;
 
+        // Explicit flow marker so /otp and /resend-otp know exactly which
+        // flow is active, rather than inferring it from which session
+        // keys happen to be set — that inference breaks if a user
+        // abandons one flow mid-way and starts the other, leaving stale
+        // data behind.
+        req.session.otpFlow = "SIGNUP";
+        delete req.session.resetPasswordEmail;
+        delete req.session.resetPasswordVerified;
+
         // Move user to OTP page
         return res.redirect("/otp");
 
@@ -107,52 +130,68 @@ const signup = async (req, res) => {
 const verifyOtp = async (req, res) => {
     try {
         const { otp } = req.body;
+        const flow = req.session.otpFlow;
 
         // Password reset OTP
-        if (req.session.resetPasswordEmail) {
+        if (flow === "RESET_PASSWORD") {
+            const email = req.session.resetPasswordEmail;
+
+            if (!email) {
+                return res.redirect("/forgot-password");
+            }
+
             const result = await verifyResetOtp({
-                email: req.session.resetPasswordEmail,
+                email,
                 enteredOtp: otp
             });
 
             if (!result.success) {
                 return res.status(400).render("user/otp", {
                     title: "OTP Verification",
-                    email: req.session.resetPasswordEmail,
+                    email,
                     error: result.message
                 });
             }
 
             req.session.resetPasswordVerified = true;
+            delete req.session.otpFlow;
 
             return res.redirect("/reset-password");
         }
 
         // Signup OTP
-        const signupData = req.session.signupData;
+        if (flow === "SIGNUP") {
+            const signupData = req.session.signupData;
 
-        if (!signupData) {
-            return res.redirect("/signup");
-        }
+            if (!signupData) {
+                return res.redirect("/signup");
+            }
 
-        const result = await verifySignupOtp({
-            email: signupData.email,
-            enteredOtp: otp.trim(),
-            signupData
-        });
-
-        if (!result.success) {
-            return res.status(400).render("user/otp", {
-                title: "OTP Verification",
+            const result = await verifySignupOtp({
                 email: signupData.email,
-                error: result.message
+                enteredOtp: otp.trim(),
+                signupData
             });
+
+            if (!result.success) {
+                return res.status(400).render("user/otp", {
+                    title: "OTP Verification",
+                    email: signupData.email,
+                    error: result.message
+                });
+            }
+
+            // Own session cookie now (velora.user.sid) — no longer
+            // shares storage with the admin session.
+            req.session.userId = result.user._id;
+            delete req.session.signupData;
+            delete req.session.otpFlow;
+
+            return req.session.save(() => res.redirect("/"));
         }
 
-        req.session.userId = result.user._id;
-        delete req.session.signupData;
-
-        return req.session.save(() => res.redirect("/"));
+        // No active flow (expired/stale session, or /otp hit directly)
+        return res.redirect("/signup");
 
     } catch (error) {
         console.error("OTP Verification Error:", error);
@@ -189,6 +228,8 @@ const login = async (req, res) => {
             });
         }
 
+        // Own session cookie now (velora.user.sid) — no longer shares
+        // storage with the admin session.
         req.session.userId = result.user._id;
 
         return req.session.save(() => {
@@ -236,40 +277,13 @@ const forgotPasswordController = async (req, res) => {
 
         req.session.resetPasswordEmail = result.email;
 
+        // Same explicit flow marker as signup — see comment there.
+        req.session.otpFlow = "RESET_PASSWORD";
+        delete req.session.signupData;
+
         return res.redirect("/otp");
     } catch (error) {
         console.error("Forgot Password Error:", error);
-        return res.status(500).send("Something went wrong");
-    }
-};
-
-const verifyResetOtpController = async (req, res) => {
-    try {
-        const email = req.session.resetPasswordEmail;
-        const { otp } = req.body;
-
-        if (!email) {
-            return res.redirect("/forgot-password");
-        }
-
-        const result = await verifyResetOtp({
-            email,
-            enteredOtp: otp
-        });
-
-        if (!result.success) {
-            return res.status(400).render("user/otp", {
-                title: "OTP Verification",
-                email,
-                error: result.message
-            });
-        }
-
-        req.session.resetPasswordVerified = true;
-
-        return res.redirect("/reset-password");
-    } catch (error) {
-        console.error("Reset OTP Error:", error);
         return res.status(500).send("Something went wrong");
     }
 };
@@ -284,21 +298,11 @@ const resetPasswordController = async (req, res) => {
             return res.redirect("/forgot-password");
         }
 
-        if (!password || password.length < 8) {
+        const errors = validateResetPassword({ password, confirmPassword });
+        if (errors) {
             return res.status(400).render("user/reset-password", {
                 title: "Reset Password",
-                errors: {
-                    password: "Password must be at least 8 characters"
-                }
-            });
-        }
-
-        if (password !== confirmPassword) {
-            return res.status(400).render("user/reset-password", {
-                title: "Reset Password",
-                errors: {
-                    confirmPassword: "Passwords do not match"
-                }
+                errors,
             });
         }
 
@@ -326,29 +330,67 @@ const resetPasswordController = async (req, res) => {
 
 const resendOtp = async (req, res) => {
     try {
-        const signupData = req.session.signupData;
+        const flow = req.session.otpFlow;
 
-        if (!signupData) {
-            return res.status(400).json({
-                success: false,
-                message: "Signup session expired. Please sign up again."
+        // Previously this only supported the signup flow — clicking
+        // "Resend" during forgot-password OTP verification always failed
+        // with a signup-specific message and never actually resent
+        // anything. Both flows are now handled explicitly.
+        if (flow === "RESET_PASSWORD") {
+            const email = req.session.resetPasswordEmail;
+
+            if (!email) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Password reset session expired. Please start again."
+                });
+            }
+
+            const result = await forgotPassword({ email });
+
+            if (!result.success) {
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "A new verification code has been sent to your email."
             });
         }
 
-        const result = await resendSignupOtp({
-            email: signupData.email
-        });
+        if (flow === "SIGNUP") {
+            const signupData = req.session.signupData;
 
-        if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message
+            if (!signupData) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Signup session expired. Please sign up again."
+                });
+            }
+
+            const result = await resendSignupOtp({
+                email: signupData.email
+            });
+
+            if (!result.success) {
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "A new verification code has been sent to your email."
             });
         }
 
-        return res.status(200).json({
-            success: true,
-            message: "A new verification code has been sent to your email."
+        return res.status(400).json({
+            success: false,
+            message: "Session expired. Please start again."
         });
 
     } catch (error) {
@@ -368,7 +410,6 @@ module.exports = {
     loadForgotPassword,
     loadResetPassword,
     forgotPasswordController,
-    verifyResetOtpController,
     resetPasswordController,
     signup,
     login,
