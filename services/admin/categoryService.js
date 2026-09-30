@@ -1,12 +1,7 @@
 const Category = require("../../models/product/categoryModel");
 const slugify = require("../../utils/slugify");
 
-/**
- * List categories for the admin table. Excludes soft-deleted categories
- * (they should never appear here, or anywhere user-facing) and supports
- * search + pagination + newest-first sorting, all combined in one query
- * so they work correctly together.
- */
+
 const getCategories = async ({ search = "", page = 1, limit = 10 }) => {
     const skip = (page - 1) * limit;
 
@@ -41,12 +36,7 @@ const getCategoryById = async (categoryId) => {
     return { success: true, category };
 };
 
-/**
- * Checks for a duplicate ACTIVE (non-deleted) category by name or slug.
- * A soft-deleted category's name should never block a new category from
- * reusing that name — uniqueness only matters among categories that are
- * actually visible/in-use.
- */
+
 const findDuplicate = async (name, slug, excludeId = null) => {
     const query = {
         isDeleted: false,

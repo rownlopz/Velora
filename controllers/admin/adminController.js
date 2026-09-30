@@ -31,8 +31,6 @@ const loginController = async (req, res) => {
             });
         }
 
-        // Own session cookie now (velora.admin.sid) — no longer shares
-        // storage with the user session, so there's nothing to clear here.
         req.session.adminId = result.admin._id;
 
         return req.session.save(() => {

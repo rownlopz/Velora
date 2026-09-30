@@ -2,11 +2,7 @@ const mongoose = require("mongoose");
 const Product = require("../../models/product/productModel");
 const Category = require("../../models/product/categoryModel");
 
-/**
- * Pure function: turns raw query-string values into a clean, typed
- * filter object. Kept separate from the database logic below so it can
- * be unit-tested without a database connection.
- */
+
 const parseListingQuery = (query) => {
     const search = (query.search || "").trim();
     
@@ -48,24 +44,24 @@ const SORT_STAGES = {
     "newest": { createdAt: -1 },
 };
 
-/**
- * Builds and runs ONE aggregation pipeline combining search + category +
- * price range + sort + pagination. Price lives on Variant, not
- * Product, so a $lookup is required to filter/sort by it — this is why a
- * plain Product.find() can't do this alone.
- */
+
 const listProducts = async (filters, limit = 12) => {
     const { search, categories, sizes, colors, minPrice, maxPrice, sort, page } = filters;
     const skip = (page - 1) * limit;
 
     const pipeline = [];
 
-    // Stage 1: base visibility — only listed, non-deleted products ever
-    // reach the storefront, no matter what else is filtered.
-    const baseMatch = { isDeleted: false, status: "ACTIVE" };
-    if (search) baseMatch.name = { $regex: search, $options: "i" };
+ 
+    const baseMatch = { isDeleted: false };
+    if (search) {
+        baseMatch.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { description: { $regex: search, $options: "i" } },
+        ];
+    }
     pipeline.push({ $match: baseMatch });
 
+  
     if (categories && categories.length > 0) {
         const catDocs = await Category.find({ slug: { $in: categories }, isDeleted: false });
         const catIds = catDocs.map(c => c._id);
@@ -76,28 +72,44 @@ const listProducts = async (filters, limit = 12) => {
         }
     }
 
-    // Stage 3: join active (non-blocked) variants to compute price + stock
-    const variantMatch = { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true };
+    // Join the category doc so we can mark products whose category is inactive.
+    pipeline.push({
+        $lookup: {
+            from: "categories",
+            localField: "categoryId",
+            foreignField: "_id",
+            as: "categoryDoc",
+        },
+    });
+    pipeline.push({
+        $addFields: {
+            categoryDoc: { $arrayElemAt: ["$categoryDoc", 0] },
+        },
+    });
+
+
+    const variantPipeline = [
+        { $match: { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true } },
+    ];
     if (sizes && sizes.length > 0) {
-        variantMatch.size = { $in: sizes };
+        variantPipeline.push({ $match: { size: { $in: sizes } } });
     }
     if (colors && colors.length > 0) {
-        variantMatch.color = { $in: colors };
+        // Case-insensitive color matching using regex
+        const colorRegexes = colors.map(c => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"));
+        variantPipeline.push({ $match: { color: { $in: colorRegexes } } });
     }
 
     pipeline.push({
         $lookup: {
             from: "variants",
             let: { productId: "$_id" },
-            pipeline: [
-                { $match: variantMatch },
-            ],
+            pipeline: variantPipeline,
             as: "activeVariants",
         },
     });
 
-    // A product with zero active variants has nothing purchasable —
-    // exclude it rather than showing a broken "no price" card.
+    // A product with zero active variants has no price info — exclude it.
     pipeline.push({ $match: { "activeVariants.0": { $exists: true } } });
 
     pipeline.push({
@@ -112,10 +124,19 @@ const listProducts = async (filters, limit = 12) => {
                 },
             },
             totalStock: { $sum: "$activeVariants.stock" },
+            // Mark as unavailable if the product itself is INACTIVE, or its
+            // category is inactive/deleted — user can see but cannot buy.
+            isUnavailable: {
+                $or: [
+                    { $eq: ["$status", "INACTIVE"] },
+                    { $ne: ["$categoryDoc.isActive", true] },
+                    { $eq: ["$categoryDoc.isDeleted", true] },
+                ],
+            },
         },
     });
 
-    // Stage 4: price range, only possible AFTER displayPrice exists
+
     if (minPrice !== undefined || maxPrice !== undefined) {
         const priceMatch = {};
         if (minPrice !== undefined) priceMatch.$gte = minPrice;
@@ -125,9 +146,6 @@ const listProducts = async (filters, limit = 12) => {
 
     pipeline.push({ $sort: SORT_STAGES[sort] || SORT_STAGES.newest });
 
-    // Stage 5: get the paginated page AND the total count in the SAME
-    // query via $facet — avoids a second round trip and avoids ever
-    // loading the full result set into memory.
     pipeline.push({
         $facet: {
             data: [
@@ -135,8 +153,9 @@ const listProducts = async (filters, limit = 12) => {
                 { $limit: limit },
                 {
                     $project: {
-                        name: 1, slug: 1, thumbnail: 1, brand: 1,
-                        displayPrice: 1, totalStock: 1, averageRating: 1, totalReviews: 1,
+                        name: 1, slug: 1, thumbnail: 1,
+                        displayPrice: 1, totalStock: 1, averageRating: 1,
+                        totalReviews: 1, isUnavailable: 1, status: 1,
                     },
                 },
             ],
@@ -156,10 +175,7 @@ const listProducts = async (filters, limit = 12) => {
     };
 };
 
-/**
- * Sidebar data: active categories (for the filter list) and the overall
- * min/max price across all listed products (to bound the price filter).
- */
+
 const getListingFilterOptions = async () => {
     const categories = await Category.find({ isDeleted: false, isActive: true }).sort({ name: 1 });
 
@@ -183,8 +199,9 @@ const getListingFilterOptions = async () => {
         },
     ]);
 
+    
     const [variantAttributes] = await Product.aggregate([
-        { $match: { isDeleted: false, status: "ACTIVE" } },
+        { $match: { isDeleted: false } },
         {
             $lookup: {
                 from: "variants",

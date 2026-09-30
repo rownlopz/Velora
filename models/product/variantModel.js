@@ -46,9 +46,7 @@ const variantSchema = new mongoose.Schema(
             min: 0,
         },
 
-        // Kept per the original schema for a possible future per-variant
-        // gallery override. Not populated by this week's admin form —
-        // Figma's product form has one shared gallery for the product.
+   
         images: {
             type: [String],
             default: [],

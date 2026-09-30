@@ -48,10 +48,7 @@ const toggleUserStatus = async (userId) => {
         };
     }
 
-    // This endpoint is for managing customer accounts only — never allow
-    // it to be used to block/unblock another admin, even if the request
-    // is crafted directly (the dashboard list already excludes admins,
-    // but the service itself must enforce this too).
+
     if (user.role !== "USER") {
         return {
             success: false,

@@ -5,13 +5,6 @@ const store = MongoStore.create({
     mongoUrl: process.env.MONGO_URI,
 });
 
-/**
- * Builds a session middleware with its own cookie name. Giving the user
- * side and admin side separate cookies (instead of sharing one) means
- * they are two entirely independent sessions in the same browser — an
- * admin can be logged in on /admin/* while also being logged in as a
- * normal shopper on the storefront, and neither login affects the other.
- */
 const createSessionMiddleware = (cookieName) =>
     session({
         name: cookieName,

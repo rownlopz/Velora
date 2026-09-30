@@ -3,9 +3,7 @@ const path = require("path");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
 
-// Kept in sync with the file input's `accept` attribute in profile-edit.ejs
-// ("JPG, GIF or PNG") so the browser and the server never disagree about
-// which formats are allowed.
+
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif"];
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Wishlist | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
+
+<%- include("../partials/storeHeader") %>
+
+<main class="flex-1">
+    <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
+
+        <h1 class="text-3xl font-medium">My Wishlist</h1>
+        <p class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %></p>
+
+        <% if (items.length === 0) { %>
+            <div class="text-center py-24">
+                <svg class="mx-auto mb-5 text-gray-300" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg>
+                <p class="text-gray-400">Your wishlist is empty.</p>
+                <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Browse Collections</a>
+            </div>
+        <% } else { %>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-8">
+                <% items.forEach(item => { %>
+                    <div class="bg-white border border-gray-100 rounded-xl overflow-hidden group relative flex flex-col">
+
+                        <!-- Remove button -->
+                        <form action="/wishlist/<%= item.variantId %>/remove" method="POST" class="absolute top-3 right-3 z-10">
+                            <button type="submit" title="Remove from wishlist"
+                                class="w-8 h-8 flex items-center justify-center bg-white/80 backdrop-blur rounded-full text-gray-500 hover:text-red-500 hover:bg-white transition shadow-sm">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                            </button>
+                        </form>
+
+                        <!-- Product image -->
+                        <a href="<%= item.product ? '/products/' + item.product.slug : '#' %>"
+                           class="block aspect-[3/4] bg-gray-50 overflow-hidden relative">
+                            <% if (item.product && item.product.thumbnail) { %>
+                                <img src="<%= item.product.thumbnail %>" alt="<%= item.product.name %>"
+                                     class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+                            <% } %>
+
+                            <% if (!item.isAvailable) { %>
+                                <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <span class="bg-white text-black text-xs font-semibold px-3 py-1 uppercase tracking-widest rounded-full">Unavailable</span>
+                                </div>
+                            <% } else if (item.variant && item.variant.stock === 0) { %>
+                                <div class="absolute top-2 left-2">
+                                    <span class="bg-black text-white text-[10px] px-2 py-1 uppercase tracking-widest">Out of Stock</span>
+                                </div>
+                            <% } %>
+                        </a>
+
+                        <!-- Info & actions -->
+                        <div class="p-4 flex flex-col flex-1">
+                            <p class="font-medium text-sm">
+                                <%= item.product ? item.product.name : 'Product unavailable' %>
+                            </p>
+
+                            <% if (item.variant) { %>
+                                <p class="text-xs text-gray-400 mt-1">
+                                    <%= [item.variant.color, item.variant.size].filter(Boolean).join(' / ') %>
+                                </p>
+                            <% } %>
+
+                            <p class="text-sm mt-2 font-medium">
+                                <% if (item.currentPrice) { %>
+                                    &#8377;<%= item.currentPrice.toLocaleString('en-IN') %>
+                                <% } else { %>
+                                    &mdash;
+                                <% } %>
+                            </p>
+
+                            <div class="mt-auto pt-4">
+                                <% if (item.isAvailable && item.variant && item.variant.stock > 0) { %>
+                                    <form action="/cart/add" method="POST">
+                                        <input type="hidden" name="variantId" value="<%= item.variantId %>">
+                                        <button type="submit"
+                                            class="w-full h-10 bg-black text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-gray-900 transition">
+                                            Move to Cart
+                                        </button>
+                                    </form>
+                                <% } else { %>
+                                    <span class="block w-full h-10 leading-10 text-center bg-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-widest rounded-lg cursor-not-allowed">
+                                        <%= !item.isAvailable ? 'Unavailable' : 'Out of Stock' %>
+                                    </span>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+
+            <div class="mt-10 flex justify-between items-center border-t border-gray-100 pt-6">
+                <a href="/products" class="text-sm text-gray-500 hover:text-black">&larr; Continue Shopping</a>
+            </div>
+        <% } %>
+
+    </div>
+</main>
+
+<%- include("../partials/storeFooter") %>
+
+</body>
+</html>

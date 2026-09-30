@@ -6,9 +6,6 @@ const { userSessionConfig } = require("../../config/session");
 
 const { setUserLocals } = require("../../middlewares/sessionLocals");
 
-// Own session cookie for the user side (velora.user.sid) — completely
-// independent from the admin side's cookie, so a person can be logged
-// in as both a shopper and an admin in the same browser at once.
 router.use(userSessionConfig);
 router.use(setUserLocals);
 
@@ -36,7 +33,9 @@ router.post("/cart/:variantId/increment", userAuth, cartController.incrementCont
 router.post("/cart/:variantId/decrement", userAuth, cartController.decrementController);
 router.post("/cart/:variantId/remove", userAuth, cartController.removeController);
 
+router.get("/wishlist", userAuth, wishlistController.loadWishlist);
 router.post("/wishlist/add", userAuth, wishlistController.addToWishlistController);
+router.post("/wishlist/:variantId/remove", userAuth, wishlistController.removeFromWishlistController);
 
 // Guest Auth Routes
 router.get("/signup", isGuest, userController.loadSignup);

@@ -50,12 +50,7 @@ const validateSignup = (data) => {
     return Object.keys(errors).length > 0 ? errors : null;
 };
 
-/**
- * Reusable field-level validators, extracted using the SAME rules as
- * validateSignup above, so validation stays consistent everywhere a
- * name, phone, or password is collected (profile edit, change password,
- * reset password). validateSignup itself is left untouched.
- */
+
 const validateFullName = (fullName) => {
     if (!fullName || !fullName.trim()) return "Full name is required";
     if (fullName.trim().length < 2) return "Full name must be at least 2 characters";
@@ -79,10 +74,6 @@ const validatePassword = (password) => {
     return null;
 };
 
-/**
- * Validates the "Edit Profile" form (full name required, phone optional
- * but must be a valid 10-digit number if provided).
- */
 const validateProfileEdit = ({ fullName, phone }) => {
     const errors = {};
 
@@ -95,11 +86,6 @@ const validateProfileEdit = ({ fullName, phone }) => {
     return Object.keys(errors).length > 0 ? errors : null;
 };
 
-/**
- * Validates the "Change Password" form. Same password-strength rule as
- * signup. Does NOT verify the current password against the DB — that
- * check happens in the service layer, against the hashed password.
- */
 const validatePasswordChange = ({ currentPassword, newPassword, confirmNewPassword }) => {
     const errors = {};
 
@@ -117,10 +103,6 @@ const validatePasswordChange = ({ currentPassword, newPassword, confirmNewPasswo
     return Object.keys(errors).length > 0 ? errors : null;
 };
 
-/**
- * Validates the "Reset Password" form (forgot-password flow). Same
- * password-strength rule as signup, for consistency.
- */
 const validateResetPassword = ({ password, confirmPassword }) => {
     const errors = {};
 

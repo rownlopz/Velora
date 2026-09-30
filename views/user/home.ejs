@@ -58,7 +58,6 @@
                             <% if (p.thumbnail) { %><img src="<%= p.thumbnail %>" alt="<%= p.name %>" class="w-full h-full object-cover"><% } %>
                         </div>
                         <p class="text-sm font-medium"><%= p.name %></p>
-                        <% if (p.brand) { %><p class="text-xs text-gray-400 mt-0.5"><%= p.brand %></p><% } %>
                         <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
                     </a>
                 <% }) %>

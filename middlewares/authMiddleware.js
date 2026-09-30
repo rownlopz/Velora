@@ -1,9 +1,6 @@
 const User = require("../models/user/userModel");
 
-/**
- * Middleware to protect user routes.
- * Ensures user is authenticated and account is active.
- */
+
 const userAuth = async (req, res, next) => {
     try {
         if (!req.session || !req.session.userId) {
@@ -38,10 +35,7 @@ const userAuth = async (req, res, next) => {
     }
 };
 
-/**
- * Middleware to protect admin routes.
- * Ensures admin is authenticated, holds ADMIN role, and account is active.
- */
+
 const adminAuth = async (req, res, next) => {
     try {
         if (!req.session || !req.session.adminId) {
@@ -76,9 +70,7 @@ const adminAuth = async (req, res, next) => {
     }
 };
 
-/**
- * Middleware to restrict access to guest-only routes (e.g. login, signup) for authenticated users.
- */
+
 const isGuest = (req, res, next) => {
     if (req.session && req.session.userId) {
         return res.redirect("/");
@@ -86,9 +78,7 @@ const isGuest = (req, res, next) => {
     next();
 };
 
-/**
- * Middleware to restrict access to guest-only admin routes (e.g. admin login) for authenticated admins.
- */
+
 const isAdminGuest = (req, res, next) => {
     if (req.session && req.session.adminId) {
         return res.redirect("/admin/dashboard");

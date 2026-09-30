@@ -47,11 +47,7 @@ const loadProductDetail = async (req, res) => {
         const result = await getProductDetail(req.params.slug);
 
         if (!result.success) {
-            // Covers: not found, invalid slug, deleted, blocked/unlisted,
-            // or no purchasable variants. Every case sends the user back
-            // to a working listing page rather than a dead end, and this
-            // logic re-runs on every request — including a refresh of a
-            // product that just became unavailable.
+            // Only hard-redirect for truly missing/deleted products.
             return res.redirect(`/products?notice=${encodeURIComponent(result.message)}`);
         }
 
@@ -60,14 +56,13 @@ const loadProductDetail = async (req, res) => {
             product: result.product,
             variants: result.variants,
             totalStock: result.totalStock,
+            isUnavailable: result.isUnavailable,
             reviews: result.reviews,
             averageRating: result.averageRating,
             totalReviews: result.totalReviews,
             relatedProducts: result.relatedProducts,
         });
     } catch (error) {
-        // Includes Mongoose CastError from a malformed slug/id reaching
-        // here some other way — never let a bad param 500 the page.
         console.error("Load Product Detail Error:", error);
         return res.redirect("/products?notice=" + encodeURIComponent("This product could not be found."));
     }

@@ -27,9 +27,6 @@ const addToCartController = async (req, res) => {
         const result = await addToCart(req.session.userId, variantId, quantity || 1);
 
         if (!result.success) {
-            // Send them back where they came from with a clear reason,
-            // rather than a dead end — the referring product page will
-            // naturally re-check availability on its own next load too.
             const back = req.get("Referer") || "/products";
             const separator = back.includes("?") ? "&" : "?";
             return res.redirect(`${back}${separator}cartError=${encodeURIComponent(result.message)}`);

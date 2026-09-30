@@ -3,18 +3,12 @@ const sharp = require("sharp");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 
-// Kept in sync with the accept attribute in the product form and with
-// middlewares/upload.js (avatar uploads), so allowed formats are
-// consistent across the whole app.
+
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per image (matches the Figma hint text)
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per image
 const MAX_IMAGES = 8;
 
-// Images are held in memory first (not written straight to disk) so
-// sharp can resize them before the final file is ever saved. This is the
-// server-side guarantee that every stored product image has a
-// predictable, storage-friendly size — the client-side crop step is a
-// UX convenience, not something the server trusts blindly.
+
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
@@ -63,7 +57,9 @@ const resizeAndSaveProductImages = async (req, res, next) => {
 
         next();
     } catch (error) {
-        next(error);
+        console.error("Image upload error:", error);
+        req.session.productUploadError = error.message || "Image upload failed. Please try again.";
+        return res.redirect(req.get("Referer") || "/admin/products");
     }
 };
 

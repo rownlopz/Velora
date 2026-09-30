@@ -4,10 +4,7 @@ const Product = require("../../models/product/productModel");
 const { checkVariantAvailability } = require("./productDetailService");
 const { removeFromWishlist } = require("./wishlistService");
 
-// Reasonable per-item cap so one shopper can't buy out the entire stock
-// of a variant in one line item. A real store would likely make this
-// configurable per-product; a fixed constant is the right size for this
-// week's scope.
+
 const MAX_QUANTITY_PER_ITEM = 5;
 
 const getOrCreateCart = async (userId) => {
@@ -18,13 +15,7 @@ const getOrCreateCart = async (userId) => {
     return cart;
 };
 
-/**
- * Returns the cart with every item re-validated against the CURRENT
- * database state — never trusts the priceSnapshot or whatever quantity
- * was stored as still being valid. An item whose product/variant became
- * blocked, unlisted, or deleted since it was added is flagged rather
- * than silently shown as if nothing changed.
- */
+
 const getCartDetails = async (userId) => {
     const cart = await getOrCreateCart(userId);
 
@@ -62,12 +53,7 @@ const getCartDetails = async (userId) => {
     return { items, subtotal, hasUnavailableItems };
 };
 
-/**
- * Adds a variant to the cart, or increases its quantity if it's already
- * there (never creates a duplicate line item for the same variant).
- * Every check here re-reads the database — the requested quantity is
- * the only thing taken from the client.
- */
+
 const addToCart = async (userId, variantId, requestedQuantity = 1) => {
     const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
 
@@ -100,8 +86,6 @@ const addToCart = async (userId, variantId, requestedQuantity = 1) => {
 
     await cart.save();
 
-    // Per spec: adding to cart removes the item from the wishlist, if
-    // wishlist functionality exists (it does, built alongside this).
     await removeFromWishlist(userId, variantId);
 
     return { success: true };
@@ -130,9 +114,7 @@ const changeQuantity = async (userId, variantId, direction) => {
         }
         item.quantity = nextQuantity;
     } else if (direction === "decrement") {
-        // Floors at 1 — removing an item entirely is a separate, explicit
-        // action (removeFromCart), not an implicit side effect of
-        // decrementing past 1.
+    
         item.quantity = Math.max(1, item.quantity - 1);
     }
 

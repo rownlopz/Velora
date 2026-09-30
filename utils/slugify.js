@@ -1,7 +1,4 @@
-/**
- * Converts a display name into a URL-safe slug.
- * "Evening Wear!" -> "evening-wear"
- */
+
 const slugify = (text) => {
     return text
         .toString()

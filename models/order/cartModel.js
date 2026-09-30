@@ -12,10 +12,7 @@ const cartItemSchema = new mongoose.Schema(
             required: true,
             min: 1,
         },
-        // A snapshot of the price at the moment it was added, per the
-        // original schema. Display always re-checks the live variant
-        // price too — this snapshot is informational, never trusted as
-        // the source of truth for what gets charged.
+
         priceSnapshot: {
             type: Number,
             required: true,

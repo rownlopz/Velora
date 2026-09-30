@@ -22,10 +22,7 @@ const getProducts = async ({ search = "", page = 1, limit = 10 }) => {
         Product.countDocuments(query),
     ]);
 
-    // Attach a lightweight stock + price summary per product (used for
-    // the Stock Status and Price columns in the admin table) without a
-    // separate round trip per row. Price lives on Variant, not Product,
-    // so this is the only correct way to show a price in the list.
+
     const productIds = products.map((p) => p._id);
     const variantAggregates = await Variant.aggregate([
         { $match: { productId: { $in: productIds } } },
@@ -79,11 +76,7 @@ const findDuplicateProduct = async (name, excludeId = null) => {
     return Product.findOne(query);
 };
 
-/**
- * Validates the variant rows submitted from the form. Runs the same
- * whether adding or editing — never trust that the browser only sent
- * well-formed rows.
- */
+
 const validateVariants = (variants) => {
     if (!Array.isArray(variants) || variants.length === 0) {
         return "At least one product variant is required";
@@ -132,8 +125,7 @@ const addProduct = async ({ name, description, brand, categoryId, tags, imagePat
     const variantError = validateVariants(variants);
     if (variantError) return { success: false, message: variantError };
 
-    // Cross-product SKU uniqueness — SKUs must be globally unique, not
-    // just unique within this one product's form submission.
+
     const skus = variants.map((v) => v.sku.trim().toUpperCase());
     const existingSkuVariant = await Variant.findOne({ sku: { $in: skus } });
     if (existingSkuVariant) {
@@ -206,10 +198,7 @@ const updateProduct = async (productId, { name, description, brand, categoryId, 
     product.tags = tags || [];
     await product.save();
 
-    // Simplest reliable approach for a server-rendered admin form with no
-    // per-row IDs tracked in the UI: replace all variants for this
-    // product with what was submitted, rather than trying to diff
-    // existing vs. submitted rows.
+  
     await Variant.deleteMany({ productId });
     await Variant.insertMany(
         variants.map((v) => ({

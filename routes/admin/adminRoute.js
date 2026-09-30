@@ -5,8 +5,6 @@ const { adminSessionConfig } = require("../../config/session");
 
 const { setAdminLocals } = require("../../middlewares/sessionLocals");
 
-// Own session cookie for the admin side (velora.admin.sid) — see
-// userRoute.js for the matching setup on that side.
 router.use(adminSessionConfig);
 router.use(setAdminLocals);
 

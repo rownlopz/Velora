@@ -38,11 +38,7 @@ const productSchema = new mongoose.Schema(
             default: "",
         },
 
-        // Additive to the original schema: the admin edit form (per Figma)
-        // has one shared "Product Media" gallery for the whole product
-        // (min. 3 images), not per-variant images. `thumbnail` stays as
-        // the single representative image used on listing cards; `images`
-        // holds the full gallery shown on the product detail page.
+     
         images: {
             type: [String],
             default: [],

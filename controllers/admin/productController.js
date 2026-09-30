@@ -9,12 +9,7 @@ const {
 
 const { getCategories } = require("../../services/admin/categoryService");
 
-/**
- * Pulls the variant rows out of req.body. The form submits them as
- * variants[0][sku], variants[0][color], etc — express.urlencoded already
- * turns that into req.body.variants = [{sku, color, ...}, ...] for us.
- * This just guards against the field being missing entirely.
- */
+
 const parseVariants = (body) => {
     if (!body.variants) return [];
     return Array.isArray(body.variants) ? body.variants : Object.values(body.variants);
@@ -126,10 +121,6 @@ const updateProductController = async (req, res) => {
         const { name, description, brand, categoryId, tags } = req.body;
         const variants = parseVariants(req.body);
 
-        // Existing images the admin chose to keep (checkboxes), plus any
-        // freshly uploaded ones this submission — never assume the
-        // client re-sent everything, but also never silently drop images
-        // the admin didn't touch.
         const keptExisting = req.body.existingImages
             ? (Array.isArray(req.body.existingImages) ? req.body.existingImages : [req.body.existingImages])
             : [];

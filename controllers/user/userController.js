@@ -101,11 +101,7 @@ const signup = async (req, res) => {
         // Store temporary signup data in session
         req.session.signupData = result.signupData;
 
-        // Explicit flow marker so /otp and /resend-otp know exactly which
-        // flow is active, rather than inferring it from which session
-        // keys happen to be set — that inference breaks if a user
-        // abandons one flow mid-way and starts the other, leaving stale
-        // data behind.
+
         req.session.otpFlow = "SIGNUP";
         delete req.session.resetPasswordEmail;
         delete req.session.resetPasswordVerified;
@@ -181,8 +177,6 @@ const verifyOtp = async (req, res) => {
                 });
             }
 
-            // Own session cookie now (velora.user.sid) — no longer
-            // shares storage with the admin session.
             req.session.userId = result.user._id;
             delete req.session.signupData;
             delete req.session.otpFlow;
@@ -228,8 +222,6 @@ const login = async (req, res) => {
             });
         }
 
-        // Own session cookie now (velora.user.sid) — no longer shares
-        // storage with the admin session.
         req.session.userId = result.user._id;
 
         return req.session.save(() => {
@@ -332,10 +324,6 @@ const resendOtp = async (req, res) => {
     try {
         const flow = req.session.otpFlow;
 
-        // Previously this only supported the signup flow — clicking
-        // "Resend" during forgot-password OTP verification always failed
-        // with a signup-specific message and never actually resent
-        // anything. Both flows are now handled explicitly.
         if (flow === "RESET_PASSWORD") {
             const email = req.session.resetPasswordEmail;
 

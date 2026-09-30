@@ -81,7 +81,6 @@
             <!-- Details -->
             <div>
                 <h1 class="text-3xl font-medium"><%= product.name %></h1>
-                <% if (product.brand) { %><p class="text-gray-400 text-sm mt-1"><%= product.brand %></p><% } %>
 
                 <% if (totalReviews > 0) { %>
                     <div class="flex items-center gap-2 mt-3 text-sm">
@@ -143,16 +142,28 @@
                         </div>
                     <% } %>
 
+                    <% if (typeof isUnavailable !== 'undefined' && isUnavailable) { %>
+                        <div class="mt-6 mb-4 p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm">
+                            This product is currently <strong>unavailable</strong> and cannot be added to your cart. You can still save it to your wishlist.
+                        </div>
+                    <% } %>
+
                     <p id="stockMessage" class="text-sm mb-5 <%= defaultVariant.stock === 0 ? 'text-red-500' : defaultVariant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600' %>">
                         <%= defaultVariant.stock === 0 ? 'Out of stock' : defaultVariant.stock <= 5 ? `Only ${defaultVariant.stock} left in stock` : 'In stock' %>
                     </p>
 
                     <div class="flex gap-3">
-                        <button type="submit" id="addToCartBtn" <%= totalStock === 0 ? 'disabled' : '' %>
+                        <button type="submit" id="addToCartBtn" <%= (totalStock === 0 || (typeof isUnavailable !== 'undefined' && isUnavailable)) ? 'disabled' : '' %>
                             class="flex-1 h-14 bg-black text-white rounded-xl font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
-                            <%= totalStock === 0 ? 'Out of Stock' : 'Add to Cart' %>
+                            <% if (typeof isUnavailable !== 'undefined' && isUnavailable) { %>
+                                Unavailable
+                            <% } else if (totalStock === 0) { %>
+                                Out of Stock
+                            <% } else { %>
+                                Add to Cart
+                            <% } %>
                         </button>
-                        <button type="button" onclick="document.getElementById('wishlistForm').requestSubmit()" class="h-14 px-6 border border-gray-300 rounded-xl font-semibold">
+                        <button type="button" onclick="document.getElementById('wishlistForm').requestSubmit()" class="h-14 px-6 border border-gray-300 rounded-xl font-semibold hover:border-black transition" title="Save to Wishlist">
                             &hearts;
                         </button>
                     </div>
@@ -225,6 +236,8 @@
 
     let selectedColor = "<%= defaultVariant.color %>";
     let selectedSize = "<%= defaultVariant.size %>";
+    // Server-rendered flag — never re-enables Add-to-Cart for unavailable products.
+    const IS_UNAVAILABLE = <%= typeof isUnavailable !== 'undefined' && isUnavailable ? 'true' : 'false' %>;
 
     function findMatchingVariant() {
         return VARIANTS.find(v => v.color === selectedColor && v.size === selectedSize) || VARIANTS[0];
@@ -242,7 +255,12 @@
 
         const stockEl = document.getElementById('stockMessage');
         const btn = document.getElementById('addToCartBtn');
-        if (variant.stock === 0) {
+        if (IS_UNAVAILABLE) {
+            // Product/category is blocked — never allow cart, regardless of stock.
+            btn.disabled = true;
+            btn.textContent = 'Unavailable';
+            stockEl.textContent = '';
+        } else if (variant.stock === 0) {
             stockEl.textContent = 'Out of stock';
             stockEl.className = 'text-sm mb-5 text-red-500';
             btn.disabled = true;

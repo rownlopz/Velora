@@ -1,31 +1,28 @@
 const Product = require("../../models/product/productModel");
 const Variant = require("../../models/product/variantModel");
+const Category = require("../../models/product/categoryModel");
 const Review = require("../../models/product/reviewModel");
 
-/**
- * Fetches everything the product detail page needs in one place, and is
- * the single source of truth for whether a product is actually viewable
- * right now. This same function is called on every page load AND every
- * refresh — there is no client-side caching of availability, so a
- * product that becomes blocked/deleted after the page was first opened
- * will correctly stop being viewable the moment the page is reloaded.
- */
+
 const getProductDetail = async (slug) => {
-    const product = await Product.findOne({ slug, isDeleted: false }).populate("categoryId", "name slug");
+    const product = await Product.findOne({ slug, isDeleted: false }).populate("categoryId", "name slug isActive isDeleted");
 
     if (!product) {
         return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
     }
 
-    if (product.status !== "ACTIVE") {
-        return { success: false, reason: "UNAVAILABLE", message: "This product is currently unavailable." };
-    }
+    // Determine if the product itself or its category is unavailable.
+    const categoryInactive =
+        !product.categoryId ||
+        product.categoryId.isDeleted === true ||
+        product.categoryId.isActive === false;
+
+    const isUnavailable = product.status !== "ACTIVE" || categoryInactive;
 
     const variants = await Variant.find({ productId: product._id, isActive: true }).sort({ createdAt: 1 });
 
     if (variants.length === 0) {
-        // A product with no purchasable variants at all shouldn't be
-        // treated as a normal viewable product either.
+        // No purchasable variants at all — nothing to show.
         return { success: false, reason: "UNAVAILABLE", message: "This product is currently unavailable." };
     }
 
@@ -41,7 +38,7 @@ const getProductDetail = async (slug) => {
         {
             $match: {
                 _id: { $ne: product._id },
-                categoryId: product.categoryId,
+                categoryId: product.categoryId._id || product.categoryId,
                 isDeleted: false,
                 status: "ACTIVE",
             },
@@ -79,6 +76,7 @@ const getProductDetail = async (slug) => {
         product,
         variants,
         totalStock,
+        isUnavailable,
         reviews,
         averageRating: reviewStats[0] ? Number(reviewStats[0].avgRating.toFixed(1)) : 0,
         totalReviews: reviewStats[0] ? reviewStats[0].count : 0,
@@ -86,12 +84,7 @@ const getProductDetail = async (slug) => {
     };
 };
 
-/**
- * Cheap re-check used right before an action (e.g. add to cart) — does
- * NOT fetch reviews/related products, just the availability truth.
- * Cart Management (next phase) calls this before trusting any
- * browser-submitted product/variant data.
- */
+
 const checkVariantAvailability = async (variantId) => {
     const variant = await Variant.findById(variantId);
     if (!variant || !variant.isActive) {
@@ -101,6 +94,12 @@ const checkVariantAvailability = async (variantId) => {
     const product = await Product.findOne({ _id: variant.productId, isDeleted: false, status: "ACTIVE" });
     if (!product) {
         return { available: false, reason: "This product is no longer available." };
+    }
+
+    // Also check the category is active.
+    const category = await Category.findOne({ _id: product.categoryId, isDeleted: false, isActive: true });
+    if (!category) {
+        return { available: false, reason: "This product is currently unavailable." };
     }
 
     if (variant.stock <= 0) {
