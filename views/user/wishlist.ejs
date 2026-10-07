@@ -14,26 +14,27 @@
     <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
 
         <h1 class="text-3xl font-medium">My Wishlist</h1>
-        <p class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %></p>
+        <p id="wishlistCountText" class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %></p>
 
         <% if (items.length === 0) { %>
-            <div class="text-center py-24">
+            <div id="emptyWishlist" class="text-center py-24">
                 <svg class="mx-auto mb-5 text-gray-300" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg>
                 <p class="text-gray-400">Your wishlist is empty.</p>
                 <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Browse Collections</a>
             </div>
         <% } else { %>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-8">
+            <div id="wishlistGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-8">
                 <% items.forEach(item => { %>
-                    <div class="bg-white border border-gray-100 rounded-xl overflow-hidden group relative flex flex-col">
+                    <div class="wishlist-item bg-white border border-gray-100 rounded-xl overflow-hidden group relative flex flex-col"
+                         data-variant-id="<%= item.variantId %>">
 
-                        <!-- Remove button -->
-                        <form action="/wishlist/<%= item.variantId %>/remove" method="POST" class="absolute top-3 right-3 z-10">
-                            <button type="submit" title="Remove from wishlist"
-                                class="w-8 h-8 flex items-center justify-center bg-white/80 backdrop-blur rounded-full text-gray-500 hover:text-red-500 hover:bg-white transition shadow-sm">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                            </button>
-                        </form>
+                        <!-- Remove button (AJAX) -->
+                        <button type="button"
+                            class="remove-wishlist-btn absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center bg-white/80 backdrop-blur rounded-full text-gray-500 hover:text-red-500 hover:bg-white transition shadow-sm"
+                            data-variant-id="<%= item.variantId %>"
+                            title="Remove from wishlist">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        </button>
 
                         <!-- Product image -->
                         <a href="<%= item.product ? '/products/' + item.product.slug : '#' %>"
@@ -76,13 +77,11 @@
 
                             <div class="mt-auto pt-4">
                                 <% if (item.isAvailable && item.variant && item.variant.stock > 0) { %>
-                                    <form action="/cart/add" method="POST">
-                                        <input type="hidden" name="variantId" value="<%= item.variantId %>">
-                                        <button type="submit"
-                                            class="w-full h-10 bg-black text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-gray-900 transition">
-                                            Move to Cart
-                                        </button>
-                                    </form>
+                                    <button type="button"
+                                        class="move-to-cart-btn w-full h-10 bg-black text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-gray-900 transition"
+                                        data-variant-id="<%= item.variantId %>">
+                                        Move to Cart
+                                    </button>
                                 <% } else { %>
                                     <span class="block w-full h-10 leading-10 text-center bg-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-widest rounded-lg cursor-not-allowed">
                                         <%= !item.isAvailable ? 'Unavailable' : 'Out of Stock' %>
@@ -103,6 +102,122 @@
 </main>
 
 <%- include("../partials/storeFooter") %>
+
+<script>
+(function () {
+    // ---- Remove from wishlist ----
+    document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.remove-wishlist-btn');
+        if (!btn) return;
+        const variantId = btn.dataset.variantId;
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`/wishlist/${variantId}/remove`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await res.json();
+            if (data.success) {
+                const row = btn.closest('.wishlist-item');
+                if (row) row.remove();
+                if (typeof updateNavWishlistCount === 'function') updateNavWishlistCount(data.wishlistCount);
+
+                const remaining = document.querySelectorAll('.wishlist-item');
+                const countEl = document.getElementById('wishlistCountText');
+                if (remaining.length === 0) {
+                    const grid = document.getElementById('wishlistGrid');
+                    if (grid) grid.remove();
+                    document.querySelector('main .max-w-screen-lg').insertAdjacentHTML('beforeend', `
+                        <div class="text-center py-24">
+                            <p class="text-gray-400">Your wishlist is empty.</p>
+                            <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Browse Collections</a>
+                        </div>`);
+                    if (countEl) countEl.textContent = '0 items';
+                } else {
+                    const n = remaining.length;
+                    if (countEl) countEl.textContent = n + ' item' + (n === 1 ? '' : 's');
+                }
+                showToast('Removed from wishlist', 'info');
+            } else {
+                showToast('Unable to remove item', 'error');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Something went wrong', 'error');
+            btn.disabled = false;
+        }
+    });
+
+    // ---- Move to Cart from Wishlist ----
+    document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.move-to-cart-btn');
+        if (!btn) return;
+        const variantId = btn.dataset.variantId;
+        const originalText = btn.textContent.trim();
+        btn.disabled = true;
+        btn.textContent = 'Adding...';
+
+        try {
+            const res = await fetch('/cart/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ variantId, quantity: 1 }),
+            });
+
+            if (res.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const data = await res.json();
+            if (data.requireLogin) {
+                window.location.href = '/login';
+                return;
+            }
+
+            if (data.success) {
+                // Remove from wishlist after moving to cart (backend does it too, but update UI)
+                const row = btn.closest('.wishlist-item');
+                if (row) row.remove();
+                if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+
+                const remaining = document.querySelectorAll('.wishlist-item');
+                const countEl = document.getElementById('wishlistCountText');
+                const newWishlistCount = data.wishlistCount !== undefined ? data.wishlistCount : remaining.length;
+                if (remaining.length === 0) {
+                    const grid = document.getElementById('wishlistGrid');
+                    if (grid) grid.remove();
+                    document.querySelector('main .max-w-screen-lg').insertAdjacentHTML('beforeend', `
+                        <div class="text-center py-24">
+                            <p class="text-gray-400">Your wishlist is empty.</p>
+                            <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Browse Collections</a>
+                        </div>`);
+                    if (countEl) countEl.textContent = '0 items';
+                } else {
+                    const n = remaining.length;
+                    if (countEl) countEl.textContent = n + ' item' + (n === 1 ? '' : 's');
+                }
+                if (typeof updateNavWishlistCount === 'function') updateNavWishlistCount(newWishlistCount);
+
+                showToast('Moved to cart', 'success');
+            } else {
+                showToast(data.message || 'Unable to add to cart', 'error');
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        } catch (err) {
+            showToast('Something went wrong', 'error');
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    });
+})();
+</script>
 
 </body>
 </html>

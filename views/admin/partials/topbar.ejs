@@ -22,3 +22,80 @@
         </a>
     </div>
 </header>
+
+<!-- Global Admin Toast Container -->
+<div id="adminToastContainer" style="position:fixed;top:1.25rem;right:1.25rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;pointer-events:none;"></div>
+
+<script>
+(function () {
+    const COLORS = {
+        success: { bg: '#059669', icon: '✓' },
+        error:   { bg: '#dc2626', icon: '✕' },
+        warning: { bg: '#d97706', icon: '⚠' },
+        info:    { bg: '#000000', icon: 'ℹ' },
+    };
+
+    window.showAdminToast = function (message, type = 'info', duration = 3500) {
+        let container = document.getElementById('adminToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'adminToastContainer';
+            container.style.cssText = 'position:fixed;top:1.25rem;right:1.25rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;pointer-events:none;';
+            document.body.appendChild(container);
+        }
+
+        const c = COLORS[type] || COLORS.info;
+        const el = document.createElement('div');
+        el.style.cssText = `
+            display:flex;align-items:center;gap:10px;
+            background:${c.bg};color:#fff;
+            padding:12px 18px;border-radius:10px;
+            box-shadow:0 4px 24px rgba(0,0,0,0.18);
+            font-size:13px;font-family:inherit;font-weight:500;
+            max-width:360px;pointer-events:all;
+            opacity:0;transform:translateX(24px);
+            transition:opacity 0.25s ease,transform 0.25s ease;
+        `;
+        el.innerHTML = `
+            <span style="font-size:15px;line-height:1;">${c.icon}</span>
+            <span style="flex:1;">${message}</span>
+            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;padding:0;margin-left:4px;opacity:0.7;">&times;</button>
+        `;
+        container.appendChild(el);
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                el.style.opacity = '1';
+                el.style.transform = 'translateX(0)';
+            });
+        });
+
+        setTimeout(() => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(24px)';
+            setTimeout(() => el.remove(), 300);
+        }, duration);
+    };
+
+    window.showToast = window.showAdminToast;
+
+    // Override native browser alert with admin toast
+    window.alert = function (message) {
+        window.showAdminToast(message, 'info');
+    };
+
+    // Auto-display any query message
+    window.addEventListener('DOMContentLoaded', function () {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('error')) {
+                window.showAdminToast(params.get('error'), 'error');
+            } else if (params.get('success')) {
+                window.showAdminToast(params.get('success'), 'success');
+            } else if (params.get('notice')) {
+                window.showAdminToast(params.get('notice'), 'info');
+            }
+        } catch (e) {}
+    });
+})();
+</script>

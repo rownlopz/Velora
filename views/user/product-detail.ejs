@@ -1,371 +1,531 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= product.name %> | VELORA</title>
+    <title>
+        <%= product.name %> | VELORA
+    </title>
     <link rel="stylesheet" href="/css/output.css">
 </head>
+
 <body class="bg-[#FAFAF8] flex flex-col min-h-screen">
 
-<%- include("../partials/storeHeader") %>
+    <%- include("../partials/storeHeader") %>
 
-<%
-    // Group variants by color/size so the page can offer selectable
-    // options rather than a flat list, and so we can tell at a glance
-    // whether a specific combination is in stock.
-    const colors = [...new Set(variants.map(v => v.color).filter(Boolean))];
-    const sizes = [...new Set(variants.map(v => v.size).filter(Boolean))];
+        <%
+            // Group variants by color/size so the page can offer selectable
+            // options rather than a flat list, and so we can tell at a glance
+            // whether a specific combination is in stock.
+            const colors = [...new Set(variants.map(v => v.color).filter(Boolean))];
+            const sizes = [...new Set(variants.map(v => v.size).filter(Boolean))];
 
-    // A representative variant for the default price/discount shown
-    // before the shopper picks anything — the cheapest in-stock one.
-    const inStockVariants = variants.filter(v => v.stock > 0);
-    const defaultVariant = (inStockVariants.length ? inStockVariants : variants)
-        .slice().sort((a, b) => (a.salePrice || a.regularPrice) - (b.salePrice || b.regularPrice))[0];
+            // A representative variant for the default price/discount shown
+            // before the shopper picks anything — the cheapest in-stock one.
+            const inStockVariants = variants.filter(v => v.stock > 0);
+            const defaultVariant = (inStockVariants.length ? inStockVariants : variants)
+                .slice().sort((a, b) => (a.salePrice || a.regularPrice) - (b.salePrice || b.regularPrice))[0] || {};
 
-    const discountPercent = defaultVariant.salePrice
-        ? Math.round(((defaultVariant.regularPrice - defaultVariant.salePrice) / defaultVariant.regularPrice) * 100)
-        : 0;
-%>
+            const discountPercent = defaultVariant && defaultVariant.salePrice
+                ? Math.round(((defaultVariant.regularPrice - defaultVariant.salePrice) / defaultVariant.regularPrice) * 100)
+                : 0;
+        %>
 
-<main class="flex-1">
-    <div class="max-w-screen-xl mx-auto px-6 md:px-10 py-8">
+            <main class="flex-1">
+                <div class="max-w-screen-xl mx-auto px-6 md:px-10 py-8">
 
-        <!-- Breadcrumbs -->
-        <p class="text-xs text-gray-400 mb-6">
-            <a href="/products" class="hover:text-black">Products</a>
-            <% if (product.categoryId) { %>
-                &nbsp;/&nbsp;<a href="/products?category=<%= product.categoryId.slug || '' %>" class="hover:text-black"><%= product.categoryId.name || 'Category' %></a>
-            <% } %>
-            &nbsp;/&nbsp;<span class="text-gray-600"><%= product.name %></span>
-        </p>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-
-            <!-- Image gallery with zoom -->
-            <!-- The outer div must be 'relative' so the zoomBox (which is
-                 position:fixed) can anchor correctly. We use position:fixed
-                 for the zoom result box so it can escape all clipping contexts. -->
-            <div id="gallerySection">
-                <div class="flex gap-4">
-                    <!-- Thumbnails -->
-                    <div class="flex flex-col gap-3">
-                        <% (product.images || []).forEach((img, i) => { %>
-                            <button
-                                type="button"
-                                onclick="setMainImage('<%= img %>')"
-                                class="w-16 h-20 rounded-md overflow-hidden border <%= i === 0 ? 'border-black' : 'border-gray-200' %> thumb-btn"
-                            >
-                                <img src="<%= img %>" class="w-full h-full object-cover">
-                            </button>
-                        <% }) %>
-                    </div>
-
-                    <!-- Main image with lens -->
-                    <div id="zoomContainer" class="flex-1 aspect-[3/4] bg-gray-100 rounded-lg relative cursor-crosshair select-none">
-                        <img
-                            id="mainImage"
-                            src="<%= (product.images && product.images[0]) || product.thumbnail || '' %>"
-                            class="w-full h-full object-cover rounded-lg block"
-                            draggable="false"
-                        >
-                        <!-- The lens square that follows the cursor -->
-                        <div id="zoomLens" class="hidden absolute pointer-events-none" style="width:130px;height:160px;background:rgba(200,200,200,0.25);border:1px solid rgba(100,100,255,0.4);"></div>
-                    </div>
-                </div>
-
-                <!-- Zoom result panel - positioned fixed so it escapes all CSS overflow clipping -->
-                <div id="zoomBox" style="display:none;position:fixed;width:430px;height:530px;background-color:#fff;background-repeat:no-repeat;border:1px solid #ddd;box-shadow:0 8px 40px rgba(0,0,0,0.18);border-radius:12px;z-index:9999;pointer-events:none;"></div>
-            </div>
-
-            <!-- Details -->
-            <div>
-                <h1 class="text-3xl font-medium"><%= product.name %></h1>
-
-                <% if (totalReviews > 0) { %>
-                    <div class="flex items-center gap-2 mt-3 text-sm">
-                        <span class="text-amber-500">&#9733; <%= averageRating %></span>
-                        <span class="text-gray-400">(<%= totalReviews %> review<%= totalReviews === 1 ? '' : 's' %>)</span>
-                    </div>
-                <% } %>
-
-                <div id="priceBlock" class="flex items-center gap-3 mt-5">
-                    <span id="displayPrice" class="text-2xl font-medium">
-                        &#8377;<%= (defaultVariant.salePrice || defaultVariant.regularPrice).toLocaleString('en-IN') %>
-                    </span>
-                    <% if (defaultVariant.salePrice) { %>
-                        <span id="regularPriceStrike" class="text-gray-400 line-through text-sm">&#8377;<%= defaultVariant.regularPrice.toLocaleString('en-IN') %></span>
-                        <span id="discountBadge" class="text-emerald-600 text-sm font-semibold"><%= discountPercent %>% OFF</span>
-                    <% } %>
-                </div>
-
-                <p class="text-gray-500 mt-6 leading-7 text-sm"><%= product.description %></p>
-
-                <form action="/cart/add" method="POST" class="mt-8" id="addToCartForm">
-                    <input type="hidden" name="variantId" id="selectedVariantId" value="<%= defaultVariant._id %>">
-
-                    <% if (sizes.length > 0) { %>
-                        <div class="mb-5">
-                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-900 mb-3">Select Size</p>
-                            <div class="flex flex-wrap gap-2" id="sizeOptions">
-                                <% sizes.forEach(s => { %>
-                                    <button type="button" onclick="selectSize('<%= s %>')" data-size="<%= s %>"
-                                        class="size-btn flex items-center justify-center min-w-[44px] h-[44px] px-2 border rounded-md text-sm transition-colors <%= s === defaultVariant.size ? 'border-black bg-black text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-black' %>">
-                                        <%= s %>
-                                    </button>
-                                <% }) %>
-                            </div>
-                        </div>
-                    <% } %>
-
-                    <% if (colors.length > 0) { %>
-                        <div class="mb-5">
-                            <p class="text-xs font-semibold uppercase tracking-widest text-gray-900 mb-3">Color</p>
-                            <div class="flex gap-3" id="colorOptions">
-                                <% colors.forEach(c => { 
-                                    const bgMap = {
-                                        'black': 'bg-black', 'white': 'bg-white border-gray-300', 
-                                        'brown': 'bg-amber-800', 'yellow': 'bg-yellow-100', 
-                                        'gray': 'bg-gray-400', 'navy': 'bg-blue-900',
-                                        'red': 'bg-red-700', 'green': 'bg-emerald-700',
-                                        'blue': 'bg-blue-600', 'beige': 'bg-[#F5F5DC]',
-                                        'onyx black': 'bg-gray-900', 'charcoal grey': 'bg-gray-700'
-                                    };
-                                    const cssClass = bgMap[c.toLowerCase()] || 'bg-gray-200';
-                                %>
-                                    <button type="button" onclick="selectColor('<%= c %>')" data-color="<%= c %>"
-                                        class="color-btn w-7 h-7 rounded-full border <%= cssClass.includes('border') ? cssClass : cssClass + ' border-transparent' %> ring-1 transition-all <%= c === defaultVariant.color ? 'ring-black ring-offset-2' : 'ring-transparent' %>"
-                                        title="<%= c %>">
-                                    </button>
-                                <% }) %>
-                            </div>
-                        </div>
-                    <% } %>
-
-                    <% if (typeof isUnavailable !== 'undefined' && isUnavailable) { %>
-                        <div class="mt-6 mb-4 p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm">
-                            This product is currently <strong>unavailable</strong> and cannot be added to your cart. You can still save it to your wishlist.
-                        </div>
-                    <% } %>
-
-                    <p id="stockMessage" class="text-sm mb-5 <%= defaultVariant.stock === 0 ? 'text-red-500' : defaultVariant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600' %>">
-                        <%= defaultVariant.stock === 0 ? 'Out of stock' : defaultVariant.stock <= 5 ? `Only ${defaultVariant.stock} left in stock` : 'In stock' %>
+                    <!-- Breadcrumbs -->
+                    <p class="text-xs text-gray-400 mb-6">
+                        <a href="/products" class="hover:text-black">Products</a>
+                        <% if (product.categoryId) { %>
+                            &nbsp;/&nbsp;<a href="/products?category=<%= product.categoryId.slug || '' %>"
+                                class="hover:text-black">
+                                <%= product.categoryId.name || 'Category' %>
+                            </a>
+                            <% } %>
+                                &nbsp;/&nbsp;<span class="text-gray-600">
+                                    <%= product.name %>
+                                </span>
                     </p>
 
-                    <div class="flex gap-3">
-                        <button type="submit" id="addToCartBtn" <%= (totalStock === 0 || (typeof isUnavailable !== 'undefined' && isUnavailable)) ? 'disabled' : '' %>
-                            class="flex-1 h-14 bg-black text-white rounded-xl font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
-                            <% if (typeof isUnavailable !== 'undefined' && isUnavailable) { %>
-                                Unavailable
-                            <% } else if (totalStock === 0) { %>
-                                Out of Stock
-                            <% } else { %>
-                                Add to Cart
-                            <% } %>
-                        </button>
-                        <button type="button" onclick="document.getElementById('wishlistForm').requestSubmit()" class="h-14 px-6 border border-gray-300 rounded-xl font-semibold hover:border-black transition" title="Save to Wishlist">
-                            &hearts;
-                        </button>
-                    </div>
-                </form>
-                <form id="wishlistForm" action="/wishlist/add" method="POST" class="hidden">
-                    <input type="hidden" name="variantId" id="wishlistVariantId" value="<%= defaultVariant._id %>">
-                </form>
-            </div>
-        </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
 
-        <!-- Reviews -->
-        <section class="mt-20 pt-10 border-t border-gray-200 max-w-3xl">
-            <h2 class="text-2xl font-medium mb-6">Customer Reviews</h2>
-
-            <% if (reviews.length === 0) { %>
-                <p class="text-gray-400 text-sm">No reviews yet for this product.</p>
-            <% } else { %>
-                <div class="space-y-6">
-                    <% reviews.forEach(r => { %>
-                        <div class="border-b border-gray-100 pb-6">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="font-semibold text-sm"><%= r.name %>
-                                        <% if (r.isVerifiedPurchase) { %><span class="text-emerald-600 text-xs ml-2">Verified Purchase</span><% } %>
-                                    </p>
-                                    <p class="text-amber-500 text-sm mt-1"><%= '&#9733;'.repeat(r.rating) %></p>
+                        <!-- Image gallery with zoom -->
+                        <!-- The outer div must be 'relative' so the zoomBox (which is
+                 position:fixed) can anchor correctly. We use position:fixed
+                 for the zoom result box so it can escape all clipping contexts. -->
+                        <div id="gallerySection">
+                            <div class="flex gap-4">
+                                <!-- Thumbnails -->
+                                <div class="flex flex-col gap-3">
+                                    <% (product.images || []).forEach((img, i)=> { %>
+                                        <button type="button" onclick="setMainImage('<%= img %>')"
+                                            class="w-16 h-20 rounded-md overflow-hidden border <%= i === 0 ? 'border-black' : 'border-gray-200' %> thumb-btn">
+                                            <img src="<%= img %>" class="w-full h-full object-cover">
+                                        </button>
+                                        <% }) %>
                                 </div>
-                                <p class="text-xs text-gray-400"><%= new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) %></p>
+
+                                <!-- Main image with lens -->
+                                <div id="zoomContainer"
+                                    class="flex-1 aspect-[3/4] bg-gray-100 rounded-lg relative cursor-crosshair select-none">
+                                    <img id="mainImage"
+                                        src="<%= (product.images && product.images[0]) || product.thumbnail || '' %>"
+                                        class="w-full h-full object-cover rounded-lg block" draggable="false">
+                                    <!-- The lens square that follows the cursor -->
+                                    <div id="zoomLens" class="hidden absolute pointer-events-none"
+                                        style="width:130px;height:160px;background:rgba(200,200,200,0.25);border:1px solid rgba(100,100,255,0.4);">
+                                    </div>
+                                </div>
                             </div>
-                            <p class="text-gray-600 text-sm mt-2"><%= r.comment %></p>
+
+                            <!-- Zoom result panel - positioned fixed so it escapes all CSS overflow clipping -->
+                            <div id="zoomBox"
+                                style="display:none;position:fixed;width:430px;height:530px;background-color:#fff;background-repeat:no-repeat;border:1px solid #ddd;box-shadow:0 8px 40px rgba(0,0,0,0.18);border-radius:12px;z-index:9999;pointer-events:none;">
+                            </div>
                         </div>
-                    <% }) %>
-                </div>
-            <% } %>
-        </section>
 
-        <!-- Related products -->
-        <% if (relatedProducts.length > 0) { %>
-            <section class="mt-16 pt-10 border-t border-gray-200">
-                <h2 class="text-2xl font-medium mb-6">You Might Also Like</h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <% relatedProducts.forEach(p => { %>
-                        <a href="/products/<%= p.slug %>">
-                            <div class="aspect-[3/4] bg-gray-100 overflow-hidden mb-3">
-                                <% if (p.thumbnail) { %><img src="<%= p.thumbnail %>" class="w-full h-full object-cover"><% } %>
+                        <!-- Details -->
+                        <div>
+                            <h1 class="text-3xl font-medium">
+                                <%= product.name %>
+                            </h1>
+
+                            <% if (totalReviews> 0) { %>
+                                <div class="flex items-center gap-2 mt-3 text-sm">
+                                    <span class="text-amber-500">&#9733; <%= averageRating %></span>
+                                    <span class="text-gray-400">(<%= totalReviews %> review<%= totalReviews===1 ? ''
+                                                : 's' %>)</span>
+                                </div>
+                                <% } %>
+
+                                    <div id="priceBlock" class="flex items-center gap-3 mt-5">
+                                        <span id="displayPrice" class="text-2xl font-medium">
+                                            &#8377;<%= (defaultVariant.salePrice ||
+                                                defaultVariant.regularPrice).toLocaleString('en-IN') %>
+                                        </span>
+                                        <% if (defaultVariant.salePrice) { %>
+                                            <span id="regularPriceStrike"
+                                                class="text-gray-400 line-through text-sm">&#8377;<%=
+                                                    defaultVariant.regularPrice.toLocaleString('en-IN') %></span>
+                                            <span id="discountBadge" class="text-emerald-600 text-sm font-semibold">
+                                                <%= discountPercent %>% OFF
+                                            </span>
+                                            <% } %>
+                                    </div>
+
+                                    <p class="text-gray-500 mt-6 leading-7 text-sm">
+                                        <%= product.description %>
+                                    </p>
+
+                                    <form action="/cart/add" method="POST" class="mt-8" id="addToCartForm">
+                                        <input type="hidden" name="variantId" id="selectedVariantId"
+                                            value="<%= defaultVariant._id %>">
+
+                                        <% if (sizes.length> 0) { %>
+                                            <div class="mb-5">
+                                                <p
+                                                    class="text-xs font-semibold uppercase tracking-widest text-gray-900 mb-3">
+                                                    Select Size</p>
+                                                <div class="flex flex-wrap gap-2" id="sizeOptions">
+                                                    <% sizes.forEach(s=> { %>
+                                                        <button type="button" onclick="selectSize('<%= s %>')"
+                                                            data-size="<%= s %>"
+                                                            class="size-btn flex items-center justify-center min-w-[44px] h-[44px] px-2 border rounded-md text-sm transition-colors <%= s === defaultVariant.size ? 'border-black bg-black text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-black' %>">
+                                                            <%= s %>
+                                                        </button>
+                                                        <% }) %>
+                                                </div>
+                                            </div>
+                                            <% } %>
+
+                                                <% if (colors.length> 0) { %>
+                                                    <div class="mb-5">
+                                                        <p
+                                                            class="text-xs font-semibold uppercase tracking-widest text-gray-900 mb-3">
+                                                            Color</p>
+                                                        <div class="flex gap-3" id="colorOptions">
+                                                            <% colors.forEach(c => {
+                                                                const bgMap = {
+                                                                    'black': 'bg-black',
+                                                                    'white': 'bg-white border-gray-300',
+                                                                    'brown': 'bg-amber-800',
+                                                                    'yellow': 'bg-yellow-100',
+                                                                    'gray': 'bg-gray-400',
+                                                                    'navy': 'bg-blue-900',
+                                                                    'red': 'bg-red-700',
+                                                                    'green': 'bg-emerald-700',
+                                                                    'blue': 'bg-blue-600',
+                                                                    'beige': 'bg-[#F5F5DC]',
+                                                                    'onyx black': 'bg-gray-900',
+                                                                    'charcoal grey': 'bg-gray-700'
+                                                                };
+                                                                const cssClass = bgMap[c.toLowerCase()] || 'bg-gray-200';
+                                                            %>
+                                                                <button type="button" onclick="selectColor('<%= c %>')"
+                                                                    data-color="<%= c %>"
+                                                                    class="color-btn w-7 h-7 rounded-full border <%= cssClass.includes('border') ? cssClass : cssClass + ' border-transparent' %> ring-1 transition-all <%= c === defaultVariant.color ? 'ring-black ring-offset-2' : 'ring-transparent' %>"
+                                                                    title="<%= c %>">
+                                                                </button>
+                                                                <% }) %>
+                                                        </div>
+                                                    </div>
+                                                    <% } %>
+
+                                                        <% if (typeof isUnavailable !=='undefined' && isUnavailable) {
+                                                            %>
+                                                            <div
+                                                                class="mt-6 mb-4 p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm">
+                                                                This product is currently <strong>unavailable</strong>
+                                                                and cannot be added to your cart. You can still save it
+                                                                to your wishlist.
+                                                            </div>
+                                                            <% } %>
+
+                                                                <p id="stockMessage"
+                                                                    class="text-sm mb-5 <%= defaultVariant.stock === 0 ? 'text-red-500' : defaultVariant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600' %>">
+                                                                    <%= defaultVariant.stock===0 ? 'Out of stock' :
+                                                                        defaultVariant.stock <=5 ? `Only
+                                                                        ${defaultVariant.stock} left in stock`
+                                                                        : 'In stock' %>
+                                                                </p>
+
+                                                                <div class="flex gap-3">
+                                                                    <button type="submit" id="addToCartBtn"
+                                                                        <%=(totalStock===0 || (typeof isUnavailable
+                                                                        !=='undefined' && isUnavailable)) ? 'disabled'
+                                                                        : '' %>
+                                                                        class="flex-1 h-14 bg-black text-white
+                                                                        rounded-xl font-semibold disabled:opacity-40
+                                                                        disabled:cursor-not-allowed">
+                                                                        <% if (typeof isUnavailable !=='undefined' &&
+                                                                            isUnavailable) { %>
+                                                                            Unavailable
+                                                                            <% } else if (totalStock===0) { %>
+                                                                                Out of Stock
+                                                                                <% } else { %>
+                                                                                    Add to Cart
+                                                                                    <% } %>
+                                                                    </button>
+                                                                    <button type="button" id="wishlistBtn"
+                                                                        onclick="document.getElementById('wishlistForm').requestSubmit()"
+                                                                        class="h-14 px-6 border border-gray-300 rounded-xl font-semibold hover:border-black transition"
+                                                                        title="Save to Wishlist">
+                                                                        &hearts;
+                                                                    </button>
+                                                                </div>
+                                    </form>
+                                    <form id="wishlistForm" action="/wishlist/add" method="POST" class="hidden">
+                                        <input type="hidden" name="variantId" id="wishlistVariantId"
+                                            value="<%= defaultVariant._id %>">
+                                    </form>
+                        </div>
+                    </div>
+
+                    <!-- Reviews -->
+                    <section class="mt-20 pt-10 border-t border-gray-200 max-w-3xl">
+                        <h2 class="text-2xl font-medium mb-6">Customer Reviews</h2>
+
+                        <% if (reviews.length===0) { %>
+                            <p class="text-gray-400 text-sm">No reviews yet for this product.</p>
+                            <% } else { %>
+                                <div class="space-y-6">
+                                    <% reviews.forEach(r=> { %>
+                                        <div class="border-b border-gray-100 pb-6">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <p class="font-semibold text-sm">
+                                                        <%= r.name %>
+                                                            <% if (r.isVerifiedPurchase) { %><span
+                                                                    class="text-emerald-600 text-xs ml-2">Verified
+                                                                    Purchase</span>
+                                                                <% } %>
+                                                    </p>
+                                                    <p class="text-amber-500 text-sm mt-1">
+                                                        <%= '&#9733;' .repeat(r.rating) %>
+                                                    </p>
+                                                </div>
+                                                <p class="text-xs text-gray-400">
+                                                    <%= new Date(r.createdAt).toLocaleDateString('en-US', {
+                                                        month: 'short' , day: '2-digit' , year: 'numeric' }) %>
+                                                </p>
+                                            </div>
+                                            <p class="text-gray-600 text-sm mt-2">
+                                                <%= r.comment %>
+                                            </p>
+                                        </div>
+                                        <% }) %>
+                                </div>
+                                <% } %>
+                    </section>
+
+                    <!-- Related products -->
+                    <% if (relatedProducts.length> 0) { %>
+                        <section class="mt-16 pt-10 border-t border-gray-200">
+                            <h2 class="text-2xl font-medium mb-6">You Might Also Like</h2>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                <% relatedProducts.forEach(p=> { %>
+                                    <a href="/products/<%= p.slug %>">
+                                        <div class="aspect-[3/4] bg-gray-100 overflow-hidden mb-3">
+                                            <% if (p.thumbnail) { %><img src="<%= p.thumbnail %>"
+                                                    class="w-full h-full object-cover">
+                                                <% } %>
+                                        </div>
+                                        <p class="text-sm font-medium">
+                                            <%= p.name %>
+                                        </p>
+                                        <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %>
+                                        </p>
+                                    </a>
+                                    <% }) %>
                             </div>
-                            <p class="text-sm font-medium"><%= p.name %></p>
-                            <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
-                        </a>
-                    <% }) %>
+                        </section>
+                        <% } %>
+
                 </div>
-            </section>
-        <% } %>
+            </main>
 
-    </div>
-</main>
+            <%- include("../partials/storeFooter") %>
 
-<%- include("../partials/storeFooter") %>
+                <script>
+                    // All variants for this product, embedded so color/size selection
+                    // can look up the matching variant client-side without a page
+                    // reload. This is ONLY for UI responsiveness — the actual stock,
+                    // price, and availability are re-verified server-side when the
+                    // form is submitted, never trusted from this data alone.
+                    const VARIANTS = <%- JSON.stringify(variants.map(v => ({
+                        _id: v._id, color: v.color, size: v.size, stock: v.stock,
+                        regularPrice: v.regularPrice, salePrice: v.salePrice,
+                    }))) %>;
 
-<script>
-    // All variants for this product, embedded so color/size selection
-    // can look up the matching variant client-side without a page
-    // reload. This is ONLY for UI responsiveness — the actual stock,
-    // price, and availability are re-verified server-side when the
-    // form is submitted, never trusted from this data alone.
-    const VARIANTS = <%- JSON.stringify(variants.map(v => ({
-        _id: v._id, color: v.color, size: v.size, stock: v.stock,
-        regularPrice: v.regularPrice, salePrice: v.salePrice,
-    }))) %>;
+                    let selectedColor = "<%= defaultVariant.color %>";
+                    let selectedSize = "<%= defaultVariant.size %>";
+                    // Server-rendered flag — never re-enables Add-to-Cart for unavailable products.
+                    const IS_UNAVAILABLE = <%= typeof isUnavailable !== 'undefined' && isUnavailable ? 'true' : 'false' %>;
 
-    let selectedColor = "<%= defaultVariant.color %>";
-    let selectedSize = "<%= defaultVariant.size %>";
-    // Server-rendered flag — never re-enables Add-to-Cart for unavailable products.
-    const IS_UNAVAILABLE = <%= typeof isUnavailable !== 'undefined' && isUnavailable ? 'true' : 'false' %>;
+                    function findMatchingVariant() {
+                        return VARIANTS.find(v => v.color === selectedColor && v.size === selectedSize) || VARIANTS[0];
+                    }
 
-    function findMatchingVariant() {
-        return VARIANTS.find(v => v.color === selectedColor && v.size === selectedSize) || VARIANTS[0];
-    }
+                    function refreshSelection() {
+                        const variant = findMatchingVariant();
+                        if (!variant) return;
 
-    function refreshSelection() {
-        const variant = findMatchingVariant();
-        if (!variant) return;
+                        document.getElementById('selectedVariantId').value = variant._id;
+                        document.getElementById('wishlistVariantId').value = variant._id;
 
-        document.getElementById('selectedVariantId').value = variant._id;
-        document.getElementById('wishlistVariantId').value = variant._id;
+                        const priceEl = document.getElementById('displayPrice');
+                        priceEl.textContent = '\u20b9' + (variant.salePrice || variant.regularPrice).toLocaleString('en-IN');
 
-        const priceEl = document.getElementById('displayPrice');
-        priceEl.textContent = '\u20b9' + (variant.salePrice || variant.regularPrice).toLocaleString('en-IN');
+                        const stockEl = document.getElementById('stockMessage');
+                        const btn = document.getElementById('addToCartBtn');
+                        if (IS_UNAVAILABLE) {
+                            // Product/category is blocked — never allow cart, regardless of stock.
+                            btn.disabled = true;
+                            btn.textContent = 'Unavailable';
+                            stockEl.textContent = '';
+                        } else if (variant.stock === 0) {
+                            stockEl.textContent = 'Out of stock';
+                            stockEl.className = 'text-sm mb-5 text-red-500';
+                            btn.disabled = true;
+                            btn.textContent = 'Out of Stock';
+                        } else {
+                            stockEl.textContent = variant.stock <= 5 ? ('Only ' + variant.stock + ' left in stock') : 'In stock';
+                            stockEl.className = 'text-sm mb-5 ' + (variant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600');
+                            btn.disabled = false;
+                            btn.textContent = 'Add to Cart';
+                        }
+                    }
 
-        const stockEl = document.getElementById('stockMessage');
-        const btn = document.getElementById('addToCartBtn');
-        if (IS_UNAVAILABLE) {
-            // Product/category is blocked — never allow cart, regardless of stock.
-            btn.disabled = true;
-            btn.textContent = 'Unavailable';
-            stockEl.textContent = '';
-        } else if (variant.stock === 0) {
-            stockEl.textContent = 'Out of stock';
-            stockEl.className = 'text-sm mb-5 text-red-500';
-            btn.disabled = true;
-            btn.textContent = 'Out of Stock';
-        } else {
-            stockEl.textContent = variant.stock <= 5 ? ('Only ' + variant.stock + ' left in stock') : 'In stock';
-            stockEl.className = 'text-sm mb-5 ' + (variant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600');
-            btn.disabled = false;
-            btn.textContent = 'Add to Cart';
-        }
-    }
+                    function selectColor(color) {
+                        selectedColor = color;
+                        document.querySelectorAll('.color-btn').forEach(b => {
+                            if (b.dataset.color === color) {
+                                b.classList.add('ring-black', 'ring-offset-2');
+                                b.classList.remove('ring-transparent');
+                            } else {
+                                b.classList.remove('ring-black', 'ring-offset-2');
+                                b.classList.add('ring-transparent');
+                            }
+                        });
+                        refreshSelection();
+                    }
 
-    function selectColor(color) {
-        selectedColor = color;
-        document.querySelectorAll('.color-btn').forEach(b => {
-            if (b.dataset.color === color) {
-                b.classList.add('ring-black', 'ring-offset-2');
-                b.classList.remove('ring-transparent');
-            } else {
-                b.classList.remove('ring-black', 'ring-offset-2');
-                b.classList.add('ring-transparent');
-            }
-        });
-        refreshSelection();
-    }
+                    function selectSize(size) {
+                        selectedSize = size;
+                        document.querySelectorAll('.size-btn').forEach(b => {
+                            if (b.dataset.size === size) {
+                                b.classList.add('border-black', 'bg-black', 'text-white');
+                                b.classList.remove('border-gray-200', 'bg-white', 'text-gray-600', 'hover:border-black');
+                            } else {
+                                b.classList.remove('border-black', 'bg-black', 'text-white');
+                                b.classList.add('border-gray-200', 'bg-white', 'text-gray-600', 'hover:border-black');
+                            }
+                        });
+                        refreshSelection();
+                    }
 
-    function selectSize(size) {
-        selectedSize = size;
-        document.querySelectorAll('.size-btn').forEach(b => {
-            if (b.dataset.size === size) {
-                b.classList.add('border-black', 'bg-black', 'text-white');
-                b.classList.remove('border-gray-200', 'bg-white', 'text-gray-600', 'hover:border-black');
-            } else {
-                b.classList.remove('border-black', 'bg-black', 'text-white');
-                b.classList.add('border-gray-200', 'bg-white', 'text-gray-600', 'hover:border-black');
-            }
-        });
-        refreshSelection();
-    }
+                    function setMainImage(src) {
+                        const mainImage = document.getElementById('mainImage');
+                        mainImage.src = src;
+                        document.getElementById('zoomBox').style.backgroundImage = `url('${src}')`;
 
-    function setMainImage(src) {
-        const mainImage = document.getElementById('mainImage');
-        mainImage.src = src;
-        document.getElementById('zoomBox').style.backgroundImage = `url('${src}')`;
+                        // Update active thumbnail border
+                        document.querySelectorAll('.thumb-btn').forEach(b => {
+                            const thumbImg = b.querySelector('img');
+                            if (thumbImg && thumbImg.src === mainImage.src) {
+                                b.classList.replace('border-gray-200', 'border-black');
+                            } else {
+                                b.classList.replace('border-black', 'border-gray-200');
+                            }
+                        });
+                    }
 
-        // Update active thumbnail border
-        document.querySelectorAll('.thumb-btn').forEach(b => {
-            const thumbImg = b.querySelector('img');
-            if (thumbImg && thumbImg.src === mainImage.src) {
-                b.classList.replace('border-gray-200', 'border-black');
-            } else {
-                b.classList.replace('border-black', 'border-gray-200');
-            }
-        });
-    }
+                    // === Add to Cart — AJAX intercept ===
+                    document.getElementById('addToCartForm').addEventListener('submit', async function (e) {
+                        e.preventDefault();
+                        const btn = document.getElementById('addToCartBtn');
+                        if (btn.disabled) return;
 
-    // === Flipkart-style lens + result box zoom ===
-    (function () {
-        const container = document.getElementById('zoomContainer');
-        const mainImg   = document.getElementById('mainImage');
-        const lens      = document.getElementById('zoomLens');
-        const box       = document.getElementById('zoomBox');
+                        const variantId = document.getElementById('selectedVariantId').value;
+                        if (!variantId) {
+                            showToast('Please select a product option.', 'warning');
+                            return;
+                        }
 
-        // Set initial background image on zoom result box
-        box.style.backgroundImage = `url('${mainImg.src}')`;
+                        const originalText = btn.textContent.trim();
+                        btn.disabled = true;
+                        btn.textContent = 'Adding...';
 
-        const LENS_W = lens.offsetWidth  || 130;
-        const LENS_H = lens.offsetHeight || 160;
-        const BOX_W  = 430;  // matches inline style width
-        const BOX_H  = 530;  // matches inline style height
+                        try {
+                            const res = await fetch('/cart/add', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({ variantId, quantity: 1 }),
+                            });
 
-        container.addEventListener('mouseenter', () => {
-            lens.classList.remove('hidden');
-            box.style.display = 'block';
-        });
+                            if (res.status === 401) {
+                                window.location.href = '/login';
+                                return;
+                            }
 
-        container.addEventListener('mouseleave', () => {
-            lens.classList.add('hidden');
-            box.style.display = 'none';
-        });
+                            const data = await res.json();
+                            if (data.requireLogin) {
+                                window.location.href = '/login';
+                                return;
+                            }
 
-        container.addEventListener('mousemove', (e) => {
-            const rect = container.getBoundingClientRect();
+                            if (data.success) {
+                                showToast(data.message || 'Product added to cart', 'success');
+                                if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+                                if (typeof updateNavWishlistCount === 'function' && data.wishlistCount !== undefined) {
+                                    updateNavWishlistCount(data.wishlistCount);
+                                }
+                            } else {
+                                showToast(data.message || 'Unable to add to cart', 'error');
+                            }
+                        } catch (err) {
+                            showToast('Something went wrong. Please try again.', 'error');
+                        } finally {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                    });
 
-            // --- Position the lens (clamped inside the image) ---
-            let lx = e.clientX - rect.left  - LENS_W / 2;
-            let ly = e.clientY - rect.top   - LENS_H / 2;
-            lx = Math.max(0, Math.min(lx, rect.width  - LENS_W));
-            ly = Math.max(0, Math.min(ly, rect.height - LENS_H));
-            lens.style.left = lx + 'px';
-            lens.style.top  = ly + 'px';
+                    // === Wishlist — AJAX intercept ===
+                    document.getElementById('wishlistForm').addEventListener('submit', async function (e) {
+                        e.preventDefault();
+                        const variantId = document.getElementById('wishlistVariantId').value;
+                        if (!variantId) return;
 
-            // --- Position the result box (fixed, to the right of the container) ---
-            box.style.left = (rect.right + 16) + 'px';
-            box.style.top  = rect.top + 'px';
+                        try {
+                            const res = await fetch('/wishlist/add', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({ variantId }),
+                            });
 
-            // --- Calculate background to show the zoomed area ---
-            const cx = BOX_W / LENS_W;   // horizontal magnification
-            const cy = BOX_H / LENS_H;   // vertical magnification
+                            if (res.status === 401) {
+                                window.location.href = '/login';
+                                return;
+                            }
 
-            box.style.backgroundSize     = (rect.width * cx) + 'px ' + (rect.height * cy) + 'px';
-            box.style.backgroundPosition = '-' + (lx * cx) + 'px -' + (ly * cy) + 'px';
-        });
-    })();
-</script>
+                            const data = await res.json();
+                            if (data.requireLogin) {
+                                window.location.href = '/login';
+                                return;
+                            }
+
+                            if (data.success) {
+                                showToast('Added to wishlist', 'success');
+                                if (typeof updateNavWishlistCount === 'function') updateNavWishlistCount(data.wishlistCount);
+                            } else {
+                                showToast(data.message || 'Unable to add to wishlist', 'error');
+                            }
+                        } catch (err) {
+                            showToast('Something went wrong. Please try again.', 'error');
+                        }
+                    });
+
+                    // === Flipkart-style lens + result box zoom ===
+                    (function () {
+                        const container = document.getElementById('zoomContainer');
+                        const mainImg = document.getElementById('mainImage');
+                        const lens = document.getElementById('zoomLens');
+                        const box = document.getElementById('zoomBox');
+
+                        // Set initial background image on zoom result box
+                        box.style.backgroundImage = `url('${mainImg.src}')`;
+
+                        const LENS_W = lens.offsetWidth || 130;
+                        const LENS_H = lens.offsetHeight || 160;
+                        const BOX_W = 430;  // matches inline style width
+                        const BOX_H = 530;  // matches inline style height
+
+                        container.addEventListener('mouseenter', () => {
+                            lens.classList.remove('hidden');
+                            box.style.display = 'block';
+                        });
+
+                        container.addEventListener('mouseleave', () => {
+                            lens.classList.add('hidden');
+                            box.style.display = 'none';
+                        });
+
+                        container.addEventListener('mousemove', (e) => {
+                            const rect = container.getBoundingClientRect();
+
+                            // --- Position the lens (clamped inside the image) ---
+                            let lx = e.clientX - rect.left - LENS_W / 2;
+                            let ly = e.clientY - rect.top - LENS_H / 2;
+                            lx = Math.max(0, Math.min(lx, rect.width - LENS_W));
+                            ly = Math.max(0, Math.min(ly, rect.height - LENS_H));
+                            lens.style.left = lx + 'px';
+                            lens.style.top = ly + 'px';
+
+                            // --- Position the result box (fixed, to the right of the container) ---
+                            box.style.left = (rect.right + 16) + 'px';
+                            box.style.top = rect.top + 'px';
+
+                            // --- Calculate background to show the zoomed area ---
+                            const cx = BOX_W / LENS_W;   // horizontal magnification
+                            const cy = BOX_H / LENS_H;   // vertical magnification
+
+                            box.style.backgroundSize = (rect.width * cx) + 'px ' + (rect.height * cy) + 'px';
+                            box.style.backgroundPosition = '-' + (lx * cx) + 'px -' + (ly * cy) + 'px';
+                        });
+                    })();
+                </script>
 
 </body>
+
 </html>

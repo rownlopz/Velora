@@ -99,10 +99,13 @@
                                     </td>
 
                                     <td class="px-6 py-4">
-                                        <form action="/admin/products/<%= product._id %>/toggle-status" method="POST" onsubmit="return confirm('Change visibility of this product?')">
+                                        <!-- Status toggle — uses custom confirm dialog instead of browser confirm() -->
+                                        <form id="toggleForm-<%= product._id %>" action="/admin/products/<%= product._id %>/toggle-status" method="POST">
                                             <input type="hidden" name="search" value="<%= search %>">
                                             <input type="hidden" name="page" value="<%= currentPage %>">
-                                            <button type="submit" class="text-xs font-semibold px-2.5 py-1 rounded-full <%= product.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500' %>">
+                                            <button type="button"
+                                                onclick="adminConfirm('Change visibility of this product?', document.getElementById('toggleForm-<%= product._id %>'))"
+                                                class="text-xs font-semibold px-2.5 py-1 rounded-full <%= product.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500' %>">
                                                 <%= product.status === 'ACTIVE' ? 'Listed' : 'Unlisted' %>
                                             </button>
                                         </form>
@@ -123,10 +126,13 @@
                                             <a href="/admin/products/<%= product._id %>/edit" title="Edit" class="text-gray-500 hover:text-black">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                                             </a>
-                                            <form action="/admin/products/<%= product._id %>/delete" method="POST" onsubmit="return confirm('Delete this product? This cannot be undone from the storefront.')">
+                                            <!-- Delete — uses custom confirm dialog -->
+                                            <form id="deleteForm-<%= product._id %>" action="/admin/products/<%= product._id %>/delete" method="POST">
                                                 <input type="hidden" name="search" value="<%= search %>">
                                                 <input type="hidden" name="page" value="<%= currentPage %>">
-                                                <button type="submit" title="Delete" class="text-gray-500 hover:text-red-600">
+                                                <button type="button" title="Delete"
+                                                    onclick="adminConfirm('Delete this product? This cannot be undone from the storefront.', document.getElementById('deleteForm-<%= product._id %>'), 'Delete')"
+                                                    class="text-gray-500 hover:text-red-600">
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
                                                 </button>
                                             </form>
@@ -155,6 +161,52 @@
             </main>
         </div>
     </div>
+
+    <!-- Custom Confirm Modal for Admin -->
+    <div id="adminConfirmOverlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+            <p id="adminConfirmMsg" class="text-sm text-gray-800 font-medium mb-6 leading-6"></p>
+            <div class="flex justify-end gap-3">
+                <button id="adminConfirmCancel" type="button"
+                    class="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
+                    Cancel
+                </button>
+                <button id="adminConfirmOk" type="button"
+                    class="px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let _adminConfirmTarget = null;
+
+        function adminConfirm(message, formEl, okLabel) {
+            document.getElementById('adminConfirmMsg').textContent = message;
+            document.getElementById('adminConfirmOk').textContent = okLabel || 'Confirm';
+            _adminConfirmTarget = formEl;
+            document.getElementById('adminConfirmOverlay').classList.remove('hidden');
+        }
+
+        document.getElementById('adminConfirmCancel').addEventListener('click', () => {
+            document.getElementById('adminConfirmOverlay').classList.add('hidden');
+            _adminConfirmTarget = null;
+        });
+
+        document.getElementById('adminConfirmOk').addEventListener('click', () => {
+            document.getElementById('adminConfirmOverlay').classList.add('hidden');
+            if (_adminConfirmTarget) _adminConfirmTarget.submit();
+            _adminConfirmTarget = null;
+        });
+
+        document.getElementById('adminConfirmOverlay').addEventListener('click', function (e) {
+            if (e.target === this) {
+                this.classList.add('hidden');
+                _adminConfirmTarget = null;
+            }
+        });
+    </script>
 
 </body>
 </html>

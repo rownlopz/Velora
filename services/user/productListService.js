@@ -52,7 +52,8 @@ const listProducts = async (filters, limit = 12) => {
     const pipeline = [];
 
  
-    const baseMatch = { isDeleted: false };
+    // Only show ACTIVE, non-deleted products to users
+    const baseMatch = { isDeleted: false, status: "ACTIVE" };
     if (search) {
         baseMatch.$or = [
             { name: { $regex: search, $options: "i" } },
@@ -63,7 +64,8 @@ const listProducts = async (filters, limit = 12) => {
 
   
     if (categories && categories.length > 0) {
-        const catDocs = await Category.find({ slug: { $in: categories }, isDeleted: false });
+        // Only allow filtering by active, non-deleted categories
+        const catDocs = await Category.find({ slug: { $in: categories }, isDeleted: false, isActive: true });
         const catIds = catDocs.map(c => c._id);
         if (catIds.length > 0) {
             pipeline.push({ $match: { categoryId: { $in: catIds } } });
@@ -72,7 +74,7 @@ const listProducts = async (filters, limit = 12) => {
         }
     }
 
-    // Join the category doc so we can mark products whose category is inactive.
+    // Join the category doc — only include products with active, non-deleted categories.
     pipeline.push({
         $lookup: {
             from: "categories",
@@ -84,6 +86,13 @@ const listProducts = async (filters, limit = 12) => {
     pipeline.push({
         $addFields: {
             categoryDoc: { $arrayElemAt: ["$categoryDoc", 0] },
+        },
+    });
+    // Exclude products whose category is inactive or deleted
+    pipeline.push({
+        $match: {
+            "categoryDoc.isActive": true,
+            "categoryDoc.isDeleted": false,
         },
     });
 
@@ -124,15 +133,9 @@ const listProducts = async (filters, limit = 12) => {
                 },
             },
             totalStock: { $sum: "$activeVariants.stock" },
-            // Mark as unavailable if the product itself is INACTIVE, or its
-            // category is inactive/deleted — user can see but cannot buy.
-            isUnavailable: {
-                $or: [
-                    { $eq: ["$status", "INACTIVE"] },
-                    { $ne: ["$categoryDoc.isActive", true] },
-                    { $eq: ["$categoryDoc.isDeleted", true] },
-                ],
-            },
+            // isUnavailable is now always false since we filtered INACTIVE products above.
+            // We keep the field for template compatibility.
+            isUnavailable: false,
         },
     });
 
@@ -156,6 +159,8 @@ const listProducts = async (filters, limit = 12) => {
                         name: 1, slug: 1, thumbnail: 1,
                         displayPrice: 1, totalStock: 1, averageRating: 1,
                         totalReviews: 1, isUnavailable: 1, status: 1,
+                        defaultVariantId: { $arrayElemAt: ["$activeVariants._id", 0] },
+                        variantIds: "$activeVariants._id",
                     },
                 },
             ],
@@ -178,9 +183,10 @@ const listProducts = async (filters, limit = 12) => {
 
 const getListingFilterOptions = async () => {
     const categories = await Category.find({ isDeleted: false, isActive: true }).sort({ name: 1 });
+    const activeCatIds = categories.map(c => c._id);
 
     const [priceBounds] = await Product.aggregate([
-        { $match: { isDeleted: false, status: "ACTIVE" } },
+        { $match: { isDeleted: false, status: "ACTIVE", categoryId: { $in: activeCatIds } } },
         {
             $lookup: {
                 from: "variants",
@@ -201,7 +207,7 @@ const getListingFilterOptions = async () => {
 
     
     const [variantAttributes] = await Product.aggregate([
-        { $match: { isDeleted: false } },
+        { $match: { isDeleted: false, status: "ACTIVE", categoryId: { $in: activeCatIds } } },
         {
             $lookup: {
                 from: "variants",

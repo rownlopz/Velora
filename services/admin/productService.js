@@ -15,7 +15,7 @@ const getProducts = async ({ search = "", page = 1, limit = 10 }) => {
     const [products, totalProducts] = await Promise.all([
         Product.find(query)
             .populate("categoryId", "name")
-            .sort({ createdAt: -1 })
+            .sort({ name: 1 })
             .skip(skip)
             .limit(limit),
 

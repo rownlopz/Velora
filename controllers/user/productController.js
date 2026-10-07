@@ -1,11 +1,20 @@
 const { parseListingQuery, listProducts, getListingFilterOptions } = require("../../services/user/productListService");
 const { getProductDetail } = require("../../services/user/productDetailService");
+const Wishlist = require("../../models/user/wishlistModel");
 
 const loadProducts = async (req, res, next) => {
     try {
         const query = parseListingQuery(req.query);
         const { products, totalProducts, totalPages, currentPage } = await listProducts(query, 12);
         const { categories, priceMin, priceMax, availableSizes, availableColors } = await getListingFilterOptions();
+
+        let wishlistVariantIds = [];
+        if (req.session && req.session.userId) {
+            const wishlist = await Wishlist.findOne({ userId: req.session.userId }).lean();
+            if (wishlist && wishlist.items) {
+                wishlistVariantIds = wishlist.items.map(i => i.variantId.toString());
+            }
+        }
 
         res.render("user/products", {
             filters: query,
@@ -18,6 +27,8 @@ const loadProducts = async (req, res, next) => {
             priceMax,
             availableSizes,
             availableColors,
+            notice: req.query.notice || null,
+            wishlistVariantIds,
         });
     } catch (error) {
         next(error);
@@ -47,7 +58,7 @@ const loadProductDetail = async (req, res) => {
         const result = await getProductDetail(req.params.slug);
 
         if (!result.success) {
-            // Only hard-redirect for truly missing/deleted products.
+            // Product not found, unlisted, or category inactive — redirect to shop.
             return res.redirect(`/products?notice=${encodeURIComponent(result.message)}`);
         }
 

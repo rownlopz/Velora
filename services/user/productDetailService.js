@@ -11,13 +11,22 @@ const getProductDetail = async (slug) => {
         return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
     }
 
-    // Determine if the product itself or its category is unavailable.
+    // Block access to INACTIVE products — treat them as if they don't exist for users.
+    if (product.status !== "ACTIVE") {
+        return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
+    }
+
+    // Also block if the category is inactive/deleted.
     const categoryInactive =
         !product.categoryId ||
         product.categoryId.isDeleted === true ||
         product.categoryId.isActive === false;
 
-    const isUnavailable = product.status !== "ACTIVE" || categoryInactive;
+    if (categoryInactive) {
+        return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
+    }
+
+    const isUnavailable = false; // Only active products in active categories reach here
 
     const variants = await Variant.find({ productId: product._id, isActive: true }).sort({ createdAt: 1 });
 

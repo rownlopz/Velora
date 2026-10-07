@@ -1,6 +1,7 @@
 const Cart = require("../../models/order/cartModel");
 const Variant = require("../../models/product/variantModel");
 const Product = require("../../models/product/productModel");
+const Category = require("../../models/product/categoryModel");
 const { checkVariantAvailability } = require("./productDetailService");
 const { removeFromWishlist } = require("./wishlistService");
 
@@ -23,10 +24,19 @@ const getCartDetails = async (userId) => {
         cart.items.map(async (item) => {
             const variant = await Variant.findById(item.variantId);
             const product = variant ? await Product.findById(variant.productId) : null;
+            let category = null;
+            if (product && product.categoryId) {
+                category = await Category.findById(product.categoryId);
+            }
 
-            const isAvailable = !!(
-                variant && variant.isActive &&
-                product && !product.isDeleted && product.status === "ACTIVE" &&
+            const categoryUnlisted = !category || category.isDeleted === true || category.isActive === false;
+            // A product is truly unavailable (unlisted) if it is INACTIVE, hard-deleted, missing, or category is unlisted
+            const productUnlisted = !product || product.isDeleted || product.status !== "ACTIVE" || categoryUnlisted;
+            // A variant is unavailable if it no longer exists or is deactivated.
+            const variantUnavailable = !variant || !variant.isActive;
+
+            const isAvailable = !!( 
+                !productUnlisted && !variantUnavailable &&
                 variant.stock > 0
             );
 
@@ -40,6 +50,7 @@ const getCartDetails = async (userId) => {
                 product,
                 variant,
                 isAvailable,
+                productUnlisted,   // true = product was unlisted by admin
                 currentPrice,
                 lineTotal: isAvailable ? currentPrice * cappedQuantity : 0,
                 stockExceeded: variant ? item.quantity > variant.stock : false,
@@ -47,12 +58,31 @@ const getCartDetails = async (userId) => {
         })
     );
 
-    const subtotal = items.reduce((sum, i) => sum + i.lineTotal, 0);
-    const hasUnavailableItems = items.some((i) => !i.isAvailable || i.stockExceeded);
+    // Auto-remove unlisted/deleted products from the cart document.
+    const unlistedVariantIds = items
+        .filter(i => i.productUnlisted || !i.variant)
+        .map(i => i.variantId.toString());
 
-    return { items, subtotal, hasUnavailableItems };
+    if (unlistedVariantIds.length > 0) {
+        await Cart.updateOne(
+            { userId },
+            { $pull: { items: { variantId: { $in: unlistedVariantIds.map(id => require("mongoose").Types.ObjectId.createFromHexString(id)) } } } }
+        );
+    }
+
+    // Only return items that are NOT unlisted products.
+    const visibleItems = items.filter(i => !i.productUnlisted && i.variant);
+
+    const subtotal = visibleItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    const hasUnavailableItems = visibleItems.some((i) => !i.isAvailable || i.stockExceeded);
+
+    return {
+        items: visibleItems,
+        subtotal,
+        hasUnavailableItems,
+        removedUnlistedCount: unlistedVariantIds.length,
+    };
 };
-
 
 const addToCart = async (userId, variantId, requestedQuantity = 1) => {
     const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
@@ -101,7 +131,8 @@ const changeQuantity = async (userId, variantId, direction) => {
 
     const availability = await checkVariantAvailability(variantId);
     if (!availability.available) {
-        return { success: false, message: availability.reason };
+        await removeFromCart(userId, variantId);
+        return { success: false, message: availability.reason || "This product is no longer available and was removed.", removed: true };
     }
 
     if (direction === "increment") {
@@ -114,8 +145,10 @@ const changeQuantity = async (userId, variantId, direction) => {
         }
         item.quantity = nextQuantity;
     } else if (direction === "decrement") {
-    
-        item.quantity = Math.max(1, item.quantity - 1);
+        if (item.quantity <= 1) {
+            return { success: false, message: "Minimum quantity is 1.", atMinimum: true };
+        }
+        item.quantity = item.quantity - 1;
     }
 
     await cart.save();

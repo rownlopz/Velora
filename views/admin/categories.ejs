@@ -100,10 +100,12 @@
                                     </td>
 
                                     <td class="px-6 py-4">
-                                        <form action="/admin/categories/<%= cat._id %>/toggle-status" method="POST" onsubmit="return confirm('Change status of this category?')">
+                                        <form id="toggleCatForm-<%= cat._id %>" action="/admin/categories/<%= cat._id %>/toggle-status" method="POST">
                                             <input type="hidden" name="search" value="<%= search %>">
                                             <input type="hidden" name="page" value="<%= currentPage %>">
-                                            <button type="submit" class="relative inline-flex h-6 w-11 items-center rounded-full transition <%= cat.isActive ? 'bg-black' : 'bg-gray-300' %>">
+                                            <button type="button"
+                                                onclick="adminConfirm('Change status of this category?', document.getElementById('toggleCatForm-<%= cat._id %>'))"
+                                                class="relative inline-flex h-6 w-11 items-center rounded-full transition <%= cat.isActive ? 'bg-black' : 'bg-gray-300' %>">
                                                 <span class="inline-block h-4 w-4 transform rounded-full bg-white transition <%= cat.isActive ? 'translate-x-6' : 'translate-x-1' %>"></span>
                                             </button>
                                         </form>
@@ -116,10 +118,11 @@
                                             <a href="/admin/categories?edit=<%= cat._id %>" title="Edit" class="text-gray-500 hover:text-black">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                                             </a>
-                                            <form action="/admin/categories/<%= cat._id %>/delete" method="POST" onsubmit="return confirm('Delete this category? Products in it will need to be reassigned.')">
+                                            <form id="deleteCatForm-<%= cat._id %>" action="/admin/categories/<%= cat._id %>/delete" method="POST">
                                                 <input type="hidden" name="search" value="<%= search %>">
                                                 <input type="hidden" name="page" value="<%= currentPage %>">
-                                                <button type="submit" title="Delete" class="text-gray-500 hover:text-red-600">
+                                                <button type="button" title="Delete" class="text-gray-500 hover:text-red-600"
+                                                    onclick="adminConfirm('Delete this category? Products in it will need to be reassigned.', document.getElementById('deleteCatForm-<%= cat._id %>'), 'Delete')">
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
                                                 </button>
                                             </form>
@@ -201,3 +204,49 @@
 
 </body>
 </html>
+
+<!-- Custom Confirm Modal for Admin -->
+<div id="adminConfirmOverlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+        <p id="adminConfirmMsg" class="text-sm text-gray-800 font-medium mb-6 leading-6"></p>
+        <div class="flex justify-end gap-3">
+            <button id="adminConfirmCancel" type="button"
+                class="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
+                Cancel
+            </button>
+            <button id="adminConfirmOk" type="button"
+                class="px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                Confirm
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let _adminConfirmTarget = null;
+
+    function adminConfirm(message, formEl, okLabel) {
+        document.getElementById('adminConfirmMsg').textContent = message;
+        document.getElementById('adminConfirmOk').textContent = okLabel || 'Confirm';
+        _adminConfirmTarget = formEl;
+        document.getElementById('adminConfirmOverlay').classList.remove('hidden');
+    }
+
+    document.getElementById('adminConfirmCancel').addEventListener('click', () => {
+        document.getElementById('adminConfirmOverlay').classList.add('hidden');
+        _adminConfirmTarget = null;
+    });
+
+    document.getElementById('adminConfirmOk').addEventListener('click', () => {
+        document.getElementById('adminConfirmOverlay').classList.add('hidden');
+        if (_adminConfirmTarget) _adminConfirmTarget.submit();
+        _adminConfirmTarget = null;
+    });
+
+    document.getElementById('adminConfirmOverlay').addEventListener('click', function (e) {
+        if (e.target === this) {
+            this.classList.add('hidden');
+            _adminConfirmTarget = null;
+        }
+    });
+</script>

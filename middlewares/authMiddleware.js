@@ -4,6 +4,10 @@ const User = require("../models/user/userModel");
 const userAuth = async (req, res, next) => {
     try {
         if (!req.session || !req.session.userId) {
+            const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
+            if (isAjax) {
+                return res.status(401).json({ success: false, message: "Please login to continue", requireLogin: true, redirectUrl: "/login" });
+            }
             return res.redirect("/login");
         }
 

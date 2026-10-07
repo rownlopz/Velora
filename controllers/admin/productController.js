@@ -87,7 +87,12 @@ const addProductController = async (req, res) => {
     try {
         const { name, description, brand, categoryId, tags } = req.body;
         const variants = parseVariants(req.body);
-        const imagePaths = (req.files || []).map((f) => f.savedPath);
+
+        const keptExisting = req.body.existingImages
+            ? (Array.isArray(req.body.existingImages) ? req.body.existingImages : [req.body.existingImages])
+            : [];
+        const newlyUploaded = (req.files || []).map((f) => f.savedPath);
+        const imagePaths = [...keptExisting, ...newlyUploaded];
 
         const result = await addProduct({
             name, description, brand, categoryId,
@@ -101,7 +106,7 @@ const addProductController = async (req, res) => {
             return res.status(400).render("admin/product-form", {
                 title: "Add Product",
                 isEdit: false,
-                product: { name, description, brand, categoryId, tags },
+                product: { name, description, brand, categoryId, tags, images: imagePaths },
                 variants: variants.length ? variants : [{}],
                 categories: categoryResult.categories,
                 error: result.message,

@@ -14,25 +14,37 @@
     <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
 
         <h1 class="text-3xl font-medium">Shopping Bag</h1>
-        <p class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> in your bag</p>
+        <p id="cartItemCountText" class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> in your bag</p>
 
         <% if (typeof notice !== 'undefined' && notice) { %>
             <div class="mt-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm"><%= notice %></div>
         <% } %>
 
+        <% if (typeof removedUnlistedCount !== 'undefined' && removedUnlistedCount > 0) { %>
+            <script>
+                // Show toast after storeHeader scripts load
+                window.addEventListener('DOMContentLoaded', function () {
+                    if (typeof showToast === 'function') {
+                        showToast('Some unavailable products were removed from your cart.', 'warning');
+                    }
+                });
+            </script>
+        <% } %>
+
         <% if (items.length === 0) { %>
-            <div class="text-center py-24">
+            <div id="emptyCartMessage" class="text-center py-24">
                 <p class="text-gray-400">Your bag is empty.</p>
                 <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Continue Shopping</a>
             </div>
         <% } else { %>
 
-            <div class="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-10 mt-8">
+            <div id="cartContent" class="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-10 mt-8">
 
                 <!-- Items -->
-                <div class="space-y-6">
+                <div id="cartItemsList" class="space-y-6">
                     <% items.forEach(item => { %>
-                        <div class="flex gap-4 pb-6 border-b border-gray-100 <%= !item.isAvailable ? 'opacity-60' : '' %>">
+                        <div class="cart-item flex gap-4 pb-6 border-b border-gray-100 <%= !item.isAvailable ? 'opacity-60' : '' %>"
+                             data-variant-id="<%= item.variantId %>">
                             <div class="w-20 h-24 bg-gray-100 rounded-md overflow-hidden shrink-0">
                                 <% if (item.product && item.product.thumbnail) { %>
                                     <img src="<%= item.product.thumbnail %>" class="w-full h-full object-cover">
@@ -55,22 +67,30 @@
 
                                 <div class="flex items-center gap-6 mt-4">
                                     <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                                        <form action="/cart/<%= item.variantId %>/decrement" method="POST">
-                                            <button type="submit" class="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-black transition-colors" <%= !item.isAvailable ? 'disabled' : '' %>>&minus;</button>
-                                        </form>
-                                        <span class="text-sm w-8 text-center font-medium"><%= item.quantity %></span>
-                                        <form action="/cart/<%= item.variantId %>/increment" method="POST">
-                                            <button type="submit" class="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-black transition-colors" <%= !item.isAvailable ? 'disabled' : '' %>>+</button>
-                                        </form>
+                                        <button type="button"
+                                            class="decrement-btn w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+                                            data-variant-id="<%= item.variantId %>"
+                                            <%= !item.isAvailable ? 'disabled' : '' %>>
+                                            &minus;
+                                        </button>
+                                        <span class="item-qty text-sm w-8 text-center font-medium"><%= item.quantity %></span>
+                                        <button type="button"
+                                            class="increment-btn w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+                                            data-variant-id="<%= item.variantId %>"
+                                            <%= !item.isAvailable ? 'disabled' : '' %>>
+                                            +
+                                        </button>
                                     </div>
 
-                                    <form action="/cart/<%= item.variantId %>/remove" method="POST" class="ml-2">
-                                        <button type="submit" class="text-xs text-gray-400 hover:text-red-600 underline">Remove</button>
-                                    </form>
+                                    <button type="button"
+                                        class="remove-btn text-xs text-gray-400 hover:text-red-600 underline ml-2"
+                                        data-variant-id="<%= item.variantId %>">
+                                        Remove
+                                    </button>
                                 </div>
                             </div>
 
-                            <p class="text-sm font-medium">
+                            <p class="item-line-total text-sm font-medium">
                                 <% if (item.isAvailable) { %>
                                     &#8377;<%= item.currentPrice.toLocaleString('en-IN') %>
                                 <% } else { %>
@@ -90,7 +110,7 @@
 
                         <div class="flex justify-between text-sm mb-2">
                             <span class="text-gray-500">Subtotal</span>
-                            <span>&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
+                            <span id="cartSubtotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
                         <div class="flex justify-between text-sm mb-2">
                             <span class="text-gray-500">Estimated Shipping</span>
@@ -99,10 +119,11 @@
 
                         <div class="border-t border-gray-200 mt-4 pt-4 flex justify-between font-medium">
                             <span>Total</span>
-                            <span>&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
+                            <span id="cartTotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
 
                         <span
+                            id="checkoutBtn"
                             class="block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold <%= hasUnavailableItems ? 'opacity-40 cursor-not-allowed' : 'cursor-not-allowed opacity-70' %>"
                             title="Checkout isn't part of this week's build"
                         >
@@ -116,6 +137,181 @@
 </main>
 
 <%- include("../partials/storeFooter") %>
+
+<script>
+(function () {
+    // Format INR
+    function fmtINR(n) {
+        return '\u20b9' + Number(n).toLocaleString('en-IN');
+    }
+
+    function setButtonsDisabled(variantId, disabled) {
+        document.querySelectorAll(
+            `.increment-btn[data-variant-id="${variantId}"],` +
+            `.decrement-btn[data-variant-id="${variantId}"],` +
+            `.remove-btn[data-variant-id="${variantId}"]`
+        ).forEach(btn => { btn.disabled = disabled; });
+    }
+
+    async function cartRequest(url) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        return res.json();
+    }
+
+    function updateSummary(subtotal) {
+        const fmt = fmtINR(subtotal);
+        const subEl = document.getElementById('cartSubtotal');
+        const totEl = document.getElementById('cartTotal');
+        if (subEl) subEl.textContent = fmt;
+        if (totEl) totEl.textContent = fmt;
+    }
+
+    function removeCartItemRow(variantId) {
+        const row = document.querySelector(`.cart-item[data-variant-id="${variantId}"]`);
+        if (row) row.remove();
+
+        // Check if cart is now empty
+        const remaining = document.querySelectorAll('.cart-item');
+        const itemCountEl = document.getElementById('cartItemCountText');
+        if (remaining.length === 0) {
+            // Show empty state
+            const content = document.getElementById('cartContent');
+            if (content) content.remove();
+            const empty = document.getElementById('emptyCartMessage');
+            if (empty) {
+                empty.classList.remove('hidden');
+            } else {
+                const main = document.querySelector('main .max-w-screen-lg');
+                if (main) {
+                    main.insertAdjacentHTML('beforeend', `
+                        <div class="text-center py-24">
+                            <p class="text-gray-400">Your bag is empty.</p>
+                            <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Continue Shopping</a>
+                        </div>`);
+                }
+            }
+            if (itemCountEl) itemCountEl.textContent = '0 items in your bag';
+        } else {
+            const n = remaining.length;
+            if (itemCountEl) itemCountEl.textContent = n + ' item' + (n === 1 ? '' : 's') + ' in your bag';
+        }
+    }
+
+    function updateCheckoutButton(hasUnavailable) {
+        const btn = document.getElementById('checkoutBtn');
+        if (!btn) return;
+        if (hasUnavailable) {
+            btn.className = 'block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold opacity-40 cursor-not-allowed';
+            btn.textContent = 'Resolve unavailable items to continue';
+        } else {
+            btn.className = 'block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold cursor-not-allowed opacity-70';
+            btn.textContent = 'Proceed to Checkout';
+        }
+    }
+
+    // ---- Increment ----
+    document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.increment-btn');
+        if (!btn) return;
+        const variantId = btn.dataset.variantId;
+        setButtonsDisabled(variantId, true);
+        try {
+            const data = await cartRequest(`/cart/${variantId}/increment`);
+            if (data.removed) {
+                removeCartItemRow(variantId);
+                updateSummary(data.subtotal);
+                if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+                if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
+                showToast(data.message || 'Product is no longer available and was removed from your bag.', 'warning');
+                return;
+            }
+            if (!data.success) {
+                showToast(data.message || 'Unable to update cart', 'warning');
+            } else {
+                // Update qty display
+                const row = btn.closest('.cart-item');
+                if (row && data.item) {
+                    row.querySelector('.item-qty').textContent = data.item.quantity;
+                    row.querySelector('.item-line-total').textContent = fmtINR(data.item.lineTotal);
+                }
+                updateSummary(data.subtotal);
+                if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+                if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
+            }
+        } catch (err) {
+            showToast('Unable to update cart', 'error');
+        } finally {
+            setButtonsDisabled(variantId, false);
+        }
+    });
+
+    // ---- Decrement ----
+    document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.decrement-btn');
+        if (!btn) return;
+        const variantId = btn.dataset.variantId;
+        setButtonsDisabled(variantId, true);
+        try {
+            const data = await cartRequest(`/cart/${variantId}/decrement`);
+            if (data.removed) {
+                removeCartItemRow(variantId);
+                updateSummary(data.subtotal);
+                if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+                if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
+                showToast(data.message || 'Product is no longer available and was removed from your bag.', 'warning');
+                return;
+            }
+            if (!data.success) {
+                showToast(data.message || 'Unable to update cart', 'warning');
+            } else {
+                const row = btn.closest('.cart-item');
+                if (row && data.item) {
+                    row.querySelector('.item-qty').textContent = data.item.quantity;
+                    row.querySelector('.item-line-total').textContent = fmtINR(data.item.lineTotal);
+                }
+                updateSummary(data.subtotal);
+                if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+                if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
+            }
+        } catch (err) {
+            showToast('Unable to update cart', 'error');
+        } finally {
+            setButtonsDisabled(variantId, false);
+        }
+    });
+
+    // ---- Remove ----
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.remove-btn');
+        if (!btn) return;
+        const variantId = btn.dataset.variantId;
+
+        showConfirm('Remove this item from your bag?', async function () {
+            setButtonsDisabled(variantId, true);
+            try {
+                const data = await cartRequest(`/cart/${variantId}/remove`);
+                if (!data.success) {
+                    showToast('Unable to remove item', 'error');
+                } else {
+                    removeCartItemRow(variantId);
+                    updateSummary(data.subtotal);
+                    if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
+                    if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
+                    showToast('Item removed from bag', 'success');
+                }
+            } catch (err) {
+                showToast('Unable to remove item', 'error');
+            }
+        }, 'Remove');
+    });
+})();
+</script>
 
 </body>
 </html>

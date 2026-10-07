@@ -5,6 +5,34 @@
         }
     });
 </script>
+
+<!-- ============================================================
+     Toast Notification System
+     Used by all user-facing pages. Call: showToast(msg, type)
+     type: 'success' | 'error' | 'warning' | 'info'
+     ============================================================ -->
+<div id="toastContainer" style="position:fixed;top:1.25rem;right:1.25rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;pointer-events:none;"></div>
+
+<!-- ============================================================
+     Confirm Dialog (replaces native browser confirm())
+     Usage: showConfirm('Message', callbackFn)
+     ============================================================ -->
+<div id="confirmOverlay" class="hidden fixed inset-0 bg-black/40 z-[9998] flex items-center justify-center px-4">
+    <div class="bg-white rounded-2xl p-4 shadow-xl" style="width:280px; max-width:100%;">
+        <p id="confirmMessage" class="text-sm text-gray-800 font-medium mb-6 leading-6"></p>
+        <div class="flex justify-end gap-3">
+            <button id="confirmCancelBtn" type="button"
+                class="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
+                Cancel
+            </button>
+            <button id="confirmOkBtn" type="button"
+                class="px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                Confirm
+            </button>
+        </div>
+    </div>
+</div>
+
 <header class="border-b border-gray-200 bg-[#FAFAF8] sticky top-0 z-40">
     <div class="max-w-screen-xl mx-auto h-20 flex items-center justify-between px-6 md:px-10">
 
@@ -23,13 +51,36 @@
                 Search
             </span>
 
-            <!-- Wishlist icon (active) -->
-            <a href="/wishlist" class="text-black hover:text-gray-600 transition" title="Wishlist">
+            <!-- Wishlist icon with count badge -->
+            <a href="/wishlist" class="relative text-black hover:text-gray-600 transition" title="Wishlist">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg>
+                <% if (typeof wishlistCount !== 'undefined' && wishlistCount > 0) { %>
+                    <span id="wishlistBadge"
+                        class="absolute -top-2 -right-2 min-w-[18px] h-[18px] flex items-center justify-center bg-black text-white text-[10px] font-bold rounded-full px-1 leading-none">
+                        <%= wishlistCount %>
+                    </span>
+                <% } else { %>
+                    <span id="wishlistBadge"
+                        class="absolute -top-2 -right-2 min-w-[18px] h-[18px] items-center justify-center bg-black text-white text-[10px] font-bold rounded-full px-1 leading-none <%= (typeof wishlistCount !== 'undefined' && wishlistCount > 0) ? 'flex' : 'hidden' %>">
+                        <%= typeof wishlistCount !== 'undefined' ? wishlistCount : 0 %>
+                    </span>
+                <% } %>
             </a>
 
+            <!-- Cart icon with count badge -->
             <a href="/cart" class="relative text-black hover:text-gray-600 transition">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                <% if (typeof cartCount !== 'undefined' && cartCount > 0) { %>
+                    <span id="cartBadge"
+                        class="absolute -top-2 -right-2 min-w-[18px] h-[18px] flex items-center justify-center bg-black text-white text-[10px] font-bold rounded-full px-1 leading-none">
+                        <%= cartCount %>
+                    </span>
+                <% } else { %>
+                    <span id="cartBadge"
+                        class="absolute -top-2 -right-2 min-w-[18px] h-[18px] items-center justify-center bg-black text-white text-[10px] font-bold rounded-full px-1 leading-none hidden">
+                        0
+                    </span>
+                <% } %>
             </a>
 
             <a href="/profile" class="text-black hover:text-gray-600 transition">
@@ -38,3 +89,133 @@
         </div>
     </div>
 </header>
+
+<script>
+// ============================================================
+// Toast System
+// ============================================================
+(function () {
+    const COLORS = {
+        success: { bg: '#000', border: '#333', icon: '✓' },
+        error:   { bg: '#dc2626', border: '#b91c1c', icon: '✕' },
+        warning: { bg: '#d97706', border: '#b45309', icon: '⚠' },
+        info:    { bg: '#2563eb', border: '#1d4ed8', icon: 'ℹ' },
+    };
+
+    window.showToast = function (message, type = 'info', duration = 3500) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const c = COLORS[type] || COLORS.info;
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            display:flex;align-items:center;gap:10px;
+            background:${c.bg};color:#fff;
+            padding:12px 18px;border-radius:10px;
+            box-shadow:0 4px 24px rgba(0,0,0,0.18);
+            font-size:13px;font-family:inherit;font-weight:500;
+            max-width:340px;pointer-events:all;
+            opacity:0;transform:translateX(24px);
+            transition:opacity 0.25s ease,transform 0.25s ease;
+        `;
+        toast.innerHTML = `
+            <span style="font-size:15px;line-height:1;">${c.icon}</span>
+            <span style="flex:1;">${message}</span>
+            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;padding:0;margin-left:4px;opacity:0.7;">&times;</button>
+        `;
+        container.appendChild(toast);
+
+        // Animate in
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateX(0)';
+            });
+        });
+
+        // Auto-dismiss
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(24px)';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    };
+
+    // Override browser alert with Toast system
+    window.alert = function (message) {
+        window.showToast(message, 'info');
+    };
+
+    // Automatically show toast if cartSuccess, cartError, or notice exists in URL parameters
+    window.addEventListener('DOMContentLoaded', function () {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('cartSuccess')) {
+                window.showToast('Product added to bag', 'success');
+            } else if (params.get('cartError')) {
+                window.showToast(params.get('cartError'), 'error');
+            }
+        } catch (e) {}
+    });
+
+    // ============================================================
+    // Confirm Dialog
+    // ============================================================
+    let _confirmCallback = null;
+    window.showConfirm = function (message, onConfirm, confirmLabel) {
+        document.getElementById('confirmMessage').textContent = message;
+        document.getElementById('confirmOkBtn').textContent = confirmLabel || 'Confirm';
+        _confirmCallback = onConfirm;
+        document.getElementById('confirmOverlay').classList.remove('hidden');
+    };
+
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+        document.getElementById('confirmOverlay').classList.add('hidden');
+        _confirmCallback = null;
+    });
+    document.getElementById('confirmOkBtn').addEventListener('click', () => {
+        document.getElementById('confirmOverlay').classList.add('hidden');
+        if (typeof _confirmCallback === 'function') _confirmCallback();
+        _confirmCallback = null;
+    });
+    document.getElementById('confirmOverlay').addEventListener('click', function (e) {
+        if (e.target === this) {
+            this.classList.add('hidden');
+            _confirmCallback = null;
+        }
+    });
+
+    // ============================================================
+    // Navbar badge update helper — called after cart/wishlist changes
+    // ============================================================
+    window.updateNavCartCount = function (count) {
+        const badge = document.getElementById('cartBadge');
+        if (!badge) return;
+        const num = Number(count) || 0;
+        if (num > 0) {
+            badge.textContent = num;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+        } else {
+            badge.textContent = '0';
+            badge.classList.add('hidden');
+            badge.classList.remove('flex');
+        }
+    };
+
+    window.updateNavWishlistCount = function (count) {
+        const badge = document.getElementById('wishlistBadge');
+        if (!badge) return;
+        const num = Number(count) || 0;
+        if (num > 0) {
+            badge.textContent = num;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+        } else {
+            badge.textContent = '0';
+            badge.classList.add('hidden');
+            badge.classList.remove('flex');
+        }
+    };
+})();
+</script>

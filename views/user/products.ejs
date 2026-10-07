@@ -5,6 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collections | VELORA</title>
     <link rel="stylesheet" href="/css/output.css">
+    <style>
+        .wishlist-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+            width: 36px;
+            height: 36px;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4b5563;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .wishlist-btn:hover {
+            background: #ffffff;
+            transform: scale(1.12);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+            color: #ef4444;
+        }
+        .wishlist-btn:active {
+            transform: scale(0.92);
+        }
+        .wishlist-btn.active {
+            color: #ef4444;
+            background: #ffffff;
+        }
+    </style>
 </head>
 <body class="bg-[#FAFAF8] flex flex-col min-h-screen">
 
@@ -186,27 +221,55 @@
                     </div>
                 <% } else { %>
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                        <% products.forEach(p => { %>
-                            <a href="/products/<%= p.slug %>" class="block group relative">
+                        <% products.forEach(p => { 
+                            const pVariantIds = (p.variantIds || []).map(v => v.toString());
+                            const userWishlist = typeof wishlistVariantIds !== 'undefined' ? wishlistVariantIds : [];
+                            const inWishlist = pVariantIds.some(vid => userWishlist.includes(vid));
+                            const activeVariantId = inWishlist 
+                                ? pVariantIds.find(vid => userWishlist.includes(vid)) 
+                                : (p.defaultVariantId ? p.defaultVariantId.toString() : '');
+                        %>
+                            <div class="group relative flex flex-col">
                                 <div class="aspect-[3/4] bg-gray-100 overflow-hidden mb-3 relative">
-                                    <% if (p.thumbnail) { %>
-                                        <img src="<%= p.thumbnail %>" alt="<%= p.name %>"
-                                            class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 <%= p.isUnavailable ? 'opacity-60' : '' %>">
-                                    <% } %>
-                                    <% if (p.isUnavailable) { %>
-                                        <div class="absolute inset-0 flex items-end justify-center pb-4">
-                                            <span class="bg-black/70 text-white text-[10px] px-3 py-1 uppercase tracking-widest rounded-full backdrop-blur-sm">Unavailable</span>
-                                        </div>
-                                    <% } else if (p.totalStock === 0) { %>
-                                        <span class="absolute top-2 left-2 bg-black text-white text-[10px] px-2 py-1 uppercase tracking-widest">Out of Stock</span>
-                                    <% } %>
+                                    <a href="/products/<%= p.slug %>" class="block w-full h-full">
+                                        <% if (p.thumbnail) { %>
+                                            <img src="<%= p.thumbnail %>" alt="<%= p.name %>"
+                                                class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 <%= p.isUnavailable ? 'opacity-60' : '' %>">
+                                        <% } %>
+                                        <% if (p.isUnavailable) { %>
+                                            <div class="absolute inset-0 flex items-end justify-center pb-4">
+                                                <span class="bg-black/70 text-white text-[10px] px-3 py-1 uppercase tracking-widest rounded-full backdrop-blur-sm">Unavailable</span>
+                                            </div>
+                                        <% } else if (p.totalStock === 0) { %>
+                                            <span class="absolute top-2 left-2 bg-black text-white text-[10px] px-2 py-1 uppercase tracking-widest">Out of Stock</span>
+                                        <% } %>
+                                    </a>
+
+                                    <!-- Wishlist Button -->
+                                    <button type="button"
+                                        class="wishlist-btn <%= inWishlist ? 'active' : '' %>"
+                                        data-variant-id="<%= activeVariantId %>"
+                                        data-default-variant-id="<%= p.defaultVariantId ? p.defaultVariantId.toString() : '' %>"
+                                        data-in-wishlist="<%= inWishlist ? 'true' : 'false' %>"
+                                        title="<%= inWishlist ? 'Remove from wishlist' : 'Save to wishlist' %>"
+                                        aria-label="<%= inWishlist ? 'Remove from wishlist' : 'Save to wishlist' %>">
+                                        <svg width="17" height="17" viewBox="0 0 24 24" 
+                                             fill="<%= inWishlist ? '#ef4444' : 'none' %>" 
+                                             stroke="<%= inWishlist ? '#ef4444' : 'currentColor' %>" 
+                                             stroke-width="1.8">
+                                            <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/>
+                                        </svg>
+                                    </button>
                                 </div>
-                                <p class="text-sm font-medium group-hover:text-gray-600 transition-colors"><%= p.name %></p>
-                                <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
-                                <% if (p.totalReviews > 0) { %>
-                                    <p class="text-xs text-gray-400 mt-0.5">&#9733; <%= p.averageRating.toFixed(1) %> (<%= p.totalReviews %>)</p>
-                                <% } %>
-                            </a>
+
+                                <a href="/products/<%= p.slug %>" class="block">
+                                    <p class="text-sm font-medium group-hover:text-gray-600 transition-colors"><%= p.name %></p>
+                                    <p class="text-sm mt-1">&#8377;<%= p.displayPrice.toLocaleString('en-IN') %></p>
+                                    <% if (p.totalReviews > 0) { %>
+                                        <p class="text-xs text-gray-400 mt-0.5">&#9733; <%= p.averageRating.toFixed(1) %> (<%= p.totalReviews %>)</p>
+                                    <% } %>
+                                </a>
+                            </div>
                         <% }) %>
                     </div>
 
@@ -227,6 +290,118 @@
 </main>
 
 <%- include("../partials/storeFooter") %>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const wishlistBtns = document.querySelectorAll('.wishlist-btn');
+
+    wishlistBtns.forEach(btn => {
+        btn.addEventListener('click', async function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const inWishlist = this.dataset.inWishlist === 'true';
+            const variantId = inWishlist 
+                ? this.dataset.variantId 
+                : (this.dataset.defaultVariantId || this.dataset.variantId);
+
+            if (!variantId) {
+                if (typeof showToast === 'function') {
+                    showToast('Product variant unavailable', 'warning');
+                }
+                return;
+            }
+
+            if (this.disabled) return;
+            this.disabled = true;
+
+            try {
+                const endpoint = inWishlist 
+                    ? `/wishlist/${variantId}/remove` 
+                    : '/wishlist/add';
+                
+                const options = inWishlist
+                    ? {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }
+                    : {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ variantId })
+                    };
+
+                const res = await fetch(endpoint, options);
+
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await res.json();
+                if (data.requireLogin) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (data.success) {
+                    const nowInWishlist = !inWishlist;
+                    this.dataset.inWishlist = nowInWishlist ? 'true' : 'false';
+                    
+                    const svg = this.querySelector('svg');
+                    if (nowInWishlist) {
+                        this.classList.add('active');
+                        this.dataset.variantId = variantId;
+                        if (svg) {
+                            svg.setAttribute('fill', '#ef4444');
+                            svg.setAttribute('stroke', '#ef4444');
+                        }
+                        this.setAttribute('title', 'Remove from wishlist');
+                        this.setAttribute('aria-label', 'Remove from wishlist');
+                        if (typeof showToast === 'function') {
+                            showToast('Added to wishlist', 'success');
+                        }
+                    } else {
+                        this.classList.remove('active');
+                        this.dataset.variantId = this.dataset.defaultVariantId || variantId;
+                        if (svg) {
+                            svg.setAttribute('fill', 'none');
+                            svg.setAttribute('stroke', 'currentColor');
+                        }
+                        this.setAttribute('title', 'Save to wishlist');
+                        this.setAttribute('aria-label', 'Save to wishlist');
+                        if (typeof showToast === 'function') {
+                            showToast('Removed from wishlist', 'info');
+                        }
+                    }
+
+                    if (typeof updateNavWishlistCount === 'function' && data.wishlistCount !== undefined) {
+                        updateNavWishlistCount(data.wishlistCount);
+                    }
+                } else {
+                    if (typeof showToast === 'function') {
+                        showToast(data.message || 'Unable to update wishlist', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Wishlist error:', err);
+                if (typeof showToast === 'function') {
+                    showToast('Something went wrong. Please try again.', 'error');
+                }
+            } finally {
+                this.disabled = false;
+            }
+        });
+    });
+});
+</script>
 
 </body>
 </html>
