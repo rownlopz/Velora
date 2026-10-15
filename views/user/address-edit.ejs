@@ -76,12 +76,16 @@
                 Set as default shipping address
             </label>
 
+            <% if (typeof redirectTo !== 'undefined' && redirectTo) { %>
+                <input type="hidden" name="redirectTo" value="<%= redirectTo %>">
+            <% } %>
+
             <button type="submit" class="primary-btn">
                 <%= isEdit ? "SAVE ADDRESS" : "ADD ADDRESS" %>
             </button>
         </form>
 
-        <a href="/addresses" class="block text-center mt-6 text-sm text-gray-500 hover:text-black transition">
+        <a href="<%= typeof redirectTo !== 'undefined' && redirectTo ? redirectTo : '/addresses' %>" class="block text-center mt-6 text-sm text-gray-500 hover:text-black transition">
             Cancel
         </a>
     </div>

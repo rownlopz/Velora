@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Orders | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen text-neutral-800 antialiased selection:bg-neutral-900 selection:text-white">
+
+<%- include("../partials/storeHeader", { active: "orders" }) %>
+
+<main class="flex-1">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 md:px-10 py-8 md:py-12">
+
+        <!-- Top Breadcrumb & Page Header -->
+        <div class="pb-8 border-b border-neutral-200">
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <a href="/profile" class="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 hover:text-black transition-colors mb-3 group">
+                        <svg class="group-hover:-translate-x-0.5 transition-transform" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                            <path d="m15 18-6-6 6-6"/>
+                        </svg>
+                        Account Profile
+                    </a>
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-3xl sm:text-4xl font-light tracking-tight text-neutral-950">My Orders</h1>
+                        <% if (typeof totalOrders !== 'undefined' && totalOrders > 0) { %>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-neutral-200/80 text-neutral-700">
+                                <%= totalOrders %>
+                            </span>
+                        <% } %>
+                    </div>
+                    <p class="text-xs sm:text-sm text-neutral-500 mt-1.5 max-w-xl">
+                        Review your recent purchases, track deliveries in real time, download tax invoices, or manage returns.
+                    </p>
+                </div>
+
+                <!-- Search Bar -->
+                <form action="/orders" method="GET" class="flex items-center gap-2 w-full md:w-auto">
+                    <div class="relative flex-1 md:w-80">
+                        <input
+                            type="text"
+                            name="search"
+                            value="<%= search || '' %>"
+                            placeholder="Search by Order ID, Product..."
+                            class="w-full h-11 pl-10 pr-9 bg-white border border-neutral-300 rounded-xl text-xs sm:text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/5 transition shadow-xs"
+                        >
+                        <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+                        </svg>
+                        <% if (search) { %>
+                            <a href="/orders<%= status ? '?status=' + encodeURIComponent(status) : '' %>" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black text-sm p-1 transition" title="Clear search">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </a>
+                        <% } %>
+                    </div>
+                    <% if (status) { %>
+                        <input type="hidden" name="status" value="<%= status %>">
+                    <% } %>
+                    <button type="submit" class="h-11 px-5 bg-neutral-900 text-white rounded-xl text-xs font-semibold uppercase tracking-wider hover:bg-black transition-all duration-150 shadow-xs active:scale-[0.98]">
+                        Search
+                    </button>
+                </form>
+            </div>
+
+            <!-- Status Filter Pills -->
+            <div class="flex items-center gap-2 overflow-x-auto pt-6 pb-2 scrollbar-none text-xs">
+                <%
+                    const filterTabs = [
+                        { id: '', label: 'All Orders' },
+                        { id: 'PLACED', label: 'Placed' },
+                        { id: 'PROCESSING', label: 'Processing' },
+                        { id: 'SHIPPED', label: 'Shipped' },
+                        { id: 'DELIVERED', label: 'Delivered' },
+                        { id: 'CANCELLED', label: 'Cancelled' },
+                        { id: 'RETURN_REQUESTED', label: 'Return Requested' },
+                    ];
+                    const activeStatus = status || '';
+                %>
+                <% filterTabs.forEach((tab) => { %>
+                    <% const isActive = activeStatus === tab.id; %>
+                    <a
+                        href="/orders?<%= tab.id ? 'status=' + encodeURIComponent(tab.id) + '&' : '' %><%= search ? 'search=' + encodeURIComponent(search) : '' %>"
+                        class="px-4 py-2 rounded-full whitespace-nowrap transition-all duration-150 font-medium text-xs <%= isActive ? 'bg-black text-white shadow-sm ring-1 ring-black' : 'bg-white text-neutral-600 border border-neutral-200/90 hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900' %>"
+                    >
+                        <%= tab.label %>
+                    </a>
+                <% }) %>
+            </div>
+        </div>
+
+        <!-- Notification Banner -->
+        <% if (notice) { %>
+            <div class="mt-6 p-4 rounded-xl text-xs sm:text-sm bg-neutral-100 border border-neutral-200 text-neutral-800 flex items-center justify-between shadow-xs">
+                <div class="flex items-center gap-2.5">
+                    <svg class="text-neutral-600 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span><%= notice %></span>
+                </div>
+                <a href="/orders" class="text-neutral-900 font-semibold hover:underline ml-4 text-xs">Dismiss</a>
+            </div>
+        <% } %>
+
+        <!-- Orders List -->
+        <% if (orders && orders.length > 0) { %>
+            <div class="mt-8 space-y-6">
+                <% orders.forEach((order) => { %>
+                    <%
+                        // Status badge configuration
+                        let badgeBg = "bg-neutral-100 text-neutral-800 border-neutral-200";
+                        let dotColor = "bg-neutral-400";
+
+                        if (order.orderStatus === "PLACED" || order.orderStatus === "PENDING") {
+                            badgeBg = "bg-sky-50 text-sky-800 border-sky-200";
+                            dotColor = "bg-sky-500";
+                        } else if (order.orderStatus === "PROCESSING") {
+                            badgeBg = "bg-amber-50 text-amber-800 border-amber-200";
+                            dotColor = "bg-amber-500 animate-pulse";
+                        } else if (order.orderStatus === "SHIPPED") {
+                            badgeBg = "bg-indigo-50 text-indigo-800 border-indigo-200";
+                            dotColor = "bg-indigo-500";
+                        } else if (order.orderStatus === "OUT_FOR_DELIVERY") {
+                            badgeBg = "bg-cyan-50 text-cyan-800 border-cyan-200";
+                            dotColor = "bg-cyan-500 animate-pulse";
+                        } else if (order.orderStatus === "DELIVERED") {
+                            badgeBg = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                            dotColor = "bg-emerald-500";
+                        } else if (order.orderStatus === "CANCELLED") {
+                            badgeBg = "bg-rose-50 text-rose-800 border-rose-200";
+                            dotColor = "bg-rose-500";
+                        } else if (order.orderStatus === "RETURN_REQUESTED") {
+                            badgeBg = "bg-orange-50 text-orange-800 border-orange-200";
+                            dotColor = "bg-orange-500";
+                        } else if (order.orderStatus === "RETURN_APPROVED") {
+                            badgeBg = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                            dotColor = "bg-emerald-500";
+                        } else if (order.orderStatus === "RETURN_REJECTED") {
+                            badgeBg = "bg-rose-50 text-rose-800 border-rose-200";
+                            dotColor = "bg-rose-500";
+                        } else if (order.orderStatus === "RETURNED") {
+                            badgeBg = "bg-zinc-100 text-zinc-800 border-zinc-300";
+                            dotColor = "bg-zinc-500";
+                        }
+
+                        // Payment status badge
+                        let paymentBadge = "bg-neutral-100 text-neutral-700 border-neutral-200";
+                        if (order.paymentStatus === "COMPLETED") {
+                            paymentBadge = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                        } else if (order.paymentStatus === "PENDING") {
+                            paymentBadge = "bg-amber-50 text-amber-700 border-amber-200";
+                        } else if (order.paymentStatus === "REFUNDED") {
+                            paymentBadge = "bg-purple-50 text-purple-700 border-purple-200";
+                        } else if (order.paymentStatus === "FAILED" || order.paymentStatus === "CANCELLED") {
+                            paymentBadge = "bg-rose-50 text-rose-700 border-rose-200";
+                        }
+
+                        const placedDate = new Date(order.placedAt || order.createdAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                        });
+                    %>
+                    <div class="bg-white border border-neutral-200/90 rounded-2xl overflow-hidden shadow-xs hover:border-neutral-300 hover:shadow-sm transition-all duration-200">
+
+                        <!-- Order Card Header with clear column structure -->
+                        <div class="bg-neutral-50/70 border-b border-neutral-200/80 px-6 py-4">
+                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 items-center">
+                                
+                                <!-- Order Placed Date -->
+                                <div>
+                                    <span class="block text-[11px] font-medium uppercase tracking-wider text-neutral-400 mb-0.5">Order Placed</span>
+                                    <span class="text-xs sm:text-sm font-medium text-neutral-800"><%= placedDate %></span>
+                                </div>
+
+                                <!-- Total Amount -->
+                                <div>
+                                    <span class="block text-[11px] font-medium uppercase tracking-wider text-neutral-400 mb-0.5">Total Amount</span>
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-xs sm:text-sm font-bold text-neutral-900">&#8377;<%= order.pricing.totalAmount.toLocaleString('en-IN') %></span>
+                                        <span class="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-neutral-200/70 text-neutral-700">
+                                            <%= order.paymentMethod %>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Ship To -->
+                                <div>
+                                    <span class="block text-[11px] font-medium uppercase tracking-wider text-neutral-400 mb-0.5">Ship To</span>
+                                    <span class="text-xs sm:text-sm font-medium text-neutral-800 truncate block max-w-[150px]" title="<%= order.shippingAddress.firstName %> <%= order.shippingAddress.lastName %>, <%= order.shippingAddress.city || '' %>">
+                                        <%= order.shippingAddress.firstName %> <%= order.shippingAddress.lastName %>
+                                    </span>
+                                </div>
+
+                                <!-- Order Number -->
+                                <div>
+                                    <span class="block text-[11px] font-medium uppercase tracking-wider text-neutral-400 mb-0.5">Order ID</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="font-mono text-xs font-semibold text-neutral-900 tracking-tight"><%= order.orderNumber %></span>
+                                        <button
+                                            type="button"
+                                            onclick="copyOrderId('<%= order.orderNumber %>')"
+                                            class="text-neutral-400 hover:text-black transition-colors p-0.5"
+                                            title="Copy Order ID"
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Status Badge -->
+                                <div class="col-span-2 sm:col-span-1 lg:col-span-1 flex sm:justify-start lg:justify-end">
+                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide border <%= badgeBg %> shadow-xs">
+                                        <span class="w-1.5 h-1.5 rounded-full <%= dotColor %>"></span>
+                                        <%= order.orderStatus.replace(/_/g, ' ') %>
+                                    </span>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Order Card Body: Items Preview -->
+                        <div class="px-6 py-2 divide-y divide-neutral-100">
+                            <% order.items.forEach((item) => { %>
+                                <div class="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div class="flex items-center gap-4 min-w-0">
+                                        
+                                            <!-- Product Thumbnail -->
+                                            <div class="w-16 h-20 sm:w-20 sm:h-24 bg-neutral-100 rounded-xl overflow-hidden shrink-0 border border-neutral-200/80 shadow-xs flex items-center justify-center">
+                                                <% if (item.thumbnail) { %>
+                                                    <img src="<%= item.thumbnail %>" alt="<%= item.productName %>" class="w-full h-full object-cover">
+                                                <% } else { %>
+                                                    <svg class="text-neutral-300" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                                                <% } %>
+                                            </div>
+
+                                        <!-- Product Meta -->
+                                        <div class="min-w-0 flex-1">
+                                            <h3 class="text-sm sm:text-base font-semibold text-neutral-900 truncate">
+                                                <%= item.productName %>
+                                            </h3>
+
+                                            <!-- Tags: Color, Size, Quantity -->
+                                            <div class="flex flex-wrap items-center gap-1.5 text-xs text-neutral-600 mt-1.5">
+                                                <% if (item.color) { %>
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 text-[11px] font-medium text-neutral-700">
+                                                        Color: <strong class="ml-1 font-semibold text-neutral-900"><%= item.color %></strong>
+                                                    </span>
+                                                <% } %>
+                                                <% if (item.size) { %>
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 text-[11px] font-medium text-neutral-700">
+                                                        Size: <strong class="ml-1 font-semibold text-neutral-900"><%= item.size %></strong>
+                                                    </span>
+                                                <% } %>
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 text-[11px] font-medium text-neutral-700">
+                                                    Qty: <strong class="ml-1 font-semibold text-neutral-900"><%= item.quantity %></strong>
+                                                </span>
+                                            </div>
+
+                                            <div class="text-xs text-neutral-500 mt-1.5 font-mono">
+                                                &#8377;<%= item.unitPrice.toLocaleString('en-IN') %> each
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Price & Item-specific status -->
+                                    <div class="sm:text-right shrink-0 flex sm:flex-col justify-between items-center sm:items-end">
+                                        <p class="text-sm sm:text-base font-bold text-neutral-900 font-mono">
+                                            &#8377;<%= item.lineTotal.toLocaleString('en-IN') %>
+                                        </p>
+                                        <%
+                                            const itemSt = (item.status || 'PENDING').toUpperCase();
+                                            let itmBg = "bg-neutral-100 text-neutral-700 border-neutral-200";
+                                            if (itemSt === 'PENDING' || itemSt === 'PLACED') itmBg = "bg-blue-50 text-blue-700 border-blue-200";
+                                            else if (itemSt === 'PROCESSING') itmBg = "bg-amber-50 text-amber-700 border-amber-200";
+                                            else if (itemSt === 'SHIPPED') itmBg = "bg-indigo-50 text-indigo-700 border-indigo-200";
+                                            else if (itemSt === 'DELIVERED') itmBg = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                            else if (itemSt === 'CANCELLED') itmBg = "bg-rose-50 text-rose-700 border-rose-200";
+                                            else if (itemSt === 'RETURN_REQUESTED') itmBg = "bg-orange-50 text-orange-700 border-orange-200";
+                                            else if (itemSt === 'RETURN_APPROVED') itmBg = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                            else if (itemSt === 'RETURN_REJECTED') itmBg = "bg-rose-50 text-rose-800 border-rose-200";
+                                            else if (itemSt === 'RETURNED') itmBg = "bg-zinc-100 text-zinc-800 border-zinc-200";
+                                        %>
+                                        <span class="inline-block mt-1 text-[11px] px-2.5 py-0.5 rounded-md font-semibold border <%= itmBg %>">
+                                            <%= itemSt.replace(/_/g, ' ') %>
+                                        </span>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        </div>
+
+                        <!-- Order Card Footer -->
+                        <div class="px-6 py-4 bg-neutral-50/50 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+                            
+                            <!-- Left info -->
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-neutral-500">
+                                <% if (order.cancellationReason) { %>
+                                    <div class="inline-flex items-center gap-1.5 text-rose-700 bg-rose-50 border border-rose-200/80 px-2.5 py-1 rounded-lg text-xs font-medium">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                        <span>Cancellation: <%= order.cancellationReason %></span>
+                                    </div>
+                                <% } else if (order.returnReason) { %>
+                                    <div class="inline-flex items-center gap-1.5 text-orange-700 bg-orange-50 border border-orange-200/80 px-2.5 py-1 rounded-lg text-xs font-medium">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        <span>Return: <%= order.returnReason %></span>
+                                    </div>
+                                <% } else { %>
+                                    <span class="font-medium text-neutral-600">
+                                        <%= order.items.length %> <%= order.items.length === 1 ? 'item' : 'items' %>
+                                    </span>
+                                    <span class="text-neutral-300">&bull;</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span>Payment:</span>
+                                        <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider border <%= paymentBadge %>">
+                                            <%= order.paymentStatus %>
+                                        </span>
+                                    </div>
+                                <% } %>
+                            </div>
+
+                            <!-- Right actions -->
+                            <div class="flex items-center gap-2.5 self-end sm:self-auto">
+                                <a
+                                    href="/orders/<%= order._id %>/invoice"
+                                    class="h-9 px-4 bg-white border border-neutral-300 hover:border-black hover:text-black rounded-xl text-neutral-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 shadow-xs active:scale-[0.98]"
+                                    title="Download PDF Tax Invoice"
+                                >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    <span>Invoice</span>
+                                </a>
+
+                                <a
+                                    href="/orders/<%= order._id %>"
+                                    class="h-9 px-5 bg-neutral-900 hover:bg-black text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 shadow-xs active:scale-[0.98] group"
+                                >
+                                    <span>View Details</span>
+                                    <svg class="group-hover:translate-x-0.5 transition-transform" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                                </a>
+                            </div>
+
+                        </div>
+
+                    </div>
+                <% }) %>
+            </div>
+
+            <!-- Pagination -->
+            <% if (totalPages > 1) { %>
+                <div class="flex justify-center items-center gap-2 mt-12">
+                    <% if (currentPage > 1) { %>
+                        <a
+                            href="/orders?page=<%= currentPage - 1 %><%= status ? '&status=' + encodeURIComponent(status) : '' %><%= search ? '&search=' + encodeURIComponent(search) : '' %>"
+                            class="h-9 px-3 flex items-center justify-center rounded-xl text-xs font-medium bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 transition shadow-xs"
+                            title="Previous Page"
+                        >
+                            &larr; Prev
+                        </a>
+                    <% } %>
+
+                    <% for (let p = 1; p <= totalPages; p++) { %>
+                        <a
+                            href="/orders?page=<%= p %><%= status ? '&status=' + encodeURIComponent(status) : '' %><%= search ? '&search=' + encodeURIComponent(search) : '' %>"
+                            class="w-9 h-9 flex items-center justify-center rounded-xl text-xs font-semibold transition shadow-xs <%= p === currentPage ? 'bg-black text-white' : 'bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50' %>"
+                        >
+                            <%= p %>
+                        </a>
+                    <% } %>
+
+                    <% if (currentPage < totalPages) { %>
+                        <a
+                            href="/orders?page=<%= currentPage + 1 %><%= status ? '&status=' + encodeURIComponent(status) : '' %><%= search ? '&search=' + encodeURIComponent(search) : '' %>"
+                            class="h-9 px-3 flex items-center justify-center rounded-xl text-xs font-medium bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 transition shadow-xs"
+                            title="Next Page"
+                        >
+                            Next &rarr;
+                        </a>
+                    <% } %>
+                </div>
+            <% } %>
+
+        <% } else { %>
+            <!-- Empty Orders State -->
+            <div class="bg-white border border-neutral-200/90 rounded-3xl p-10 md:p-14 text-center max-w-lg mx-auto mt-12 shadow-xs">
+                <div class="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-neutral-400">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                </div>
+                <% if (search || status) { %>
+                    <h2 class="text-xl font-light text-neutral-900 mb-2">No matching orders found</h2>
+                    <p class="text-xs sm:text-sm text-neutral-500 mb-6 leading-relaxed">
+                        We couldn't find any orders matching your search or active filters. Try adjusting your search term.
+                    </p>
+                    <a href="/orders" class="inline-flex items-center justify-center h-11 px-6 bg-neutral-900 text-white rounded-xl text-xs font-semibold uppercase tracking-wider hover:bg-black transition shadow-xs">
+                        Clear All Filters
+                    </a>
+                <% } else { %>
+                    <h2 class="text-xl font-light text-neutral-900 mb-2">You haven't placed any orders yet</h2>
+                    <p class="text-xs sm:text-sm text-neutral-500 mb-6 leading-relaxed">
+                        Discover our curated seasonal apparel and wardrobe essentials crafted with precision.
+                    </p>
+                    <a href="/products" class="inline-flex items-center justify-center h-11 px-7 bg-neutral-900 text-white rounded-xl text-xs font-semibold uppercase tracking-wider hover:bg-black transition shadow-xs">
+                        Explore Collections &rarr;
+                    </a>
+                <% } %>
+            </div>
+        <% } %>
+
+    </div>
+</main>
+
+<%- include("../partials/storeFooter") %>
+
+    function copyOrderId(text) {
+        function fallbackCopy(val) {
+            const el = document.createElement('textarea');
+            el.value = val;
+            el.setAttribute('readonly', '');
+            el.style.position = 'absolute';
+            el.style.left = '-9999px';
+            document.body.appendChild(el);
+            el.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            document.body.removeChild(el);
+            notifyCopy();
+        }
+
+        function notifyCopy() {
+            if (typeof showToast === 'function') {
+                showToast('Order ID copied to clipboard', 'info');
+            } else {
+                const temp = document.createElement('div');
+                temp.textContent = 'Order ID copied!';
+                temp.className = 'fixed bottom-5 right-5 bg-black text-white text-xs px-4 py-2 rounded-lg shadow-lg z-50';
+                document.body.appendChild(temp);
+                setTimeout(() => temp.remove(), 2000);
+            }
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(notifyCopy).catch(() => fallbackCopy(text));
+        } else {
+            fallbackCopy(text);
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -102,17 +102,15 @@
 
                                     <div id="priceBlock" class="flex items-center gap-3 mt-5">
                                         <span id="displayPrice" class="text-2xl font-medium">
-                                            &#8377;<%= (defaultVariant.salePrice ||
-                                                defaultVariant.regularPrice).toLocaleString('en-IN') %>
+                                            &#8377;<%= ((defaultVariant.salePrice != null ? defaultVariant.salePrice : defaultVariant.regularPrice) || 0).toLocaleString('en-IN') %>
                                         </span>
-                                        <% if (defaultVariant.salePrice) { %>
-                                            <span id="regularPriceStrike"
-                                                class="text-gray-400 line-through text-sm">&#8377;<%=
-                                                    defaultVariant.regularPrice.toLocaleString('en-IN') %></span>
-                                            <span id="discountBadge" class="text-emerald-600 text-sm font-semibold">
-                                                <%= discountPercent %>% OFF
-                                            </span>
-                                            <% } %>
+                                        <span id="regularPriceStrike"
+                                            class="text-gray-400 line-through text-sm <%= (defaultVariant.salePrice != null && defaultVariant.salePrice < defaultVariant.regularPrice) ? '' : 'hidden' %>">
+                                            &#8377;<%= (defaultVariant.regularPrice || 0).toLocaleString('en-IN') %>
+                                        </span>
+                                        <span id="discountBadge" class="text-emerald-600 text-sm font-semibold <%= (defaultVariant.salePrice != null && defaultVariant.salePrice < defaultVariant.regularPrice) ? '' : 'hidden' %>">
+                                            <%= typeof discountPercent !== 'undefined' ? discountPercent : '' %>% OFF
+                                        </span>
                                     </div>
 
                                     <p class="text-gray-500 mt-6 leading-7 text-sm">
@@ -209,16 +207,13 @@
                                                                                     <% } %>
                                                                     </button>
                                                                     <button type="button" id="wishlistBtn"
-                                                                        onclick="document.getElementById('wishlistForm').requestSubmit()"
-                                                                        class="h-14 px-6 border border-gray-300 rounded-xl font-semibold hover:border-black transition"
+                                                                        class="h-14 px-6 border border-gray-300 rounded-xl font-semibold hover:border-black transition flex items-center justify-center"
                                                                         title="Save to Wishlist">
-                                                                        &hearts;
+                                                                        <svg id="wishlistHeartSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                                                            <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/>
+                                                                        </svg>
                                                                     </button>
                                                                 </div>
-                                    </form>
-                                    <form id="wishlistForm" action="/wishlist/add" method="POST" class="hidden">
-                                        <input type="hidden" name="variantId" id="wishlistVariantId"
-                                            value="<%= defaultVariant._id %>">
                                     </form>
                         </div>
                     </div>
@@ -301,40 +296,124 @@
 
                     let selectedColor = "<%= defaultVariant.color %>";
                     let selectedSize = "<%= defaultVariant.size %>";
+                    let userWishlistIds = <%- JSON.stringify(typeof wishlistVariantIds !== 'undefined' ? wishlistVariantIds : []) %>;
                     // Server-rendered flag — never re-enables Add-to-Cart for unavailable products.
                     const IS_UNAVAILABLE = <%= typeof isUnavailable !== 'undefined' && isUnavailable ? 'true' : 'false' %>;
 
                     function findMatchingVariant() {
-                        return VARIANTS.find(v => v.color === selectedColor && v.size === selectedSize) || VARIANTS[0];
+                        return VARIANTS.find(v => (v.color || '') === (selectedColor || '') && (v.size || '') === (selectedSize || '')) || null;
                     }
 
                     function refreshSelection() {
                         const variant = findMatchingVariant();
-                        if (!variant) return;
-
-                        document.getElementById('selectedVariantId').value = variant._id;
-                        document.getElementById('wishlistVariantId').value = variant._id;
-
+                        const selectedInput = document.getElementById('selectedVariantId');
                         const priceEl = document.getElementById('displayPrice');
-                        priceEl.textContent = '\u20b9' + (variant.salePrice || variant.regularPrice).toLocaleString('en-IN');
-
+                        const regularStrike = document.getElementById('regularPriceStrike');
+                        const discountBadge = document.getElementById('discountBadge');
                         const stockEl = document.getElementById('stockMessage');
-                        const btn = document.getElementById('addToCartBtn');
-                        if (IS_UNAVAILABLE) {
-                            // Product/category is blocked — never allow cart, regardless of stock.
-                            btn.disabled = true;
-                            btn.textContent = 'Unavailable';
-                            stockEl.textContent = '';
-                        } else if (variant.stock === 0) {
-                            stockEl.textContent = 'Out of stock';
-                            stockEl.className = 'text-sm mb-5 text-red-500';
-                            btn.disabled = true;
-                            btn.textContent = 'Out of Stock';
+                        const cartBtn = document.getElementById('addToCartBtn');
+                        const wishBtn = document.getElementById('wishlistBtn');
+                        const heartSvg = document.getElementById('wishlistHeartSvg');
+
+                        if (!variant) {
+                            if (selectedInput) selectedInput.value = '';
+                            if (priceEl) priceEl.textContent = 'Unavailable';
+                            if (regularStrike) regularStrike.classList.add('hidden');
+                            if (discountBadge) discountBadge.classList.add('hidden');
+
+                            if (stockEl) {
+                                stockEl.textContent = 'This combination is currently unavailable.';
+                                stockEl.className = 'text-sm mb-5 text-rose-500 font-medium';
+                            }
+
+                            if (cartBtn) {
+                                cartBtn.disabled = true;
+                                cartBtn.textContent = 'Combination Unavailable';
+                            }
+
+                            if (wishBtn) {
+                                wishBtn.disabled = true;
+                                wishBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                                wishBtn.setAttribute('title', 'Select an available combination to save');
+                            }
+                            if (heartSvg) {
+                                heartSvg.setAttribute('fill', 'none');
+                                heartSvg.setAttribute('stroke', '#9ca3af');
+                            }
+                            return;
+                        }
+
+                        if (selectedInput) selectedInput.value = variant._id;
+
+                        // Authoritative price calculation with nullish fallback
+                        const effectivePrice = variant.salePrice != null ? variant.salePrice : variant.regularPrice;
+                        if (priceEl) {
+                            priceEl.textContent = '\u20b9' + Number(effectivePrice).toLocaleString('en-IN');
+                        }
+
+                        if (variant.salePrice != null && variant.salePrice < variant.regularPrice) {
+                            const pct = Math.round(((variant.regularPrice - variant.salePrice) / variant.regularPrice) * 100);
+                            if (regularStrike) {
+                                regularStrike.textContent = '\u20b9' + Number(variant.regularPrice).toLocaleString('en-IN');
+                                regularStrike.classList.remove('hidden');
+                            }
+                            if (discountBadge) {
+                                discountBadge.textContent = pct + '% OFF';
+                                discountBadge.classList.remove('hidden');
+                            }
                         } else {
-                            stockEl.textContent = variant.stock <= 5 ? ('Only ' + variant.stock + ' left in stock') : 'In stock';
-                            stockEl.className = 'text-sm mb-5 ' + (variant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600');
-                            btn.disabled = false;
-                            btn.textContent = 'Add to Cart';
+                            if (regularStrike) regularStrike.classList.add('hidden');
+                            if (discountBadge) discountBadge.classList.add('hidden');
+                        }
+
+                        // Update Wishlist Heart Icon
+                        const inWishlist = userWishlistIds.includes(variant._id.toString());
+                        if (heartSvg) {
+                            heartSvg.setAttribute('fill', inWishlist ? '#ef4444' : 'none');
+                            heartSvg.setAttribute('stroke', inWishlist ? '#ef4444' : 'currentColor');
+                        }
+                        if (wishBtn) {
+                            wishBtn.setAttribute('title', inWishlist ? 'Remove from Wishlist' : 'Save to Wishlist');
+                        }
+
+                        if (IS_UNAVAILABLE) {
+                            // Product/category is blocked — never allow cart or wishlist
+                            if (cartBtn) {
+                                cartBtn.disabled = true;
+                                cartBtn.textContent = 'Unavailable';
+                            }
+                            if (stockEl) stockEl.textContent = '';
+                            if (wishBtn) {
+                                wishBtn.disabled = true;
+                                wishBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                            }
+                        } else if (variant.stock <= 0) {
+                            if (stockEl) {
+                                stockEl.textContent = 'Out of stock';
+                                stockEl.className = 'text-sm mb-5 text-red-500 font-medium';
+                            }
+                            if (cartBtn) {
+                                cartBtn.disabled = true;
+                                cartBtn.textContent = 'Out of Stock';
+                            }
+                            // Out-of-stock variants remain wishlistable when product & category are listed
+                            if (wishBtn) {
+                                wishBtn.disabled = false;
+                                wishBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                            }
+                        } else {
+                            if (stockEl) {
+                                stockEl.textContent = variant.stock <= 5 ? ('Only ' + variant.stock + ' left in stock') : 'In stock';
+                                stockEl.className = 'text-sm mb-5 ' + (variant.stock <= 5 ? 'text-amber-600' : 'text-emerald-600');
+                            }
+                            if (cartBtn) {
+                                cartBtn.disabled = false;
+                                cartBtn.textContent = 'Add to Cart';
+                            }
+                            if (wishBtn) {
+                                wishBtn.disabled = false;
+                                wishBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                            }
                         }
                     }
 
@@ -426,6 +505,9 @@
                                 if (typeof updateNavWishlistCount === 'function' && data.wishlistCount !== undefined) {
                                     updateNavWishlistCount(data.wishlistCount);
                                 }
+                                // Item was moved/added to cart, remove from wishlist locally & update icon
+                                userWishlistIds = userWishlistIds.filter(id => id !== variantId.toString());
+                                refreshSelection();
                             } else {
                                 showToast(data.message || 'Unable to add to cart', 'error');
                             }
@@ -437,44 +519,67 @@
                         }
                     });
 
-                    // === Wishlist — AJAX intercept ===
-                    document.getElementById('wishlistForm').addEventListener('submit', async function (e) {
-                        e.preventDefault();
-                        const variantId = document.getElementById('wishlistVariantId').value;
-                        if (!variantId) return;
+                    // === Wishlist Toggle Button Handler ===
+                    const detailWishlistBtn = document.getElementById('wishlistBtn');
+                    if (detailWishlistBtn) {
+                        detailWishlistBtn.addEventListener('click', async function () {
+                            const variant = findMatchingVariant();
+                            if (!variant) return;
+                            const variantId = variant._id.toString();
+                            const inWishlist = userWishlistIds.includes(variantId);
 
-                        try {
-                            const res = await fetch('/wishlist/add', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Accept': 'application/json',
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                },
-                                body: JSON.stringify({ variantId }),
-                            });
+                            detailWishlistBtn.disabled = true;
+                            try {
+                                const endpoint = inWishlist ? `/wishlist/${variantId}/remove` : '/wishlist/add';
+                                const options = inWishlist
+                                    ? {
+                                        method: 'POST',
+                                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                                    }
+                                    : {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Accept': 'application/json',
+                                            'X-Requested-With': 'XMLHttpRequest',
+                                        },
+                                        body: JSON.stringify({ variantId }),
+                                    };
 
-                            if (res.status === 401) {
-                                window.location.href = '/login';
-                                return;
+                                const res = await fetch(endpoint, options);
+                                if (res.status === 401) {
+                                    window.location.href = '/login';
+                                    return;
+                                }
+
+                                const data = await res.json();
+                                if (data.requireLogin) {
+                                    window.location.href = '/login';
+                                    return;
+                                }
+
+                                if (data.success) {
+                                    if (inWishlist) {
+                                        userWishlistIds = userWishlistIds.filter(id => id !== variantId);
+                                        showToast('Removed from wishlist', 'info');
+                                    } else {
+                                        userWishlistIds.push(variantId);
+                                        showToast('Added to wishlist', 'success');
+                                    }
+                                    refreshSelection();
+                                    if (typeof updateNavWishlistCount === 'function' && data.wishlistCount !== undefined) {
+                                        updateNavWishlistCount(data.wishlistCount);
+                                    }
+                                } else {
+                                    showToast(data.message || 'Unable to update wishlist', 'error');
+                                }
+                            } catch (err) {
+                                showToast('Something went wrong. Please try again.', 'error');
+                            } finally {
+                                detailWishlistBtn.disabled = false;
                             }
-
-                            const data = await res.json();
-                            if (data.requireLogin) {
-                                window.location.href = '/login';
-                                return;
-                            }
-
-                            if (data.success) {
-                                showToast('Added to wishlist', 'success');
-                                if (typeof updateNavWishlistCount === 'function') updateNavWishlistCount(data.wishlistCount);
-                            } else {
-                                showToast(data.message || 'Unable to add to wishlist', 'error');
-                            }
-                        } catch (err) {
-                            showToast('Something went wrong. Please try again.', 'error');
-                        }
-                    });
+                        });
+                    }
 
                     // === Flipkart-style lens + result box zoom ===
                     (function () {

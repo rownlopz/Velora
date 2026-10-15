@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Product = require("../../models/product/productModel");
 const Variant = require("../../models/product/variantModel");
 const Category = require("../../models/product/categoryModel");
@@ -62,7 +63,7 @@ const getProductById = async (productId) => {
         return { success: false, message: "Product not found" };
     }
 
-    const variants = await Variant.find({ productId });
+    const variants = await Variant.find({ productId, isActive: true });
 
     return { success: true, product, variants };
 };
@@ -83,19 +84,37 @@ const validateVariants = (variants) => {
     }
 
     const seenSkus = new Set();
+    const seenCombos = new Set();
+    const seenIds = new Set();
 
     for (const v of variants) {
+        if (v._id) {
+            const idStr = String(v._id).trim();
+            if (idStr) {
+                if (seenIds.has(idStr)) return `Duplicate variant ID submitted: ${idStr}`;
+                seenIds.add(idStr);
+            }
+        }
+
         if (!v.sku || !v.sku.trim()) return "Every variant needs a SKU";
 
         const sku = v.sku.trim().toUpperCase();
         if (seenSkus.has(sku)) return `Duplicate SKU in this product: ${sku}`;
         seenSkus.add(sku);
 
+        const color = (v.color || "").trim().toLowerCase();
+        const size = (v.size || "").trim().toLowerCase();
+        const comboKey = `${color}:::${size}`;
+        if (seenCombos.has(comboKey)) {
+            return `Duplicate color and size combination: "${v.color || 'Default'}" / "${v.size || 'Default'}"`;
+        }
+        seenCombos.add(comboKey);
+
         const regularPrice = Number(v.regularPrice);
         if (!regularPrice || regularPrice <= 0) return `Variant ${sku}: a valid regular price is required`;
 
         const stock = Number(v.stock);
-        if (Number.isNaN(stock) || stock < 0) return `Variant ${sku}: stock cannot be negative`;
+        if (!Number.isInteger(stock) || stock < 0) return `Variant ${sku}: stock must be a non-negative whole integer`;
 
         if (v.salePrice !== undefined && v.salePrice !== "" && v.salePrice !== null) {
             const salePrice = Number(v.salePrice);
@@ -125,7 +144,6 @@ const addProduct = async ({ name, description, brand, categoryId, tags, imagePat
     const variantError = validateVariants(variants);
     if (variantError) return { success: false, message: variantError };
 
-
     const skus = variants.map((v) => v.sku.trim().toUpperCase());
     const existingSkuVariant = await Variant.findOne({ sku: { $in: skus } });
     if (existingSkuVariant) {
@@ -147,11 +165,12 @@ const addProduct = async ({ name, description, brand, categoryId, tags, imagePat
         variants.map((v) => ({
             productId: product._id,
             sku: v.sku.trim().toUpperCase(),
-            color: v.color || "",
-            size: v.size || "",
+            color: (v.color || "").trim(),
+            size: (v.size || "").trim(),
             stock: Number(v.stock),
             regularPrice: Number(v.regularPrice),
-            salePrice: v.salePrice ? Number(v.salePrice) : null,
+            salePrice: v.salePrice !== undefined && v.salePrice !== "" && v.salePrice !== null ? Number(v.salePrice) : null,
+            isActive: true,
         }))
     );
 
@@ -179,6 +198,25 @@ const updateProduct = async (productId, { name, description, brand, categoryId, 
     const variantError = validateVariants(variants);
     if (variantError) return { success: false, message: variantError };
 
+    // Fetch existing variants belonging to this product
+    const currentProductVariants = await Variant.find({ productId });
+    const currentVariantMap = new Map(currentProductVariants.map((v) => [v._id.toString(), v]));
+
+    // Validate that all submitted IDs belong to this product
+    for (const v of variants) {
+        if (v._id) {
+            const idStr = String(v._id).trim();
+            if (idStr) {
+                if (!mongoose.Types.ObjectId.isValid(idStr)) {
+                    return { success: false, message: "Invalid variant ID format" };
+                }
+                if (!currentVariantMap.has(idStr)) {
+                    return { success: false, message: `Submitted variant ID does not belong to this product: ${idStr}` };
+                }
+            }
+        }
+    }
+
     const skus = variants.map((v) => v.sku.trim().toUpperCase());
     const existingSkuVariant = await Variant.findOne({
         sku: { $in: skus },
@@ -198,19 +236,57 @@ const updateProduct = async (productId, { name, description, brand, categoryId, 
     product.tags = tags || [];
     await product.save();
 
-  
-    await Variant.deleteMany({ productId });
-    await Variant.insertMany(
-        variants.map((v) => ({
-            productId: product._id,
-            sku: v.sku.trim().toUpperCase(),
-            color: v.color || "",
-            size: v.size || "",
-            stock: Number(v.stock),
-            regularPrice: Number(v.regularPrice),
-            salePrice: v.salePrice ? Number(v.salePrice) : null,
-        }))
-    );
+    // Preserve existing variant IDs and update in place; create new ones only for new rows
+    const submittedIds = new Set();
+
+    for (const v of variants) {
+        const idStr = v._id ? String(v._id).trim() : "";
+        const sku = v.sku.trim().toUpperCase();
+        const color = (v.color || "").trim();
+        const size = (v.size || "").trim();
+        const stock = Number(v.stock);
+        const regularPrice = Number(v.regularPrice);
+        const salePrice = v.salePrice !== undefined && v.salePrice !== "" && v.salePrice !== null ? Number(v.salePrice) : null;
+
+        if (idStr && currentVariantMap.has(idStr)) {
+            // Update existing variant in place
+            await Variant.findByIdAndUpdate(idStr, {
+                sku,
+                color,
+                size,
+                stock,
+                regularPrice,
+                salePrice,
+                isActive: true,
+            });
+            submittedIds.add(idStr);
+        } else {
+            // Create new variant
+            const newVar = await Variant.create({
+                productId: product._id,
+                sku,
+                color,
+                size,
+                stock,
+                regularPrice,
+                salePrice,
+                isActive: true,
+            });
+            submittedIds.add(newVar._id.toString());
+        }
+    }
+
+    // Deactivate removed variants instead of deleting them to preserve order and history references
+    const removedVariantIds = currentProductVariants
+        .filter((v) => !submittedIds.has(v._id.toString()))
+        .map((v) => v._id);
+
+    if (removedVariantIds.length > 0) {
+        await Variant.updateMany(
+            { _id: { $in: removedVariantIds } },
+            { $set: { isActive: false } }
+        );
+    }
 
     return { success: true, product };
 };

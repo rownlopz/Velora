@@ -83,6 +83,7 @@
                                 <div id="variantRows" class="space-y-4">
                                     <% variants.forEach((v, i) => { %>
                                         <div class="variant-row border border-gray-200 rounded-lg p-4 relative">
+                                            <input type="hidden" name="variants[<%= i %>][_id]" value="<%= v._id || '' %>">
                                             <button type="button" onclick="this.closest('.variant-row').remove()" class="absolute top-3 right-3 text-gray-300 hover:text-red-600 text-sm">&times;</button>
 
                                             <div class="grid grid-cols-3 gap-3 mb-3">

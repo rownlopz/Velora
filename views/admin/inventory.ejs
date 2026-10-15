@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VELORA Admin - Inventory & Stock Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-[#FAFAF8] text-neutral-800 antialiased">
+
+    <div class="flex">
+
+        <%- include("partials/sidebar", { active: "inventory" }) %>
+
+        <div class="flex-1 min-w-0">
+
+            <%- include("partials/topbar") %>
+
+            <main class="px-8 py-8 max-w-7xl">
+
+                <!-- Breadcrumb -->
+                <p class="text-xs text-neutral-400 uppercase tracking-widest mb-2 font-medium">Admin / Inventory</p>
+
+                <!-- Page Header -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                    <div>
+                        <h1 class="text-3xl font-bold text-neutral-900 tracking-tight">Inventory & Stock Management</h1>
+                        <p class="text-neutral-500 text-sm mt-1">
+                            Track stock availability in real-time, adjust SKU quantities, and prevent stockouts.
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <a
+                            href="/admin/products"
+                            class="h-10 px-4 border border-neutral-300 hover:border-black rounded-xl text-xs font-semibold text-neutral-700 hover:text-black inline-flex items-center gap-1.5 transition shadow-xs bg-white"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.9 7.3 12 2 3.1 7.3a1 1 0 0 0-.5.9v7.6a1 1 0 0 0 .5.9L12 22l8.9-5.3a1 1 0 0 0 .5-.9V8.2a1 1 0 0 0-.5-.9Z"/></svg>
+                            View Products Catalog
+                        </a>
+                    </div>
+                </div>
+
+                <!-- KPI Metric Stat Cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Total Units in Stock</p>
+                        <p class="text-2xl sm:text-3xl font-bold text-neutral-900 mt-1 font-mono">
+                            <%= (stats.totalStockUnits || 0).toLocaleString('en-IN') %>
+                        </p>
+                        <span class="text-[11px] text-neutral-500 mt-1 block">Across all active items</span>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Total Active SKUs</p>
+                        <p class="text-2xl sm:text-3xl font-bold text-neutral-900 mt-1 font-mono">
+                            <%= (stats.totalVariants || 0).toLocaleString('en-IN') %>
+                        </p>
+                        <span class="text-[11px] text-neutral-500 mt-1 block">Distinct variant combinations</span>
+                    </div>
+
+                    <a href="/admin/inventory?status=low_stock" class="p-5 rounded-2xl border transition-all <%= status === 'low_stock' ? 'bg-amber-50/50 border-amber-600 shadow-xs ring-1 ring-amber-600' : 'bg-white border-neutral-200 hover:border-neutral-300 shadow-xs' %>">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-amber-600">Low Stock Alert (≤ 10)</p>
+                        <p class="text-2xl sm:text-3xl font-bold text-amber-700 mt-1 font-mono">
+                            <%= stats.lowStockCount || 0 %>
+                        </p>
+                        <span class="text-[11px] text-amber-600/80 mt-1 block">Requires restocking soon</span>
+                    </a>
+
+                    <a href="/admin/inventory?status=out_of_stock" class="p-5 rounded-2xl border transition-all <%= status === 'out_of_stock' ? 'bg-rose-50/50 border-rose-600 shadow-xs ring-1 ring-rose-600' : 'bg-white border-neutral-200 hover:border-neutral-300 shadow-xs' %>">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-rose-600">Out of Stock (0)</p>
+                        <p class="text-2xl sm:text-3xl font-bold text-rose-700 mt-1 font-mono">
+                            <%= stats.outOfStockCount || 0 %>
+                        </p>
+                        <span class="text-[11px] text-rose-600/80 mt-1 block">Unavailable for purchase</span>
+                    </a>
+                </div>
+
+                <!-- Search, Filter & Sort Toolbar -->
+                <div class="bg-white p-6 rounded-2xl border border-neutral-200 mb-6 shadow-xs">
+                    <form action="/admin/inventory" method="GET" class="flex flex-wrap gap-4 items-end">
+                        
+                        <!-- Search Box -->
+                        <div class="flex-1 min-w-[260px]">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+                                Search Inventory
+                            </label>
+                            <div class="relative">
+                                <input
+                                    type="text"
+                                    name="search"
+                                    value="<%= search %>"
+                                    placeholder="Search by product name, SKU, color, or brand..."
+                                    class="w-full h-11 pl-10 pr-4 border border-neutral-300 rounded-xl text-xs sm:text-sm text-neutral-900 placeholder-neutral-400 outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                                >
+                                <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Stock Status Filter -->
+                        <div class="w-44">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+                                Stock Status
+                            </label>
+                            <select
+                                name="status"
+                                class="w-full h-11 border border-neutral-300 rounded-xl px-3 text-xs sm:text-sm text-neutral-800 bg-white outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                            >
+                                <option value="all" <%= status === "all" ? "selected" : "" %>>All Statuses</option>
+                                <option value="out_of_stock" <%= status === "out_of_stock" ? "selected" : "" %>>Out of Stock (0)</option>
+                                <option value="low_stock" <%= status === "low_stock" ? "selected" : "" %>>Low Stock (≤ 10)</option>
+                                <option value="in_stock" <%= status === "in_stock" ? "selected" : "" %>>In Stock (> 10)</option>
+                            </select>
+                        </div>
+
+                        <!-- Category Filter -->
+                        <div class="w-44">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+                                Category
+                            </label>
+                            <select
+                                name="categoryId"
+                                class="w-full h-11 border border-neutral-300 rounded-xl px-3 text-xs sm:text-sm text-neutral-800 bg-white outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                            >
+                                <option value="all" <%= categoryId === "all" ? "selected" : "" %>>All Categories</option>
+                                <% (categories || []).forEach(cat => { %>
+                                    <option value="<%= cat._id %>" <%= categoryId === cat._id.toString() ? "selected" : "" %>><%= cat.name %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+
+                        <!-- Sort By -->
+                        <div class="w-48">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+                                Sort By
+                            </label>
+                            <select
+                                name="sort"
+                                class="w-full h-11 border border-neutral-300 rounded-xl px-3 text-xs sm:text-sm text-neutral-800 bg-white outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                            >
+                                <option value="stock_asc" <%= sort === "stock_asc" ? "selected" : "" %>>Stock: Low to High</option>
+                                <option value="stock_desc" <%= sort === "stock_desc" ? "selected" : "" %>>Stock: High to Low</option>
+                                <option value="name_asc" <%= sort === "name_asc" ? "selected" : "" %>>Product: A to Z</option>
+                                <option value="name_desc" <%= sort === "name_desc" ? "selected" : "" %>>Product: Z to A</option>
+                            </select>
+                        </div>
+
+                        <!-- Buttons: Filter & Clear -->
+                        <div class="flex items-center gap-2">
+                            <button type="submit" class="h-11 px-5 bg-black hover:bg-neutral-800 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition shadow-xs active:scale-[0.98]">
+                                Filter
+                            </button>
+
+                            <% if (search || (status && status !== 'all') || (categoryId && categoryId !== 'all') || sort !== 'stock_asc') { %>
+                                <a href="/admin/inventory" class="h-11 px-4 border border-neutral-300 hover:border-black hover:text-black rounded-xl text-xs font-semibold text-neutral-600 inline-flex items-center transition">
+                                    Clear
+                                </a>
+                            <% } %>
+                        </div>
+
+                    </form>
+                </div>
+
+                <!-- Inventory Table -->
+                <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden shadow-xs">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs sm:text-sm">
+                            <thead class="bg-neutral-50/80 border-b border-neutral-200 text-neutral-400 uppercase text-[10px] tracking-wider font-semibold">
+                                <tr>
+                                    <th class="px-6 py-4">Product</th>
+                                    <th class="px-6 py-4">SKU</th>
+                                    <th class="px-6 py-4">Variant Attributes</th>
+                                    <th class="px-6 py-4">Stock Level (Instant Update)</th>
+                                    <th class="px-6 py-4">Status</th>
+                                    <th class="px-6 py-4">Price</th>
+                                    <th class="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+
+                            <tbody class="divide-y divide-neutral-100">
+                                <% if (!items || items.length === 0) { %>
+                                    <tr>
+                                        <td colspan="7" class="text-center py-16 text-neutral-400">
+                                            <div class="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3 text-neutral-300">
+                                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/></svg>
+                                            </div>
+                                            <p class="font-medium text-neutral-700">No inventory items found</p>
+                                            <p class="text-xs text-neutral-400 mt-1">Try adjusting your filters or search query.</p>
+                                        </td>
+                                    </tr>
+                                <% } %>
+
+                                <% (items || []).forEach((variant) => { %>
+                                    <%
+                                        const product = variant.product || {};
+                                        const category = variant.category || {};
+                                        const stock = variant.stock || 0;
+
+                                        let statusBadge = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                        let statusText = "In Stock";
+                                        let dotColor = "bg-emerald-500";
+
+                                        if (stock === 0) {
+                                            statusBadge = "bg-rose-50 text-rose-800 border-rose-200";
+                                            statusText = "Out of Stock";
+                                            dotColor = "bg-rose-500";
+                                        } else if (stock <= 10) {
+                                            statusBadge = "bg-amber-50 text-amber-800 border-amber-200";
+                                            statusText = `Low Stock (${stock} left)`;
+                                            dotColor = "bg-amber-500 animate-pulse";
+                                        }
+                                    %>
+                                    <tr class="hover:bg-neutral-50/70 transition-colors" id="variant-row-<%= variant._id %>">
+                                        
+                                        <!-- Product info -->
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-11 h-14 rounded-lg bg-neutral-100 border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center">
+                                                    <% if (product.thumbnail || (variant.images && variant.images[0])) { %>
+                                                        <img src="<%= product.thumbnail || variant.images[0] %>" alt="" class="w-full h-full object-cover">
+                                                    <% } else { %>
+                                                        <span class="text-neutral-300 text-[10px]">No img</span>
+                                                    <% } %>
+                                                </div>
+                                                <div class="min-w-0">
+                                                    <p class="font-semibold text-neutral-900 truncate max-w-[200px]" title="<%= product.name %>">
+                                                        <%= product.name || 'Unnamed Product' %>
+                                                    </p>
+                                                    <p class="text-[11px] text-neutral-400">
+                                                        <%= product.brand || '&mdash;' %> &bull; <span class="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] text-neutral-600"><%= category.name || 'Uncategorized' %></span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <!-- SKU -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="font-mono text-xs font-semibold text-neutral-800 bg-neutral-100 px-2 py-1 rounded-md border border-neutral-200">
+                                                <%= variant.sku %>
+                                            </span>
+                                        </td>
+
+                                        <!-- Variant Attributes -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex flex-wrap items-center gap-1.5">
+                                                <% if (variant.color) { %>
+                                                    <span class="bg-neutral-100 px-2 py-0.5 rounded text-[11px] font-medium text-neutral-700">
+                                                        <%= variant.color %>
+                                                    </span>
+                                                <% } %>
+                                                <% if (variant.size) { %>
+                                                    <span class="bg-neutral-100 px-2 py-0.5 rounded text-[11px] font-medium text-neutral-700">
+                                                        Size <%= variant.size %>
+                                                    </span>
+                                                <% } %>
+                                            </div>
+                                        </td>
+
+                                        <!-- Stock Level with Instant AJAX Controls -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center gap-1.5">
+                                                
+                                                <!-- Quick -1 Button -->
+                                                <button
+                                                    type="button"
+                                                    onclick="quickAdjustStock('<%= variant._id %>', -1)"
+                                                    class="w-7 h-7 rounded-lg border border-neutral-200 hover:border-black text-neutral-600 hover:text-black flex items-center justify-center font-bold text-sm bg-white transition shadow-xs active:scale-95"
+                                                    title="Decrease stock by 1"
+                                                >
+                                                    &minus;
+                                                </button>
+
+                                                <!-- Inline input -->
+                                                <input
+                                                    type="number"
+                                                    id="stock-input-<%= variant._id %>"
+                                                    value="<%= stock %>"
+                                                    min="0"
+                                                    class="w-16 h-8 text-center border border-neutral-300 rounded-lg text-xs font-bold font-mono text-neutral-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                                                >
+
+                                                <!-- Quick +1 Button -->
+                                                <button
+                                                    type="button"
+                                                    onclick="quickAdjustStock('<%= variant._id %>', 1)"
+                                                    class="w-7 h-7 rounded-lg border border-neutral-200 hover:border-black text-neutral-600 hover:text-black flex items-center justify-center font-bold text-sm bg-white transition shadow-xs active:scale-95"
+                                                    title="Increase stock by 1"
+                                                >
+                                                    &#43;
+                                                </button>
+
+                                                <!-- Save Button -->
+                                                <button
+                                                    type="button"
+                                                    onclick="saveStock('<%= variant._id %>')"
+                                                    class="h-8 px-2.5 rounded-lg bg-neutral-900 hover:bg-black text-white text-[11px] font-semibold transition shadow-xs flex items-center gap-1 active:scale-95"
+                                                    title="Save exact stock quantity"
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                                    Save
+                                                </button>
+
+                                            </div>
+                                        </td>
+
+                                        <!-- Status Badge -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border <%= statusBadge %> shadow-xs" id="status-badge-<%= variant._id %>">
+                                                <span class="w-1.5 h-1.5 rounded-full <%= dotColor %>"></span>
+                                                <%= statusText %>
+                                            </span>
+                                        </td>
+
+                                        <!-- Price -->
+                                        <td class="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                                            <% if (variant.salePrice) { %>
+                                                <span class="font-bold text-neutral-900">&#8377;<%= variant.salePrice.toLocaleString('en-IN') %></span>
+                                                <span class="text-neutral-400 line-through text-[11px] ml-1">&#8377;<%= variant.regularPrice.toLocaleString('en-IN') %></span>
+                                            <% } else { %>
+                                                <span class="font-bold text-neutral-900">&#8377;<%= variant.regularPrice.toLocaleString('en-IN') %></span>
+                                            <% } %>
+                                        </td>
+
+                                        <!-- Actions -->
+                                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                                            <a
+                                                href="/admin/products/<%= variant.productId %>/edit"
+                                                class="h-8 px-3 border border-neutral-300 hover:border-black rounded-lg text-xs font-semibold text-neutral-700 hover:text-black inline-flex items-center gap-1 transition bg-white shadow-xs"
+                                                title="Edit Product Details"
+                                            >
+                                                Edit Product &rarr;
+                                            </a>
+                                        </td>
+
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <% if (totalPages > 1) { %>
+                        <div class="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <p class="text-xs text-neutral-500 font-medium">
+                                Showing page <span class="font-bold text-neutral-900"><%= currentPage %></span> of <span class="font-bold text-neutral-900"><%= totalPages %></span> (<%= totalVariants %> total variants)
+                            </p>
+
+                            <div class="flex items-center gap-1.5">
+                                <%
+                                    const makeUrl = (p) => {
+                                        let url = `/admin/inventory?page=${p}`;
+                                        if (search) url += `&search=${encodeURIComponent(search)}`;
+                                        if (status && status !== 'all') url += `&status=${encodeURIComponent(status)}`;
+                                        if (categoryId && categoryId !== 'all') url += `&categoryId=${encodeURIComponent(categoryId)}`;
+                                        if (sort) url += `&sort=${encodeURIComponent(sort)}`;
+                                        return url;
+                                    };
+                                %>
+
+                                <% if (currentPage > 1) { %>
+                                    <a href="<%= makeUrl(currentPage - 1) %>" class="h-8 px-3 rounded-lg border border-neutral-300 bg-white hover:border-black text-xs font-medium text-neutral-700 transition shadow-xs flex items-center gap-1">
+                                        &larr; Prev
+                                    </a>
+                                <% } %>
+
+                                <% for (let p = 1; p <= totalPages; p++) { %>
+                                    <% if (p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)) { %>
+                                        <a href="<%= makeUrl(p) %>" class="w-8 h-8 rounded-lg text-xs font-semibold flex items-center justify-center transition shadow-xs <%= p === currentPage ? 'bg-black text-white' : 'bg-white border border-neutral-300 text-neutral-700 hover:border-black' %>">
+                                            <%= p %>
+                                        </a>
+                                    <% } else if (p === currentPage - 3 || p === currentPage + 3) { %>
+                                        <span class="px-1 text-neutral-400 text-xs">&hellip;</span>
+                                    <% } %>
+                                <% } %>
+
+                                <% if (currentPage < totalPages) { %>
+                                    <a href="<%= makeUrl(currentPage + 1) %>" class="h-8 px-3 rounded-lg border border-neutral-300 bg-white hover:border-black text-xs font-medium text-neutral-700 transition shadow-xs flex items-center gap-1">
+                                        Next &rarr;
+                                    </a>
+                                <% } %>
+                            </div>
+                        </div>
+                    <% } %>
+
+                </div>
+
+            </main>
+
+        </div>
+
+    </div>
+
+    <!-- Live Inventory AJAX Script -->
+    <script>
+        async function saveStock(variantId) {
+            const input = document.getElementById(`stock-input-${variantId}`);
+            const newStock = parseInt(input.value, 10);
+
+            if (isNaN(newStock) || newStock < 0) {
+                if (window.showAdminToast) showAdminToast('Please enter a valid stock quantity (>= 0)', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/admin/inventory/${variantId}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ stock: newStock })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    if (window.showAdminToast) showAdminToast(data.message, 'success');
+                    updateBadgeDOM(variantId, data.newStock);
+                } else {
+                    if (window.showAdminToast) showAdminToast(data.message || 'Error updating stock', 'error');
+                }
+            } catch (err) {
+                if (window.showAdminToast) showAdminToast('Network error while saving stock', 'error');
+            }
+        }
+
+        async function quickAdjustStock(variantId, delta) {
+            const input = document.getElementById(`stock-input-${variantId}`);
+            const currentStock = parseInt(input.value, 10) || 0;
+            if (currentStock + delta < 0) return;
+
+            try {
+                const res = await fetch(`/admin/inventory/${variantId}/adjust`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ delta })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    input.value = data.newStock;
+                    if (window.showAdminToast) showAdminToast(data.message, 'info');
+                    updateBadgeDOM(variantId, data.newStock);
+                } else {
+                    if (window.showAdminToast) showAdminToast(data.message || 'Error adjusting stock', 'error');
+                }
+            } catch (err) {
+                if (window.showAdminToast) showAdminToast('Network error while adjusting stock', 'error');
+            }
+        }
+
+        function updateBadgeDOM(variantId, stock) {
+            const badge = document.getElementById(`status-badge-${variantId}`);
+            if (!badge) return;
+
+            if (stock === 0) {
+                badge.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-rose-50 text-rose-800 border-rose-200 shadow-xs";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Out of Stock';
+            } else if (stock <= 10) {
+                badge.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-amber-50 text-amber-800 border-amber-200 shadow-xs";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Low Stock (${stock} left)`;
+            } else {
+                badge.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-emerald-50 text-emerald-800 border-emerald-200 shadow-xs";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>In Stock';
+            }
+        }
+    </script>
+
+</body>
+</html>

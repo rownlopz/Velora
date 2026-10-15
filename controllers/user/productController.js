@@ -62,6 +62,14 @@ const loadProductDetail = async (req, res) => {
             return res.redirect(`/products?notice=${encodeURIComponent(result.message)}`);
         }
 
+        let wishlistVariantIds = [];
+        if (req.session && req.session.userId) {
+            const wishlist = await Wishlist.findOne({ userId: req.session.userId }).lean();
+            if (wishlist && wishlist.items) {
+                wishlistVariantIds = wishlist.items.map(i => i.variantId.toString());
+            }
+        }
+
         res.render("user/product-detail", {
             title: result.product.name,
             product: result.product,
@@ -72,6 +80,7 @@ const loadProductDetail = async (req, res) => {
             averageRating: result.averageRating,
             totalReviews: result.totalReviews,
             relatedProducts: result.relatedProducts,
+            wishlistVariantIds,
         });
     } catch (error) {
         console.error("Load Product Detail Error:", error);

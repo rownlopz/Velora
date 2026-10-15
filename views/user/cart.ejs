@@ -14,7 +14,8 @@
     <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
 
         <h1 class="text-3xl font-medium">Shopping Bag</h1>
-        <p id="cartItemCountText" class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> in your bag</p>
+        <% const totalUnits = items.reduce((sum, it) => sum + (it.quantity || 1), 0); %>
+        <p id="cartItemCountText" class="text-gray-400 text-sm mt-1"><span id="cartUnitsCount"><%= totalUnits %></span> unit<%= totalUnits === 1 ? '' : 's' %> (<%= items.length %> item<%= items.length === 1 ? '' : 's' %>) in your bag</p>
 
         <% if (typeof notice !== 'undefined' && notice) { %>
             <div class="mt-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm"><%= notice %></div>
@@ -92,7 +93,7 @@
 
                             <p class="item-line-total text-sm font-medium">
                                 <% if (item.isAvailable) { %>
-                                    &#8377;<%= item.currentPrice.toLocaleString('en-IN') %>
+                                    &#8377;<%= (item.lineTotal != null ? item.lineTotal : (item.currentPrice * item.quantity)).toLocaleString('en-IN') %>
                                 <% } else { %>
                                     &mdash;
                                 <% } %>
@@ -109,7 +110,7 @@
                         <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Summary</p>
 
                         <div class="flex justify-between text-sm mb-2">
-                            <span class="text-gray-500">Subtotal</span>
+                            <span class="text-gray-500">Items (<span id="summaryUnitsCount"><%= totalUnits %></span> <%= totalUnits === 1 ? 'unit' : 'units' %>)</span>
                             <span id="cartSubtotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
                         <div class="flex justify-between text-sm mb-2">
@@ -122,13 +123,14 @@
                             <span id="cartTotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
 
-                        <span
+                        <a
                             id="checkoutBtn"
-                            class="block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold <%= hasUnavailableItems ? 'opacity-40 cursor-not-allowed' : 'cursor-not-allowed opacity-70' %>"
-                            title="Checkout isn't part of this week's build"
+                            <%= hasUnavailableItems ? '' : 'href="/checkout"' %>
+                            class="block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold <%= hasUnavailableItems ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-gray-800 transition cursor-pointer' %>"
+                            <%= hasUnavailableItems ? 'aria-disabled="true"' : '' %>
                         >
                             <%= hasUnavailableItems ? 'Resolve unavailable items to continue' : 'Proceed to Checkout' %>
-                        </span>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -172,15 +174,19 @@
         if (totEl) totEl.textContent = fmt;
     }
 
-    function removeCartItemRow(variantId) {
-        const row = document.querySelector(`.cart-item[data-variant-id="${variantId}"]`);
-        if (row) row.remove();
-
-        // Check if cart is now empty
+    function refreshItemCounts(cartCount) {
         const remaining = document.querySelectorAll('.cart-item');
-        const itemCountEl = document.getElementById('cartItemCountText');
+        let totalUnits = 0;
+        document.querySelectorAll('.item-qty').forEach(el => {
+            totalUnits += parseInt(el.textContent, 10) || 0;
+        });
+        if (typeof cartCount === 'number') totalUnits = cartCount;
+
+        const countEl = document.getElementById('cartItemCountText');
+        const summaryUnitsEl = document.getElementById('summaryUnitsCount');
+        if (summaryUnitsEl) summaryUnitsEl.textContent = totalUnits;
+
         if (remaining.length === 0) {
-            // Show empty state
             const content = document.getElementById('cartContent');
             if (content) content.remove();
             const empty = document.getElementById('emptyCartMessage');
@@ -196,22 +202,32 @@
                         </div>`);
                 }
             }
-            if (itemCountEl) itemCountEl.textContent = '0 items in your bag';
+            if (countEl) countEl.textContent = '0 items in your bag';
         } else {
             const n = remaining.length;
-            if (itemCountEl) itemCountEl.textContent = n + ' item' + (n === 1 ? '' : 's') + ' in your bag';
+            if (countEl) countEl.innerHTML = `<span id="cartUnitsCount">${totalUnits}</span> unit${totalUnits === 1 ? '' : 's'} (${n} item${n === 1 ? '' : 's'}) in your bag`;
         }
+    }
+
+    function removeCartItemRow(variantId, cartCount) {
+        const row = document.querySelector(`.cart-item[data-variant-id="${variantId}"]`);
+        if (row) row.remove();
+        refreshItemCounts(cartCount);
     }
 
     function updateCheckoutButton(hasUnavailable) {
         const btn = document.getElementById('checkoutBtn');
         if (!btn) return;
         if (hasUnavailable) {
-            btn.className = 'block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold opacity-40 cursor-not-allowed';
+            btn.className = 'block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold opacity-40 cursor-not-allowed pointer-events-none';
             btn.textContent = 'Resolve unavailable items to continue';
+            btn.removeAttribute('href');
+            btn.setAttribute('aria-disabled', 'true');
         } else {
-            btn.className = 'block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold cursor-not-allowed opacity-70';
+            btn.className = 'block text-center mt-6 h-14 leading-[3.5rem] bg-black text-white rounded-xl font-semibold hover:bg-gray-800 transition cursor-pointer';
             btn.textContent = 'Proceed to Checkout';
+            btn.setAttribute('href', '/checkout');
+            btn.removeAttribute('aria-disabled');
         }
     }
 
@@ -224,7 +240,7 @@
         try {
             const data = await cartRequest(`/cart/${variantId}/increment`);
             if (data.removed) {
-                removeCartItemRow(variantId);
+                removeCartItemRow(variantId, data.cartCount);
                 updateSummary(data.subtotal);
                 if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
                 if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
@@ -240,6 +256,7 @@
                     row.querySelector('.item-qty').textContent = data.item.quantity;
                     row.querySelector('.item-line-total').textContent = fmtINR(data.item.lineTotal);
                 }
+                refreshItemCounts(data.cartCount);
                 updateSummary(data.subtotal);
                 if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
                 if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
@@ -260,7 +277,7 @@
         try {
             const data = await cartRequest(`/cart/${variantId}/decrement`);
             if (data.removed) {
-                removeCartItemRow(variantId);
+                removeCartItemRow(variantId, data.cartCount);
                 updateSummary(data.subtotal);
                 if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
                 if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
@@ -275,6 +292,7 @@
                     row.querySelector('.item-qty').textContent = data.item.quantity;
                     row.querySelector('.item-line-total').textContent = fmtINR(data.item.lineTotal);
                 }
+                refreshItemCounts(data.cartCount);
                 updateSummary(data.subtotal);
                 if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
                 if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);
@@ -299,7 +317,7 @@
                 if (!data.success) {
                     showToast('Unable to remove item', 'error');
                 } else {
-                    removeCartItemRow(variantId);
+                    removeCartItemRow(variantId, data.cartCount);
                     updateSummary(data.subtotal);
                     if (typeof updateNavCartCount === 'function') updateNavCartCount(data.cartCount);
                     if (typeof updateCheckoutButton === 'function') updateCheckoutButton(data.hasUnavailableItems);

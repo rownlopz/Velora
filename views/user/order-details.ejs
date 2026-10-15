@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order #<%= order.orderNumber %> | VELORA</title>
+    <link rel="stylesheet" href="/css/output.css">
+</head>
+<body class="bg-[#FAFAF8] flex flex-col min-h-screen">
+
+<%- include("../partials/storeHeader", { active: "orders" }) %>
+
+<main class="flex-1">
+    <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
+
+        <!-- Top Breadcrumb -->
+        <div class="flex items-center justify-between pb-4">
+            <a href="/orders" class="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-gray-500 hover:text-black transition">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+                Back to All Orders
+            </a>
+            <span class="text-xs text-gray-400 font-mono">Order ID: <%= order.orderNumber %></span>
+        </div>
+
+        <% if (notice) { %>
+            <div class="mb-6 p-4 rounded-xl text-xs bg-stone-100 border border-stone-200 text-stone-800 flex items-center justify-between">
+                <span><%= notice %></span>
+                <a href="/orders/<%= order._id %>" class="text-black font-semibold hover:underline">Dismiss</a>
+            </div>
+        <% } %>
+
+        <%
+            let statusBadge = "bg-gray-100 text-gray-800 border-gray-200";
+            if (order.orderStatus === "PLACED" || order.orderStatus === "PENDING") statusBadge = "bg-blue-50 text-blue-800 border-blue-200";
+            else if (order.orderStatus === "PROCESSING") statusBadge = "bg-amber-50 text-amber-800 border-amber-200";
+            else if (order.orderStatus === "SHIPPED") statusBadge = "bg-indigo-50 text-indigo-800 border-indigo-200";
+            else if (order.orderStatus === "OUT_FOR_DELIVERY") statusBadge = "bg-cyan-50 text-cyan-800 border-cyan-200";
+            else if (order.orderStatus === "DELIVERED") statusBadge = "bg-emerald-50 text-emerald-800 border-emerald-200";
+            else if (order.orderStatus === "CANCELLED") statusBadge = "bg-rose-50 text-rose-800 border-rose-200";
+            else if (order.orderStatus === "RETURN_REQUESTED") statusBadge = "bg-orange-50 text-orange-800 border-orange-200";
+            else if (order.orderStatus === "RETURN_APPROVED") statusBadge = "bg-emerald-50 text-emerald-800 border-emerald-200";
+            else if (order.orderStatus === "RETURN_REJECTED") statusBadge = "bg-rose-50 text-rose-800 border-rose-200";
+            else if (order.orderStatus === "RETURNED") statusBadge = "bg-zinc-100 text-zinc-800 border-zinc-300";
+
+            // Cancellation rule: Any pending/processing item can be cancelled
+            const cancellableItems = order.items.filter(i => ["PENDING", "PLACED", "ACTIVE", "PROCESSING"].includes(i.status));
+            const canCancelEligible = cancellableItems.length > 0;
+
+            // Return rule: Only delivered items can be returned
+            const deliverableReturnItems = order.items.filter(i => i.status === "DELIVERED");
+            const canReturnEntire = deliverableReturnItems.length > 0;
+        %>
+
+        <!-- Header Card -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 mt-2 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xs">
+            <div>
+                <div class="flex items-center gap-3">
+                    <h1 class="text-2xl font-light text-gray-900">Order #<%= order.orderNumber %></h1>
+                    <span class="text-xs font-semibold px-3 py-1 rounded-full border <%= statusBadge %>">
+                        <%= order.orderStatus.replace(/_/g, ' ') %>
+                    </span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                    Placed on <%= new Date(order.placedAt || order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+                </p>
+            </div>
+
+            <!-- Action Buttons: Invoice & Order-level Cancel/Return -->
+            <div class="flex flex-wrap items-center gap-3">
+                <a
+                    href="/orders/<%= order._id %>/invoice"
+                    class="h-10 px-5 border border-gray-300 rounded-xl text-xs font-semibold text-gray-800 hover:text-black hover:border-black transition inline-flex items-center gap-2"
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download Invoice
+                </a>
+
+                <% if (canCancelEligible) { %>
+                    <button
+                        type="button"
+                        data-action-url="/orders/<%= order._id %>/cancel"
+                        data-target-name="<%= cancellableItems.length === order.items.length ? 'Entire Order #' + order.orderNumber : 'Eligible Products (' + cancellableItems.length + ')' %>"
+                        class="open-cancel-modal-btn h-10 px-5 border border-rose-200 text-rose-700 bg-rose-50/50 hover:bg-rose-100 rounded-xl text-xs font-semibold transition"
+                    >
+                        <%= cancellableItems.length === order.items.length ? 'Cancel Entire Order' : 'Cancel Eligible Products (' + cancellableItems.length + ')' %>
+                    </button>
+                <% } %>
+
+                <% if (canReturnEntire) { %>
+                    <button
+                        type="button"
+                        onclick="openReturnModal('/orders/<%= order._id %>/return', 'Entire Order #<%= order.orderNumber %>')"
+                        class="h-10 px-5 border border-orange-200 text-orange-800 bg-orange-50/50 hover:bg-orange-100 rounded-xl text-xs font-semibold transition"
+                    >
+                        Return Delivered Products
+                    </button>
+                <% } %>
+            </div>
+        </div>
+
+        <!-- Cancellation or Return Reason Banner -->
+        <% if (order.orderStatus === 'CANCELLED') { %>
+            <div class="mt-4 p-5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900">
+                <div class="flex items-center gap-2 font-semibold">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    This order has been cancelled
+                </div>
+                <% if (order.cancellationReason) { %>
+                    <p class="mt-1 text-rose-800"><strong>Reason:</strong> <%= order.cancellationReason %></p>
+                <% } %>
+                <% if (order.cancelledAt) { %>
+                    <p class="mt-1 text-rose-700 text-[11px]">Cancelled at: <%= new Date(order.cancelledAt).toLocaleString('en-IN') %></p>
+                <% } %>
+            </div>
+        <% } else if (order.orderStatus === 'RETURN_REQUESTED' || order.orderStatus === 'RETURNED' || order.orderStatus === 'RETURN_APPROVED' || order.orderStatus === 'RETURN_REJECTED') { %>
+            <div class="mt-4 p-5 <%= order.orderStatus === 'RETURN_APPROVED' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : (order.orderStatus === 'RETURN_REJECTED' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-orange-50 border-orange-200 text-orange-900') %> border rounded-2xl text-xs">
+                <div class="flex items-center gap-2 font-semibold">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 14l2 2 4-4"/></svg>
+                    <% if (order.orderStatus === 'RETURN_APPROVED') { %>
+                        Return Request Approved by Admin
+                    <% } else if (order.orderStatus === 'RETURN_REJECTED') { %>
+                        Return Request Rejected by Admin
+                    <% } else if (order.orderStatus === 'RETURNED') { %>
+                        Return Completed & Restocked
+                    <% } else { %>
+                        Return Request Under Review
+                    <% } %>
+                </div>
+                <% if (order.returnReason) { %>
+                    <p class="mt-1"><strong>Your Return Reason:</strong> <%= order.returnReason %></p>
+                <% } %>
+                <% if (order.adminFeedback) { %>
+                    <p class="mt-1 font-semibold"><strong>Admin Message:</strong> <%= order.adminFeedback %></p>
+                <% } %>
+                <% if (order.returnRequestedAt) { %>
+                    <p class="mt-1 text-[11px] opacity-75">Requested on: <%= new Date(order.returnRequestedAt).toLocaleString('en-IN') %></p>
+                <% } %>
+            </div>
+        <% } %>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mt-6">
+
+            <!-- Items List (2 cols on md) -->
+            <div class="md:col-span-2 space-y-4">
+                <div class="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-xs">
+                    <div class="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
+                        <h2 class="text-base font-medium text-gray-900">
+                            Purchased Products (<%= order.items.length %>)
+                        </h2>
+                        <span class="text-xs text-gray-400">Independent order process per product</span>
+                    </div>
+
+                    <div class="space-y-6">
+                        <% order.items.forEach((item) => { %>
+                            <%
+                                const itemStatus = (item.status || 'PENDING').toUpperCase();
+                                // Individual item cancellation rule:
+                                // User can cancel if item is in PENDING/PROCESSING regardless of other items
+                                const canCancelItem = ["PENDING", "PLACED", "ACTIVE", "PROCESSING"].includes(itemStatus);
+                                // Individual item return rule:
+                                // User can return ONLY after product is delivered
+                                const canReturnItem = itemStatus === "DELIVERED";
+
+                                let itemBadgeBg = "bg-gray-100 text-gray-700 border-gray-200";
+                                if (itemStatus === "PENDING" || itemStatus === "PLACED" || itemStatus === "ACTIVE") itemBadgeBg = "bg-blue-50 text-blue-700 border-blue-200";
+                                else if (itemStatus === "PROCESSING") itemBadgeBg = "bg-amber-50 text-amber-700 border-amber-200";
+                                else if (itemStatus === "SHIPPED") itemBadgeBg = "bg-indigo-50 text-indigo-700 border-indigo-200";
+                                else if (itemStatus === "OUT_FOR_DELIVERY") itemBadgeBg = "bg-cyan-50 text-cyan-700 border-cyan-200";
+                                else if (itemStatus === "DELIVERED") itemBadgeBg = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                else if (itemStatus === "CANCELLED") itemBadgeBg = "bg-rose-50 text-rose-700 border-rose-200";
+                                else if (itemStatus === "RETURN_REQUESTED") itemBadgeBg = "bg-orange-50 text-orange-700 border-orange-200";
+                                else if (itemStatus === "RETURN_APPROVED") itemBadgeBg = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                else if (itemStatus === "RETURN_REJECTED") itemBadgeBg = "bg-rose-50 text-rose-800 border-rose-200";
+                                else if (itemStatus === "RETURNED") itemBadgeBg = "bg-zinc-100 text-zinc-800 border-zinc-200";
+                            %>
+                            <div class="flex flex-col sm:flex-row sm:items-start gap-4 pb-6 border-b border-gray-100 last:border-b-0 last:pb-0">
+                                <div class="w-20 h-24 bg-stone-100 rounded-xl overflow-hidden shrink-0 aspect-[3/4] border border-gray-200">
+                                    <% if (item.thumbnail) { %>
+                                        <img src="<%= item.thumbnail %>" alt="<%= item.productName %>" class="w-full h-full object-cover">
+                                    <% } else { %>
+                                        <div class="w-full h-full flex items-center justify-center text-gray-300 text-xs">No image</div>
+                                    <% } %>
+                                </div>
+
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h3 class="text-sm font-medium text-gray-900"><%= item.productName %></h3>
+                                            <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 mt-1">
+                                                <% if (item.color) { %><span>Color: <%= item.color %></span><% } %>
+                                                <% if (item.size) { %><span>Size: <%= item.size %></span><% } %>
+                                                <% if (item.sku) { %><span class="font-mono text-gray-400">SKU: <%= item.sku %></span><% } %>
+                                            </div>
+                                        </div>
+
+                                        <div class="text-right shrink-0">
+                                            <span class="font-semibold text-gray-900 text-sm">&#8377;<%= item.lineTotal.toLocaleString('en-IN') %></span>
+                                            <div class="text-[11px] text-gray-400 mt-0.5">
+                                                &#8377;<%= item.unitPrice.toLocaleString('en-IN') %> &times; <%= item.quantity %>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Item Status & Reasons -->
+                                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <span class="inline-block text-[11px] font-semibold px-2.5 py-1 rounded-md border <%= itemBadgeBg %>">
+                                                <%= itemStatus.replace(/_/g, ' ') %>
+                                            </span>
+
+                                            <% if (item.cancellationReason) { %>
+                                                <span class="text-xs text-rose-600 italic">Reason: <%= item.cancellationReason %></span>
+                                            <% } %>
+
+                                            <% if (item.returnReason) { %>
+                                                <span class="text-xs text-orange-600 italic">Return Reason: <%= item.returnReason %></span>
+                                            <% } %>
+                                        </div>
+
+                                        <!-- Item-Level Actions -->
+                                        <div class="flex items-center gap-3">
+                                            <% if (canCancelItem) { %>
+                                                <button
+                                                    type="button"
+                                                    data-action-url="/orders/<%= order._id %>/items/<%= item._id %>/cancel"
+                                                    data-target-name="<%= item.productName %>"
+                                                    class="open-cancel-modal-btn text-xs text-rose-600 hover:text-rose-800 font-semibold underline underline-offset-2 transition"
+                                                >
+                                                    Cancel this product
+                                                </button>
+                                            <% } %>
+
+                                            <% if (canReturnItem) { %>
+                                                <button
+                                                    type="button"
+                                                    data-action-url="/orders/<%= order._id %>/items/<%= item._id %>/return"
+                                                    data-target-name="<%= item.productName %>"
+                                                    class="open-return-modal-btn text-xs text-orange-700 hover:text-orange-900 font-semibold underline underline-offset-2 transition"
+                                                >
+                                                    Return this product
+                                                </button>
+                                            <% } %>
+                                        </div>
+                                    </div>
+
+                                    <!-- Admin Feedback Message (if provided) -->
+                                    <% if (item.adminFeedback) { %>
+                                        <div class="mt-2.5 p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-700 flex items-start gap-2">
+                                            <svg class="text-neutral-500 shrink-0 mt-0.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                            <div>
+                                                <span class="font-semibold text-neutral-900">Admin Message:</span>
+                                                <span class="ml-1"><%= item.adminFeedback %></span>
+                                                <% if (item.status === 'RETURN_APPROVED' && !item.isRestocked) { %>
+                                                    <span class="block text-emerald-700 font-medium text-[11px] mt-0.5">&bull; Return accepted. Pickup partner will be dispatched.</span>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            </div>
+                        <% }) %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Side Column: Address & Summary -->
+            <div class="space-y-6">
+
+                <!-- Delivery Address Card -->
+                <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-900 pb-3 border-b border-gray-100 mb-4">
+                        Shipping Details
+                    </h2>
+                    <div class="text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                        <p class="font-medium text-sm text-gray-900">
+                            <%= order.shippingAddress.firstName %> <%= order.shippingAddress.lastName %>
+                        </p>
+                        <p><%= order.shippingAddress.addressLine1 %></p>
+                        <% if (order.shippingAddress.addressLine2) { %>
+                            <p><%= order.shippingAddress.addressLine2 %></p>
+                        <% } %>
+                        <p><%= order.shippingAddress.city %>, <%= order.shippingAddress.state %> &ndash; <%= order.shippingAddress.pinCode %></p>
+                        <p><%= order.shippingAddress.country %></p>
+                        <p class="pt-2 text-gray-500 font-mono">Phone: <%= order.shippingAddress.phone %></p>
+                    </div>
+                </div>
+
+                <!-- Payment & Summary Card -->
+                <div class="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-xs">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-900 pb-3 border-b border-gray-100">
+                        Payment & Summary
+                    </h2>
+
+                    <div class="space-y-2.5 text-xs text-gray-600">
+                        <div class="flex justify-between">
+                            <span>Payment Method</span>
+                            <span class="font-medium text-gray-900"><%= order.paymentMethod %></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Payment Status</span>
+                            <span class="font-semibold text-gray-900"><%= order.paymentStatus %></span>
+                        </div>
+                        <div class="border-t border-gray-100 pt-2.5 flex justify-between">
+                            <span>Original Subtotal</span>
+                            <span>&#8377;<%= ((order.pricing?.originalSubtotal !== undefined ? order.pricing.originalSubtotal : order.pricing?.subtotal) || 0).toLocaleString('en-IN') %></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Shipping</span>
+                            <% const displayedShip = order.pricing?.originalShippingFee !== undefined ? order.pricing.originalShippingFee : (order.pricing?.shippingFee || 0); %>
+                            <% if (displayedShip === 0) { %>
+                                <span class="text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded text-[10px]">FREE</span>
+                            <% } else { %>
+                                <span>&#8377;<%= displayedShip.toLocaleString('en-IN') %></span>
+                            <% } %>
+                        </div>
+                        <% if (order.pricing?.discount > 0) { %>
+                            <div class="flex justify-between text-emerald-700">
+                                <span>Discount</span>
+                                <span>-&#8377;<%= order.pricing.discount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <% if (order.pricing?.cancellationDeduction > 0) { %>
+                            <div class="flex justify-between text-rose-600">
+                                <span>Cancelled Items Adjustment</span>
+                                <span>-&#8377;<%= order.pricing.cancellationDeduction.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <% if (order.pricing?.returnCredit > 0) { %>
+                            <div class="flex justify-between text-orange-600">
+                                <span>Return Credit</span>
+                                <span>-&#8377;<%= order.pricing.returnCredit.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <div class="border-t border-gray-200 pt-3 flex justify-between text-sm font-semibold text-gray-900">
+                            <span><%= (order.pricing?.cancellationDeduction > 0 || order.pricing?.returnCredit > 0) ? 'Payable Total' : 'Total' %></span>
+                            <span>&#8377;<%= ((order.pricing?.currentPayable !== undefined ? order.pricing.currentPayable : order.pricing?.totalAmount) || 0).toLocaleString('en-IN') %></span>
+                        </div>
+                    </div>
+
+                    <% if (order.paymentMethod === 'COD' && order.orderStatus !== 'CANCELLED') { %>
+                        <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl text-[11px] text-stone-700">
+                            <strong>Cash on Delivery:</strong> Please prepare exact cash of &#8377;<%= ((order.pricing?.currentPayable !== undefined ? order.pricing.currentPayable : order.pricing?.totalAmount) || 0).toLocaleString('en-IN') %> at the time of delivery.
+                        </div>
+                    <% } %>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+</main>
+
+<!-- ============================================================
+     Cancellation Modal with Predefined Reasons + Custom 'Other'
+     ============================================================ -->
+<div id="cancelModalOverlay" class="hidden fixed inset-0 bg-black/50 z-[9990] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in duration-200">
+        <h3 class="text-base font-semibold text-gray-900" id="cancelModalTitle">Cancel Order</h3>
+        <p class="text-xs text-gray-500 mt-1" id="cancelModalDesc">
+            Stock will be automatically restored to inventory. Please select a reason for cancellation.
+        </p>
+
+        <form id="cancelModalForm" method="POST" action="" class="mt-4 space-y-4" onsubmit="return handleCancelSubmit(event)">
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-2">Reason for Cancellation</label>
+                
+                <div class="space-y-2 text-xs">
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="cancelReasonChoice" value="Ordered by mistake" checked onchange="toggleCancelOther(false)" class="text-black focus:ring-black">
+                        <span>Ordered by mistake</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="cancelReasonChoice" value="Found a better price elsewhere" onchange="toggleCancelOther(false)" class="text-black focus:ring-black">
+                        <span>Found a better price elsewhere</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="cancelReasonChoice" value="Need to change shipping address or contact info" onchange="toggleCancelOther(false)" class="text-black focus:ring-black">
+                        <span>Need to change shipping address or phone</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="cancelReasonChoice" value="Estimated delivery date is too late" onchange="toggleCancelOther(false)" class="text-black focus:ring-black">
+                        <span>Delivery time is too long</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="cancelReasonChoice" value="Changed my mind" onchange="toggleCancelOther(false)" class="text-black focus:ring-black">
+                        <span>Changed my mind</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="cancelReasonChoice" value="OTHER" id="cancelChoiceOther" onchange="toggleCancelOther(true)" class="text-black focus:ring-black">
+                        <span>Other (Please specify below)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Custom reason textarea shown when 'Other' selected -->
+            <div id="cancelOtherContainer" class="hidden">
+                <label class="block text-xs font-medium text-gray-700 mb-1">
+                    Describe your issue <span class="text-rose-500 font-bold">*</span>
+                </label>
+                <textarea
+                    id="cancelModalCustomText"
+                    rows="2"
+                    placeholder="Please explain why you want to cancel..."
+                    class="w-full text-xs p-3 border border-gray-300 rounded-xl focus:outline-none focus:border-black transition"
+                ></textarea>
+                <p id="cancelOtherError" class="text-rose-600 text-[11px] mt-1 hidden">Please provide a reason before submitting.</p>
+            </div>
+
+            <!-- Hidden field submitted to backend -->
+            <input type="hidden" name="reason" id="finalCancelReason">
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button
+                    type="button"
+                    onclick="closeCancelModal()"
+                    class="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+                >
+                    Dismiss
+                </button>
+                <button
+                    type="submit"
+                    id="cancelModalSubmitBtn"
+                    class="px-5 py-2 bg-rose-600 text-white rounded-xl text-xs font-semibold hover:bg-rose-700 transition"
+                >
+                    Confirm Cancellation
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     Return Modal (Mandatory Reason)
+     ============================================================ -->
+<div id="returnModalOverlay" class="hidden fixed inset-0 bg-black/50 z-[9990] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in duration-200">
+        <h3 class="text-base font-semibold text-gray-900" id="returnModalTitle">Return Request</h3>
+        <p class="text-xs text-gray-500 mt-1" id="returnModalDesc">
+            Returns are available for delivered items. Please specify the reason for returning.
+        </p>
+
+        <form id="returnModalForm" method="POST" action="" class="mt-4 space-y-4" onsubmit="return handleReturnSubmit(event)">
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-2">Reason for Return <span class="text-rose-500 font-bold">*</span></label>
+                
+                <div class="space-y-2 text-xs mb-3">
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="returnReasonChoice" value="Size did not fit / wrong size" checked onchange="toggleReturnOther(false)" class="text-black focus:ring-black">
+                        <span>Size did not fit / wrong size</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="returnReasonChoice" value="Item arrived with defect or damage" onchange="toggleReturnOther(false)" class="text-black focus:ring-black">
+                        <span>Item arrived with defect or damage</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="returnReasonChoice" value="Product is different from description or images" onchange="toggleReturnOther(false)" class="text-black focus:ring-black">
+                        <span>Product is different from description</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <input type="radio" name="returnReasonChoice" value="OTHER" id="returnChoiceOther" onchange="toggleReturnOther(true)" class="text-black focus:ring-black">
+                        <span>Other (Please specify details)</span>
+                    </label>
+                </div>
+
+                <div id="returnOtherContainer" class="hidden">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">
+                        Specific issue details <span class="text-rose-500 font-bold">*</span>
+                    </label>
+                    <textarea
+                        id="returnCustomText"
+                        rows="2"
+                        placeholder="Please describe the defect, sizing issue, or reason..."
+                        class="w-full text-xs p-3 border border-gray-300 rounded-xl focus:outline-none focus:border-black transition"
+                    ></textarea>
+                </div>
+                <p id="returnReasonError" class="text-rose-600 text-[11px] mt-1 hidden">Please provide a valid return reason before submitting.</p>
+                <input type="hidden" name="reason" id="finalReturnReason">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button
+                    type="button"
+                    onclick="closeReturnModal()"
+                    class="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+                >
+                    Dismiss
+                </button>
+                <button
+                    type="submit"
+                    id="returnModalSubmitBtn"
+                    class="px-5 py-2 bg-orange-600 text-white rounded-xl text-xs font-semibold hover:bg-orange-700 transition"
+                >
+                    Submit Return Request
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openCancelModal(actionUrl, targetName) {
+    document.getElementById('cancelModalTitle').textContent = `Cancel ${targetName}`;
+    document.getElementById('cancelModalForm').action = actionUrl;
+    document.getElementById('cancelOtherContainer').classList.add('hidden');
+    document.getElementById('cancelOtherError').classList.add('hidden');
+    document.getElementById('cancelModalCustomText').value = '';
+    const firstRadio = document.querySelector('input[name="cancelReasonChoice"][value="Ordered by mistake"]');
+    if (firstRadio) firstRadio.checked = true;
+    document.getElementById('cancelModalOverlay').classList.remove('hidden');
+}
+
+function closeCancelModal() {
+    document.getElementById('cancelModalOverlay').classList.add('hidden');
+}
+
+function toggleCancelOther(show) {
+    const container = document.getElementById('cancelOtherContainer');
+    if (show) {
+        container.classList.remove('hidden');
+        document.getElementById('cancelModalCustomText').focus();
+    } else {
+        container.classList.add('hidden');
+        document.getElementById('cancelOtherError').classList.add('hidden');
+    }
+}
+
+function handleCancelSubmit(e) {
+    const selectedRadio = document.querySelector('input[name="cancelReasonChoice"]:checked');
+    const finalReasonInput = document.getElementById('finalCancelReason');
+    const otherError = document.getElementById('cancelOtherError');
+
+    if (!selectedRadio) {
+        finalReasonInput.value = "Cancelled by user";
+        return true;
+    }
+
+    if (selectedRadio.value === "OTHER") {
+        const customText = document.getElementById('cancelModalCustomText').value.trim();
+        if (!customText) {
+            e.preventDefault();
+            otherError.classList.remove('hidden');
+            document.getElementById('cancelModalCustomText').focus();
+            return false;
+        }
+        finalReasonInput.value = customText;
+    } else {
+        finalReasonInput.value = selectedRadio.value;
+    }
+
+    otherError.classList.add('hidden');
+    return true;
+}
+
+function openReturnModal(actionUrl, targetName) {
+    document.getElementById('returnModalTitle').textContent = `Return ${targetName}`;
+    document.getElementById('returnModalForm').action = actionUrl;
+    document.getElementById('returnOtherContainer').classList.add('hidden');
+    document.getElementById('returnReasonError').classList.add('hidden');
+    document.getElementById('returnCustomText').value = '';
+    const firstRadio = document.querySelector('input[name="returnReasonChoice"][value="Size did not fit / wrong size"]');
+    if (firstRadio) firstRadio.checked = true;
+    document.getElementById('returnModalOverlay').classList.remove('hidden');
+}
+
+function closeReturnModal() {
+    document.getElementById('returnModalOverlay').classList.add('hidden');
+}
+
+function toggleReturnOther(show) {
+    const container = document.getElementById('returnOtherContainer');
+    if (show) {
+        container.classList.remove('hidden');
+        document.getElementById('returnCustomText').focus();
+    } else {
+        container.classList.add('hidden');
+        document.getElementById('returnReasonError').classList.add('hidden');
+    }
+}
+
+function handleReturnSubmit(e) {
+    const selectedRadio = document.querySelector('input[name="returnReasonChoice"]:checked');
+    const finalReasonInput = document.getElementById('finalReturnReason');
+    const errorEl = document.getElementById('returnReasonError');
+
+    if (!selectedRadio) {
+        e.preventDefault();
+        errorEl.classList.remove('hidden');
+        return false;
+    }
+
+    if (selectedRadio.value === "OTHER") {
+        const customText = document.getElementById('returnCustomText').value.trim();
+        if (!customText) {
+            e.preventDefault();
+            errorEl.textContent = "Please provide details for why you are returning this item.";
+            errorEl.classList.remove('hidden');
+            document.getElementById('returnCustomText').focus();
+            return false;
+        }
+        finalReasonInput.value = customText;
+    } else {
+        finalReasonInput.value = selectedRadio.value;
+    }
+
+    errorEl.classList.add('hidden');
+    return true;
+}
+
+// Delegated click handlers for safe quote handling
+document.addEventListener('click', function(e) {
+    const cancelBtn = e.target.closest('.open-cancel-modal-btn');
+    if (cancelBtn) {
+        openCancelModal(cancelBtn.dataset.actionUrl, cancelBtn.dataset.targetName);
+        return;
+    }
+    const returnBtn = e.target.closest('.open-return-modal-btn');
+    if (returnBtn) {
+        openReturnModal(returnBtn.dataset.actionUrl, returnBtn.dataset.targetName);
+        return;
+    }
+});
+</script>
+
+<%- include("../partials/storeFooter") %>
+
+</body>
+</html>

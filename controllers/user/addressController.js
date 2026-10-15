@@ -7,6 +7,18 @@ const {
     setDefaultAddress,
 } = require("../../services/user/addressService");
 
+const ALLOWED_REDIRECT_PATHS = new Set(["/checkout", "/addresses", "/profile", "/profile/edit"]);
+
+const sanitizeRedirect = (target, defaultPath = "/addresses") => {
+    if (typeof target === "string") {
+        const clean = target.trim();
+        if (ALLOWED_REDIRECT_PATHS.has(clean)) {
+            return clean;
+        }
+    }
+    return defaultPath;
+};
+
 const loadAddresses = async (req, res) => {
     try {
         const result = await getAddresses(req.session.userId);
@@ -21,19 +33,24 @@ const loadAddresses = async (req, res) => {
 };
 
 const loadAddAddress = (req, res) => {
+    const rawRedirect = req.query.from === "checkout" ? "/checkout" : (req.query.redirectTo || "");
     res.render("user/address-edit", {
         title: "Add Address",
         address: {},
         errors: {},
         isEdit: false,
+        redirectTo: rawRedirect ? sanitizeRedirect(rawRedirect, "/addresses") : "",
     });
 };
 
 const loadEditAddress = async (req, res) => {
     try {
+        const rawRedirect = req.query.from === "checkout" ? "/checkout" : (req.query.redirectTo || "");
+        const safeRedirect = rawRedirect ? sanitizeRedirect(rawRedirect, "/addresses") : "";
+
         const result = await getAddressById(req.session.userId, req.params.addressId);
         if (!result.success) {
-            return res.redirect("/addresses");
+            return res.redirect(safeRedirect || "/addresses");
         }
 
         res.render("user/address-edit", {
@@ -41,6 +58,7 @@ const loadEditAddress = async (req, res) => {
             address: result.address,
             errors: {},
             isEdit: true,
+            redirectTo: safeRedirect,
         });
     } catch (error) {
         console.error("Load Edit Address Error:", error);
@@ -65,38 +83,63 @@ const validateAddressBody = (body) => {
 };
 
 const addAddressController = async (req, res) => {
+    const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
+
     try {
+        const rawRedirect = req.body.redirectTo || (req.query.from === "checkout" ? "/checkout" : "/addresses");
+        const safeRedirect = sanitizeRedirect(rawRedirect, "/addresses");
+
         const errors = validateAddressBody(req.body);
         if (errors) {
+            if (isAjax) {
+                return res.status(400).json({ success: false, errors });
+            }
             return res.status(400).render("user/address-edit", {
                 title: "Add Address",
                 address: req.body,
                 errors,
                 isEdit: false,
+                redirectTo: safeRedirect,
             });
         }
 
-        await addAddress(req.session.userId, {
+        const result = await addAddress(req.session.userId, {
             ...req.body,
             isDefault: req.body.isDefault === "on" || req.body.isDefault === true,
         });
 
-        return res.redirect("/addresses");
+        if (isAjax) {
+            return res.json({ success: true, address: result.address });
+        }
+
+        return res.redirect(safeRedirect);
     } catch (error) {
         console.error("Add Address Error:", error);
+        if (isAjax) {
+            return res.status(500).json({ success: false, message: "Something went wrong" });
+        }
         res.status(500).send("Something went wrong");
     }
 };
 
 const updateAddressController = async (req, res) => {
+    const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
+
     try {
+        const rawRedirect = req.body.redirectTo || (req.query.from === "checkout" ? "/checkout" : "/addresses");
+        const safeRedirect = sanitizeRedirect(rawRedirect, "/addresses");
+
         const errors = validateAddressBody(req.body);
         if (errors) {
+            if (isAjax) {
+                return res.status(400).json({ success: false, errors });
+            }
             return res.status(400).render("user/address-edit", {
                 title: "Edit Address",
                 address: { ...req.body, _id: req.params.addressId },
                 errors,
                 isEdit: true,
+                redirectTo: safeRedirect,
             });
         }
 
@@ -106,12 +149,22 @@ const updateAddressController = async (req, res) => {
         });
 
         if (!result.success) {
+            if (isAjax) {
+                return res.status(404).json({ success: false, message: result.message });
+            }
             return res.status(404).send(result.message);
         }
 
-        return res.redirect("/addresses");
+        if (isAjax) {
+            return res.json({ success: true, address: result.address });
+        }
+
+        return res.redirect(safeRedirect);
     } catch (error) {
         console.error("Update Address Error:", error);
+        if (isAjax) {
+            return res.status(500).json({ success: false, message: "Something went wrong" });
+        }
         res.status(500).send("Something went wrong");
     }
 };

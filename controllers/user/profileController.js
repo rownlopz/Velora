@@ -8,6 +8,7 @@ const {
 } = require("../../services/user/profileService");
 
 const { getAddresses } = require("../../services/user/addressService");
+const { getUserOrders } = require("../../services/user/orderService");
 const { validateProfileEdit, validatePasswordChange } = require("../../helpers/validation");
 
 const loadProfile = async (req, res) => {
@@ -21,6 +22,9 @@ const loadProfile = async (req, res) => {
         const addresses = addressResult.addresses || [];
         const defaultAddress = addresses.find(a => a.isDefault) || addresses[0] || null;
 
+        const orderResult = await getUserOrders(req.session.userId, { limit: 3 });
+        const recentOrders = orderResult.orders || [];
+
         const joinedYear = result.user.createdAt
             ? new Date(result.user.createdAt).getFullYear()
             : new Date().getFullYear();
@@ -29,6 +33,7 @@ const loadProfile = async (req, res) => {
             title: "My Profile",
             user: result.user,
             defaultAddress,
+            recentOrders,
             joinedYear,
             success: req.query.success || null,
         });

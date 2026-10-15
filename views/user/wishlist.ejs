@@ -14,7 +14,7 @@
     <div class="max-w-screen-lg mx-auto px-6 md:px-10 py-10">
 
         <h1 class="text-3xl font-medium">My Wishlist</h1>
-        <p id="wishlistCountText" class="text-gray-400 text-sm mt-1"><%= items.length %> item<%= items.length === 1 ? '' : 's' %></p>
+        <p id="wishlistCountText" class="text-gray-400 text-sm mt-1"><%= typeof totalItems !== 'undefined' ? totalItems : items.length %> item<%= (typeof totalItems !== 'undefined' ? totalItems : items.length) === 1 ? '' : 's' %></p>
 
         <% if (items.length === 0) { %>
             <div id="emptyWishlist" class="text-center py-24">
@@ -92,6 +92,34 @@
                     </div>
                 <% }) %>
             </div>
+
+            <!-- Pagination -->
+            <% if (typeof totalPages !== 'undefined' && totalPages > 1) { %>
+                <div class="flex justify-center items-center gap-2 mt-12">
+                    <% if (currentPage > 1) { %>
+                        <a href="/wishlist?page=<%= currentPage - 1 %>"
+                           class="h-9 px-3 flex items-center justify-center rounded-xl text-xs font-medium bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 transition shadow-xs"
+                           title="Previous Page">
+                            &larr; Prev
+                        </a>
+                    <% } %>
+
+                    <% for (let p = 1; p <= totalPages; p++) { %>
+                        <a href="/wishlist?page=<%= p %>"
+                           class="w-9 h-9 flex items-center justify-center rounded-xl text-xs font-semibold transition shadow-xs <%= p === currentPage ? 'bg-black text-white' : 'bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50' %>">
+                            <%= p %>
+                        </a>
+                    <% } %>
+
+                    <% if (currentPage < totalPages) { %>
+                        <a href="/wishlist?page=<%= currentPage + 1 %>"
+                           class="h-9 px-3 flex items-center justify-center rounded-xl text-xs font-medium bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 transition shadow-xs"
+                           title="Next Page">
+                            Next &rarr;
+                        </a>
+                    <% } %>
+                </div>
+            <% } %>
 
             <div class="mt-10 flex justify-between items-center border-t border-gray-100 pt-6">
                 <a href="/products" class="text-sm text-gray-500 hover:text-black">&larr; Continue Shopping</a>
