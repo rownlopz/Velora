@@ -160,6 +160,15 @@ const orderSchema = new mongoose.Schema(
             uppercase: true,
             index: true,
         },
+        orderId: {
+            type: String,
+            unique: true,
+            uppercase: true,
+            index: true,
+            default: function () {
+                return this.orderNumber;
+            },
+        },
         checkoutToken: {
             type: String,
             unique: true,
@@ -321,6 +330,22 @@ const orderSchema = new mongoose.Schema(
         timestamps: true,
     }
 );
+
+orderSchema.pre("validate", function () {
+    if (!this.orderId && this.orderNumber) {
+        this.orderId = this.orderNumber;
+    }
+    if (!this.orderNumber && this.orderId) {
+        this.orderNumber = this.orderId;
+    }
+    if (!this.checkoutToken) {
+        this.checkoutToken = "chk_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10);
+    }
+});
+
+orderSchema.virtual("orderID").get(function () {
+    return this.orderNumber || this.orderId;
+});
 
 const Order = mongoose.model("Order", orderSchema);
 

@@ -71,6 +71,7 @@ const getAdminOrders = async ({
 
         query.$or = [
             { orderNumber: searchRegex },
+            { orderId: searchRegex },
             { "shippingAddress.firstName": searchRegex },
             { "shippingAddress.lastName": searchRegex },
             { "shippingAddress.phone": searchRegex },

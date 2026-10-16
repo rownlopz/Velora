@@ -188,7 +188,9 @@ const placeCodOrder = async (userId, addressId, checkoutToken = "") => {
             const timestampPart = Date.now().toString(36).toUpperCase();
             const randomPart = Math.floor(1000 + Math.random() * 9000);
             const candidate = `VEL-${timestampPart}-${randomPart}`;
-            const collision = await Order.findOne({ orderNumber: candidate });
+            const collision = await Order.findOne({
+                $or: [{ orderNumber: candidate }, { orderId: candidate }],
+            });
             if (!collision) return candidate;
         }
         return `VEL-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -249,7 +251,8 @@ const placeCodOrder = async (userId, addressId, checkoutToken = "") => {
             [
                 {
                     orderNumber,
-                    checkoutToken: trimmedToken || undefined,
+                    orderId: orderNumber,
+                    checkoutToken: trimmedToken || `chk_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`,
                     userId,
                     items: orderItems,
                     shippingAddress: {
@@ -360,6 +363,7 @@ const getUserOrders = async (userId, options = {}) => {
         const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         filter.$or = [
             { orderNumber: { $regex: escapedTerm, $options: "i" } },
+            { orderId: { $regex: escapedTerm, $options: "i" } },
             { "items.productName": { $regex: escapedTerm, $options: "i" } },
             { "shippingAddress.city": { $regex: escapedTerm, $options: "i" } },
         ];

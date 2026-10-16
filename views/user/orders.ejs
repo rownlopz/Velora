@@ -91,7 +91,7 @@
         </div>
 
         <!-- Notification Banner -->
-        <% if (notice) { %>
+        <% if (typeof notice !== 'undefined' && notice) { %>
             <div class="mt-6 p-4 rounded-xl text-xs sm:text-sm bg-neutral-100 border border-neutral-200 text-neutral-800 flex items-center justify-between shadow-xs">
                 <div class="flex items-center gap-2.5">
                     <svg class="text-neutral-600 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
