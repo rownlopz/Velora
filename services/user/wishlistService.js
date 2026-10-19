@@ -27,11 +27,12 @@ const addToWishlist = async (userId, variantId) => {
         throw new Error("Selected product is not available.");
     }
 
-    if (product.category) {
-        const category = await Category.findById(product.category);
-        if (!category || category.isDeleted || !category.isActive) {
-            throw new Error("Product category is currently unavailable.");
-        }
+    const category = product.categoryId
+        ? await Category.findById(product.categoryId)
+        : null;
+
+    if (!category || category.isDeleted || !category.isActive) {
+        throw new Error("Product category is currently unavailable");
     }
 
     // Atomic insert: ensure wishlist doc exists, then conditionally push if not already present
@@ -75,12 +76,17 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8 } = {}) => {
         paginatedItems.map(async (item) => {
             const variant = await Variant.findById(item.variantId);
             const product = variant ? await Product.findById(variant.productId) : null;
-            let category = null;
-            if (product && product.category) {
-                category = await Category.findById(product.category);
-            }
+            
+            const category = product && product.categoryId  
+                ? await Category.findById(product.categoryId)
+                : null;
 
-            const isCategoryActive = !product || !product.category || (category && !category.isDeleted && category.isActive);
+            const isCategoryActive = Boolean(
+                category && 
+                !category.isDeleted &&
+                category.isActive
+            );
+            
             const isListed = !!(
                 variant && variant.isActive &&
                 product && !product.isDeleted && product.status === "ACTIVE" &&
