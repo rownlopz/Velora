@@ -5,11 +5,14 @@ const bcrypt = require("bcrypt");
 const generateOtp = require("../../utils/generateOtp");
 const sendOtpEmail = require("../../utils/sendOtpEmail");
 
+const { creditWallet, getOrCreateWallet } = require("./walletService");
+
 const signupUser = async ({
     fullName,
     email,
     phone,
-    password
+    password,
+    referralCode,
 }) => {
     const normalizedEmail = email.toLowerCase().trim();
     const trimmedPhone = phone ? phone.trim() : "";
@@ -60,7 +63,8 @@ const signupUser = async ({
             fullName,
             email: normalizedEmail,
             phone,
-            password
+            password,
+            referralCode: referralCode || null,
         }
     };
 };
@@ -123,6 +127,18 @@ const verifySignupOtp = async ({
         10
     );
 
+    // Generate unique referral ID for new user
+    let candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    while (await User.exists({ referralId: candidateRef })) {
+        candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    }
+
+    let referrer = null;
+    if (signupData.referralCode && typeof signupData.referralCode === "string") {
+        const cleanRef = signupData.referralCode.trim().toUpperCase();
+        referrer = await User.findOne({ referralId: cleanRef, isActive: true });
+    }
+
     const user = await User.create({
         fullName: signupData.fullName,
         email: signupData.email,
@@ -131,8 +147,34 @@ const verifySignupOtp = async ({
         authProvider: "LOCAL",
         isEmailVerified: true,
         role: "USER",
-        isActive: true
+        isActive: true,
+        referralId: candidateRef,
+        referredBy: referrer ? referrer._id : null,
     });
+
+    // Ensure wallet exists for user
+    await getOrCreateWallet(user._id);
+
+    // Process referral bonuses per confirmed policy:
+    // Referrer: ₹100 upon signup & email verification
+    // Referee: ₹50 upon signup & email verification
+    if (referrer && referrer._id.toString() !== user._id.toString()) {
+        await creditWallet({
+            userId: referrer._id,
+            amount: 100,
+            reason: "REFERRAL_REWARD",
+            description: `Referral bonus for inviting ${user.fullName}`,
+            referenceId: `REF_SIGNUP_REFERRER:${user._id}`,
+        });
+
+        await creditWallet({
+            userId: user._id,
+            amount: 50,
+            reason: "REFERRAL_REWARD",
+            description: "Welcome bonus for signing up via referral",
+            referenceId: `REF_SIGNUP_REFEREE:${user._id}`,
+        });
+    }
 
     otpRecord.isUsed = true;
     await otpRecord.save();

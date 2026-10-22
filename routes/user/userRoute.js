@@ -50,6 +50,20 @@ router.get("/cart/checkout", (req, res) => res.redirect("/checkout"));
 router.get(['/%22/checkout%22', '/"checkout"', '/"/checkout"'], (req, res) => res.redirect("/checkout"));
 router.post("/checkout/place-order", userAuth, orderController.placeOrderController);
 
+// Coupon Actions
+router.post("/checkout/apply-coupon", userAuth, orderController.applyCouponController);
+router.post("/checkout/remove-coupon", userAuth, orderController.removeCouponController);
+
+// Razorpay Online Payment Verification & Retry
+router.post("/checkout/verify-razorpay", userAuth, orderController.verifyRazorpayPaymentController);
+router.get("/orders/:orderId/payment-success", userAuth, orderController.loadPaymentSuccess);
+router.get("/orders/:orderId/payment-failed", userAuth, orderController.loadPaymentFailed);
+router.post("/orders/:orderId/retry-payment", userAuth, orderController.retryPaymentController);
+router.post("/webhook/razorpay", orderController.razorpayWebhookController);
+
+// Wallet Management
+router.get("/wallet", userAuth, orderController.loadWallet);
+
 // Order Management Routes
 router.get("/orders", userAuth, orderController.loadOrderList);
 router.get("/orders/:orderId/success", userAuth, orderController.loadOrderSuccess);

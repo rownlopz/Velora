@@ -3,14 +3,36 @@ const Product = require("../../models/product/productModel");
 const Variant = require("../../models/product/variantModel");
 const Category = require("../../models/product/categoryModel");
 const slugify = require("../../utils/slugify");
+const escapeRegex = require("../../utils/escapeRegex");
+
+const generateUniqueProductSlug = async (name, currentProductId = null) => {
+    let baseSlug = slugify(name);
+    if (!baseSlug) baseSlug = "product";
+    let candidate = baseSlug;
+    let count = 1;
+    while (true) {
+        const query = { slug: candidate };
+        if (currentProductId) {
+            query._id = { $ne: currentProductId };
+        }
+        const exists = await Product.findOne(query);
+        if (!exists) {
+            return candidate;
+        }
+        count++;
+        candidate = `${baseSlug}-${count}`;
+    }
+};
 
 const getProducts = async ({ search = "", page = 1, limit = 10 }) => {
-    const skip = (page - 1) * limit;
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.max(1, parseInt(limit, 10) || 10);
+    const skip = (safePage - 1) * safeLimit;
 
     const query = { isDeleted: false };
 
-    if (search.trim()) {
-        query.name = { $regex: search.trim(), $options: "i" };
+    if (typeof search === "string" && search.trim()) {
+        query.name = { $regex: escapeRegex(search.trim()), $options: "i" };
     }
 
     const [products, totalProducts] = await Promise.all([
@@ -69,9 +91,10 @@ const getProductById = async (productId) => {
 };
 
 const findDuplicateProduct = async (name, excludeId = null) => {
+    if (typeof name !== "string" || !name.trim()) return null;
     const query = {
         isDeleted: false,
-        name: { $regex: `^${name.trim()}$`, $options: "i" },
+        name: { $regex: `^${escapeRegex(name.trim())}$`, $options: "i" },
     };
     if (excludeId) query._id = { $ne: excludeId };
     return Product.findOne(query);
@@ -150,9 +173,11 @@ const addProduct = async ({ name, description, brand, categoryId, tags, imagePat
         return { success: false, message: `SKU already in use: ${existingSkuVariant.sku}` };
     }
 
+    const slug = await generateUniqueProductSlug(trimmedName);
+
     const product = await Product.create({
         name: trimmedName,
-        slug: slugify(trimmedName),
+        slug,
         description: description || "",
         brand: brand || "",
         categoryId,
@@ -227,7 +252,7 @@ const updateProduct = async (productId, { name, description, brand, categoryId, 
     }
 
     product.name = trimmedName;
-    product.slug = slugify(trimmedName);
+    product.slug = await generateUniqueProductSlug(trimmedName, productId);
     product.description = description || "";
     product.brand = brand || "";
     product.categoryId = categoryId;
@@ -249,15 +274,16 @@ const updateProduct = async (productId, { name, description, brand, categoryId, 
         const salePrice = v.salePrice !== undefined && v.salePrice !== "" && v.salePrice !== null ? Number(v.salePrice) : null;
 
         if (idStr && currentVariantMap.has(idStr)) {
-            // Update existing variant in place
+            // Do not overwrite stock when editing product metadata; stock is managed atomically by inventoryService
             await Variant.findByIdAndUpdate(idStr, {
-                sku,
-                color,
-                size,
-                stock,
-                regularPrice,
-                salePrice,
-                isActive: true,
+                $set: {
+                    sku,
+                    color,
+                    size,
+                    regularPrice,
+                    salePrice,
+                    isActive: true,
+                },
             });
             submittedIds.add(idStr);
         } else {
@@ -320,4 +346,6 @@ module.exports = {
     updateProduct,
     toggleProductStatus,
     softDeleteProduct,
+    generateUniqueProductSlug,
 };
+

@@ -33,6 +33,20 @@ const paymentSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        razorpayOrderId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        razorpayPaymentId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        razorpaySignature: {
+            type: String,
+            default: null,
+        },
         paidAt: {
             type: Date,
             default: null,
@@ -45,6 +59,15 @@ const paymentSchema = new mongoose.Schema(
             type: Number,
             default: 0,
             min: 0,
+        },
+        attemptId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        errorReason: {
+            type: String,
+            default: null,
         },
     },
     {

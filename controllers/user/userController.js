@@ -17,10 +17,15 @@ const loadHome = async (req, res) => {
 };
 
 const loadSignup = (req, res) => {
+    const referralCode = (req.query.ref || req.session.referralCode || "").trim().toUpperCase();
+    if (req.query.ref) {
+        req.session.referralCode = referralCode;
+    }
     res.render("user/signup", {
         title: "Create Account",
         errors: {},
-        formData: {}
+        formData: {},
+        referralCode,
     });
 };
 
@@ -60,6 +65,14 @@ const loadForgotPassword = (req, res) => {
 };
 
 const loadResetPassword = (req, res) => {
+    const email = req.session.resetPasswordEmail;
+    const verification = req.session.resetPasswordVerification;
+    const isVerified = verification && verification.email === email && Date.now() < verification.expiresAt;
+
+    if (!email || !isVerified) {
+        return res.redirect("/forgot-password");
+    }
+
     res.render("user/reset-password", {
         title: "Reset Password",
         errors: {}
@@ -82,28 +95,32 @@ const signup = async (req, res) => {
             });
         }
 
+        const referralCode = (req.body.referralCode || req.session.referralCode || "").trim().toUpperCase();
+
         // Business logic handled by service
         const result = await signupUser({
             fullName,
             email,
             phone,
-            password
+            password,
+            referralCode,
         });
 
         if (!result.success) {
             return res.status(400).render("user/signup", {
                 title: "Create Account",
                 errors: result.errors || { general: result.message },
-                formData
+                formData,
+                referralCode,
             });
         }
 
         // Store temporary signup data in session
         req.session.signupData = result.signupData;
 
-
         req.session.otpFlow = "SIGNUP";
         delete req.session.resetPasswordEmail;
+        delete req.session.resetPasswordVerification;
         delete req.session.resetPasswordVerified;
 
         // Move user to OTP page
@@ -149,6 +166,11 @@ const verifyOtp = async (req, res) => {
                 });
             }
 
+            const now = Date.now();
+            req.session.resetPasswordVerification = {
+                email,
+                expiresAt: now + 15 * 60 * 1000 // valid for 15 minutes
+            };
             req.session.resetPasswordVerified = true;
             delete req.session.otpFlow;
 
@@ -267,6 +289,9 @@ const forgotPasswordController = async (req, res) => {
             });
         }
 
+        // Clear any previous reset verification so starting a reset for another email invalidates old state
+        delete req.session.resetPasswordVerification;
+        delete req.session.resetPasswordVerified;
         req.session.resetPasswordEmail = result.email;
 
         // Same explicit flow marker as signup — see comment there.
@@ -283,10 +308,14 @@ const forgotPasswordController = async (req, res) => {
 const resetPasswordController = async (req, res) => {
     try {
         const email = req.session.resetPasswordEmail;
-        const verified = req.session.resetPasswordVerified;
+        const verification = req.session.resetPasswordVerification;
+        const isVerified = verification && verification.email === email && Date.now() < verification.expiresAt;
         const { password, confirmPassword } = req.body;
 
-        if (!email || !verified) {
+        if (!email || !isVerified) {
+            delete req.session.resetPasswordEmail;
+            delete req.session.resetPasswordVerification;
+            delete req.session.resetPasswordVerified;
             return res.redirect("/forgot-password");
         }
 
@@ -310,8 +339,11 @@ const resetPasswordController = async (req, res) => {
             });
         }
 
+        // Successfully consumed: clear all password reset session state
         delete req.session.resetPasswordEmail;
+        delete req.session.resetPasswordVerification;
         delete req.session.resetPasswordVerified;
+        delete req.session.otpFlow;
 
         return res.redirect("/login");
     } catch (error) {

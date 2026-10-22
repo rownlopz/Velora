@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Checkout | VELORA</title>
     <link rel="stylesheet" href="/css/output.css">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <style>
         .address-card.selected {
             border-color: #000000;
@@ -100,24 +101,73 @@
                 </div>
 
                 <!-- 2. Payment Method -->
-                <div class="bg-white border border-gray-200 rounded-2xl p-6 md:p-8">
-                    <div class="flex items-center gap-3 pb-4 border-b border-gray-100 mb-6">
+                <div class="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 space-y-4">
+                    <div class="flex items-center gap-3 pb-4 border-b border-gray-100">
                         <span class="w-7 h-7 rounded-full bg-black text-white text-xs font-semibold flex items-center justify-center">2</span>
                         <h2 class="text-lg font-medium">Payment Method</h2>
                     </div>
 
-                    <!-- Cash on Delivery Selection -->
-                    <label class="block border-2 border-black rounded-xl p-5 bg-stone-50 cursor-pointer">
+                    <!-- Online Payment (Razorpay) Selection -->
+                    <label class="block border rounded-xl p-5 cursor-pointer transition border-gray-200 hover:border-black payment-option-card">
                         <div class="flex items-start justify-between">
                             <div class="flex items-start gap-3">
-                                <input type="radio" name="paymentMethodRadio" value="COD" checked class="mt-1 accent-black">
+                                <input type="radio" name="paymentMethodRadio" value="ONLINE" checked class="mt-1 accent-black">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium text-sm text-gray-900">Online Payment (Razorpay)</span>
+                                        <span class="text-[10px] bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded uppercase tracking-wider">Fast & Secure</span>
+                                    </div>
+                                    <p class="text-xs text-gray-600 mt-1 leading-relaxed">
+                                        Pay via UPI (Google Pay, PhonePe, Paytm), Credit/Debit Cards, or Netbanking.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="text-gray-700 shrink-0">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                            </div>
+                        </div>
+                    </label>
+
+                    <!-- Wallet Payment Selection -->
+                    <% const hasEnoughWallet = (typeof walletBalance !== 'undefined' ? walletBalance : 0) >= totalAmount; %>
+                    <label class="block border rounded-xl p-5 cursor-pointer transition <%= hasEnoughWallet ? 'border-gray-200 hover:border-black' : 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed' %> payment-option-card">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3">
+                                <input type="radio" name="paymentMethodRadio" value="WALLET" <%= hasEnoughWallet ? '' : 'disabled' %> class="mt-1 accent-black">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium text-sm text-gray-900">Velora Wallet</span>
+                                        <span class="text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider <%= hasEnoughWallet ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700' %>">
+                                            Balance: &#8377;<%= (typeof walletBalance !== 'undefined' ? walletBalance : 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-gray-600 mt-1 leading-relaxed">
+                                        <% if (hasEnoughWallet) { %>
+                                            Instant one-click checkout using your available wallet funds.
+                                        <% } else { %>
+                                            Insufficient wallet balance for this order. Please choose Online Payment or COD.
+                                        <% } %>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="text-gray-700 shrink-0">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+                            </div>
+                        </div>
+                    </label>
+
+                    <!-- Cash on Delivery Selection -->
+                    <label class="block border rounded-xl p-5 cursor-pointer transition border-gray-200 hover:border-black payment-option-card">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3">
+                                <input type="radio" name="paymentMethodRadio" value="COD" class="mt-1 accent-black">
                                 <div>
                                     <div class="flex items-center gap-2">
                                         <span class="font-medium text-sm text-gray-900">Cash on Delivery (COD)</span>
-                                        <span class="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded uppercase tracking-wider">Supported</span>
+                                        <span class="text-[10px] bg-stone-100 text-stone-800 font-semibold px-2 py-0.5 rounded uppercase tracking-wider">Pay at Doorstep</span>
                                     </div>
                                     <p class="text-xs text-gray-600 mt-1 leading-relaxed">
-                                        Pay with cash when your package is delivered to your doorstep. No upfront card payment required.
+                                        Pay with cash when your package is delivered to your doorstep.
                                     </p>
                                 </div>
                             </div>
@@ -160,12 +210,62 @@
                         <% }) %>
                     </div>
 
+                    <!-- Coupon Discount Section -->
+                    <div class="border-t border-gray-100 pt-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-gray-700">Coupon Discount</span>
+                            <% if (typeof appliedCoupon !== 'undefined' && appliedCoupon) { %>
+                                <span class="text-xs bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded">Applied</span>
+                            <% } %>
+                        </div>
+
+                        <% if (typeof appliedCoupon !== 'undefined' && appliedCoupon) { %>
+                            <div class="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                <div>
+                                    <p class="text-xs font-bold text-emerald-900 tracking-wide"><%= appliedCoupon.code %></p>
+                                    <p class="text-[11px] text-emerald-700">Saved &#8377;<%= (couponDiscount || 0).toLocaleString('en-IN') %></p>
+                                </div>
+                                <button type="button" id="removeCouponBtn" class="text-xs text-red-600 hover:text-red-800 font-semibold uppercase tracking-wider cursor-pointer">
+                                    Remove
+                                </button>
+                            </div>
+                        <% } else { %>
+                            <div class="flex gap-2">
+                                <input type="text" id="couponCodeInput" placeholder="Enter coupon code" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs uppercase tracking-wider outline-none focus:border-black bg-gray-50">
+                                <button type="button" id="applyCouponBtn" class="px-4 py-2 bg-black text-white text-xs font-semibold uppercase tracking-wider rounded-xl hover:bg-gray-800 transition cursor-pointer">
+                                    Apply
+                                </button>
+                            </div>
+                            <% if (typeof couponError !== 'undefined' && couponError) { %>
+                                <p class="text-xs text-red-600 mt-1"><%= couponError %></p>
+                            <% } %>
+                        <% } %>
+                    </div>
+
                     <!-- Pricing Breakdown -->
                     <div class="border-t border-gray-100 pt-4 space-y-2.5 text-sm">
+                        <% if (typeof rawSubtotal !== 'undefined' && rawSubtotal > subtotal) { %>
+                            <div class="flex justify-between text-gray-400 line-through text-xs">
+                                <span>Original Price</span>
+                                <span>&#8377;<%= rawSubtotal.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
                         <div class="flex justify-between text-gray-600">
                             <span>Subtotal</span>
                             <span id="summarySubtotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
+                        <% if (typeof totalOfferDiscount !== 'undefined' && totalOfferDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700">
+                                <span>Offer Savings</span>
+                                <span>-&#8377;<%= totalOfferDiscount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <% if (typeof couponDiscount !== 'undefined' && couponDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700 font-medium">
+                                <span>Coupon Deduction</span>
+                                <span>-&#8377;<%= couponDiscount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
                         <div class="flex justify-between text-gray-600 items-center">
                             <span>Shipping</span>
                             <% if (shippingFee === 0) { %>
@@ -180,7 +280,7 @@
                             </p>
                         <% } %>
                         <div class="border-t border-gray-200 pt-3 flex justify-between text-base font-semibold text-gray-900">
-                            <span>Total Amount</span>
+                            <span>Total Payable</span>
                             <span id="summaryTotal">&#8377;<%= totalAmount.toLocaleString('en-IN') %></span>
                         </div>
                     </div>
@@ -190,7 +290,7 @@
                         <input type="hidden" id="checkoutToken" value="<%= typeof checkoutToken !== 'undefined' ? checkoutToken : '' %>">
                         <button type="button" id="placeOrderBtn"
                             class="w-full h-14 bg-black text-white rounded-xl font-semibold hover:bg-gray-800 active:scale-[0.99] transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                            <span>Place Order (Cash on Delivery)</span>
+                            <span id="placeOrderBtnText">Pay with Online (Razorpay)</span>
                         </button>
                         <p class="text-center text-[11px] text-gray-400 mt-2">
                             Safe and contactless delivery options available.
@@ -500,7 +600,97 @@
         }
     });
 
-    // Place Order via Cash on Delivery
+    // Payment method radio change handling
+    const placeOrderBtnText = document.getElementById('placeOrderBtnText');
+    function updatePaymentBtnText() {
+        const selectedMethod = document.querySelector('input[name="paymentMethodRadio"]:checked')?.value;
+        if (selectedMethod === 'WALLET') {
+            if (placeOrderBtnText) placeOrderBtnText.textContent = 'Pay with Wallet';
+        } else if (selectedMethod === 'COD') {
+            if (placeOrderBtnText) placeOrderBtnText.textContent = 'Place Order (Cash on Delivery)';
+        } else {
+            if (placeOrderBtnText) placeOrderBtnText.textContent = 'Pay with Online (Razorpay)';
+        }
+    }
+
+    document.querySelectorAll('input[name="paymentMethodRadio"]').forEach(radio => {
+        radio.addEventListener('change', updatePaymentBtnText);
+    });
+    updatePaymentBtnText();
+
+    // Coupon Apply & Remove
+    const applyCouponBtn = document.getElementById('applyCouponBtn');
+    const couponCodeInput = document.getElementById('couponCodeInput');
+    const removeCouponBtn = document.getElementById('removeCouponBtn');
+
+    if (applyCouponBtn && couponCodeInput) {
+        applyCouponBtn.addEventListener('click', async function (e) {
+            e.preventDefault();
+            const code = couponCodeInput.value.trim();
+            if (!code) {
+                if (typeof showToast === 'function') showToast('Please enter a coupon code.', 'warning');
+                return;
+            }
+
+            applyCouponBtn.disabled = true;
+            try {
+                const res = await fetch('/checkout/apply-coupon', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({ couponCode: code }),
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    if (typeof showToast === 'function') showToast(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 400);
+                } else {
+                    if (typeof showToast === 'function') showToast(data.message || 'Invalid coupon.', 'error');
+                    applyCouponBtn.disabled = false;
+                }
+            } catch (err) {
+                console.error('Apply coupon error:', err);
+                if (typeof showToast === 'function') showToast('Network error applying coupon.', 'error');
+                applyCouponBtn.disabled = false;
+            }
+        });
+    }
+
+    if (removeCouponBtn) {
+        removeCouponBtn.addEventListener('click', async function (e) {
+            e.preventDefault();
+            removeCouponBtn.disabled = true;
+            try {
+                const res = await fetch('/checkout/remove-coupon', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    if (typeof showToast === 'function') showToast(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 400);
+                } else {
+                    if (typeof showToast === 'function') showToast(data.message || 'Unable to remove coupon.', 'error');
+                    removeCouponBtn.disabled = false;
+                }
+            } catch (err) {
+                console.error('Remove coupon error:', err);
+                if (typeof showToast === 'function') showToast('Network error removing coupon.', 'error');
+                removeCouponBtn.disabled = false;
+            }
+        });
+    }
+
+    // Place Order handler (COD, WALLET, ONLINE)
     placeOrderBtn.addEventListener('click', async function (e) {
         e.preventDefault();
 
@@ -515,6 +705,8 @@
             return;
         }
 
+        const selectedPaymentMethod = document.querySelector('input[name="paymentMethodRadio"]:checked')?.value || 'ONLINE';
+
         // Prevent duplicate submissions
         if (placeOrderBtn.disabled) return;
         placeOrderBtn.disabled = true;
@@ -524,7 +716,7 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
             </svg>
-            <span>Placing your order...</span>
+            <span>Processing order...</span>
         `;
 
         try {
@@ -538,7 +730,7 @@
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: JSON.stringify({ addressId, checkoutToken }),
+                body: JSON.stringify({ addressId, checkoutToken, paymentMethod: selectedPaymentMethod }),
             });
 
             if (res.status === 401) {
@@ -548,18 +740,77 @@
 
             const data = await res.json();
 
-            if (data.success && data.redirectUrl) {
-                if (typeof updateNavCartCount === 'function') {
-                    updateNavCartCount(0);
-                }
-                window.location.href = data.redirectUrl;
-                return;
-            } else {
+            if (!data.success) {
                 if (typeof showToast === 'function') {
                     showToast(data.message || 'Unable to place order. Please review your cart.', 'error');
                 }
                 placeOrderBtn.disabled = false;
                 placeOrderBtn.innerHTML = originalText;
+                return;
+            }
+
+            // Online Razorpay Payment flow
+            if (data.isOnline && data.razorpay) {
+                const options = {
+                    key: data.razorpay.keyId,
+                    amount: data.razorpay.amount,
+                    currency: data.razorpay.currency,
+                    name: data.razorpay.name || 'Velora',
+                    description: data.razorpay.description || 'Order Payment',
+                    order_id: data.razorpay.orderId,
+                    prefill: data.razorpay.prefill || {},
+                    theme: { color: '#000000' },
+                    handler: async function (response) {
+                        try {
+                            const verifyRes = await fetch('/checkout/verify-razorpay', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({
+                                    orderId: data.orderId,
+                                    razorpayOrderId: response.razorpay_order_id,
+                                    razorpayPaymentId: response.razorpay_payment_id,
+                                    razorpaySignature: response.razorpay_signature,
+                                }),
+                            });
+
+                            const verifyData = await verifyRes.json();
+                            if (verifyData.redirectUrl) {
+                                window.location.href = verifyData.redirectUrl;
+                            } else {
+                                window.location.href = `/orders/${data.orderId}/payment-success`;
+                            }
+                        } catch (err) {
+                            console.error('Verification error:', err);
+                            window.location.href = `/orders/${data.orderId}/payment-failed?error=Verification+failed`;
+                        }
+                    },
+                    modal: {
+                        ondismiss: function () {
+                            window.location.href = `/orders/${data.orderId}/payment-failed?error=Payment+dismissed+by+user`;
+                        },
+                    },
+                };
+
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response) {
+                    const desc = response.error ? response.error.description : 'Payment failed';
+                    window.location.href = `/orders/${data.orderId}/payment-failed?error=${encodeURIComponent(desc)}`;
+                });
+                rzp.open();
+                return;
+            }
+
+            // Direct success (COD or Wallet)
+            if (data.redirectUrl) {
+                if (typeof updateNavCartCount === 'function') {
+                    updateNavCartCount(0);
+                }
+                window.location.href = data.redirectUrl;
+                return;
             }
         } catch (err) {
             console.error('Place order error:', err);

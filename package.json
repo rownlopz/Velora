@@ -18,6 +18,7 @@
     "connect-mongo": "^6.0.0",
     "dotenv": "^17.4.2",
     "ejs": "^6.0.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.3",
@@ -28,6 +29,7 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdfkit": "^0.20.2",
+    "razorpay": "^2.9.8",
     "sharp": "^0.35.4",
     "streamifier": "^0.1.1"
   },

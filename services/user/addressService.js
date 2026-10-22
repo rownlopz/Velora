@@ -15,12 +15,10 @@ const getAddressById = async (userId, addressId) => {
 
 const addAddress = async (userId, data) => {
     const { firstName, lastName, addressLine1, addressLine2, phone, pinCode, city, state, country, isDefault } = data;
-
-    if (isDefault) {
-        await Address.updateMany({ userId }, { isDefault: false });
-    }
+    const User = require("../../models/user/userModel");
 
     const existingCount = await Address.countDocuments({ userId });
+    const shouldBeDefault = existingCount === 0 ? true : !!isDefault;
 
     const address = await Address.create({
         firstName,
@@ -32,23 +30,45 @@ const addAddress = async (userId, data) => {
         city,
         state,
         country,
-        isDefault: existingCount === 0 ? true : !!isDefault, // first address is always default
+        isDefault: shouldBeDefault,
         userId,
     });
+
+    if (shouldBeDefault) {
+        await User.findByIdAndUpdate(userId, { $set: { defaultAddressId: address._id } });
+        await Address.updateMany({ userId, _id: { $ne: address._id } }, { $set: { isDefault: false } });
+    }
 
     return { success: true, address };
 };
 
 const updateAddress = async (userId, addressId, data) => {
     const { firstName, lastName, addressLine1, addressLine2, phone, pinCode, city, state, country, isDefault } = data;
+    const User = require("../../models/user/userModel");
 
     const address = await Address.findOne({ _id: addressId, userId });
     if (!address) {
         return { success: false, message: "Address not found" };
     }
 
-    if (isDefault) {
-        await Address.updateMany({ userId }, { isDefault: false });
+    const totalCount = await Address.countDocuments({ userId });
+    let finalIsDefault = !!isDefault;
+    if (totalCount <= 1) {
+        finalIsDefault = true;
+    } else if (address.isDefault && !isDefault) {
+        const other = await Address.findOne({ userId, _id: { $ne: addressId } }).sort({ createdAt: -1 });
+        if (other) {
+            other.isDefault = true;
+            await other.save();
+            await User.findByIdAndUpdate(userId, { $set: { defaultAddressId: other._id } });
+        } else {
+            finalIsDefault = true;
+        }
+    }
+
+    if (finalIsDefault) {
+        await User.findByIdAndUpdate(userId, { $set: { defaultAddressId: addressId } });
+        await Address.updateMany({ userId, _id: { $ne: addressId } }, { $set: { isDefault: false } });
     }
 
     address.firstName = firstName;
@@ -60,7 +80,7 @@ const updateAddress = async (userId, addressId, data) => {
     address.city = city;
     address.state = state;
     address.country = country;
-    address.isDefault = !!isDefault;
+    address.isDefault = finalIsDefault;
 
     await address.save();
 
@@ -86,16 +106,24 @@ const deleteAddress = async (userId, addressId) => {
 };
 
 const setDefaultAddress = async (userId, addressId) => {
+    const User = require("../../models/user/userModel");
     const address = await Address.findOne({ _id: addressId, userId });
     if (!address) {
         return { success: false, message: "Address not found" };
     }
 
-    await Address.updateMany({ userId }, { isDefault: false });
-    address.isDefault = true;
-    await address.save();
+    // Single-document atomic claim on User
+    await User.findByIdAndUpdate(userId, { $set: { defaultAddressId: addressId } });
 
-    return { success: true };
+    // Read the winner address ID
+    const user = await User.findById(userId);
+    const authoritativeId = user?.defaultAddressId || addressId;
+
+    // Synchronize Address documents so exactly the authoritative winner is default
+    await Address.updateMany({ userId, _id: { $ne: authoritativeId } }, { $set: { isDefault: false } });
+    await Address.updateOne({ _id: authoritativeId, userId }, { $set: { isDefault: true } });
+
+    return { success: true, address };
 };
 
 module.exports = {

@@ -54,9 +54,9 @@ const updateStockController = async (req, res) => {
 
     try {
         const { variantId } = req.params;
-        const { stock } = req.body;
+        const { stock, expectedStock } = req.body;
 
-        const result = await updateVariantStock(variantId, stock);
+        const result = await updateVariantStock(variantId, stock, expectedStock);
 
         if (!result.success) {
             if (isAjax) {

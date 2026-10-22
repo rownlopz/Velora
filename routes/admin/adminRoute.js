@@ -13,6 +13,9 @@ const categoryController = require("../../controllers/admin/categoryController")
 const productController = require("../../controllers/admin/productController");
 const orderController = require("../../controllers/admin/orderController");
 const inventoryController = require("../../controllers/admin/inventoryController");
+const offerController = require("../../controllers/admin/offerController");
+const couponController = require("../../controllers/admin/couponController");
+const reportController = require("../../controllers/admin/reportController");
 const { adminAuth, isAdminGuest } = require("../../middlewares/authMiddleware");
 const { handleProductImageUpload, resizeAndSaveProductImages } = require("../../middlewares/uploadProductImages");
 
@@ -20,8 +23,31 @@ router.get("/login", isAdminGuest, adminController.loadLogin);
 router.post("/login", isAdminGuest, adminController.loginController);
 router.get("/logout", adminController.logoutController);
 
-router.get("/dashboard", adminAuth, adminController.loadDashboard);
+// Dashboard & Analytics
+router.get("/dashboard", adminAuth, reportController.loadDashboard);
+
+// Customer Management
+router.get("/customers", adminAuth, adminController.loadCustomers);
+router.get("/users", adminAuth, adminController.loadCustomers);
 router.post("/users/:userId/toggle-status", adminAuth, adminController.toggleUserStatusController);
+
+// Marketing: Offers Management
+router.get("/offers", adminAuth, offerController.loadOffers);
+router.post("/offers/create", adminAuth, offerController.createOfferController);
+router.post("/offers/:offerId/edit", adminAuth, offerController.updateOfferController);
+router.post("/offers/:offerId/toggle-status", adminAuth, offerController.toggleOfferStatusController);
+router.post("/offers/:offerId/delete", adminAuth, offerController.deleteOfferController);
+
+// Marketing: Coupons Management
+router.get("/coupons", adminAuth, couponController.loadCoupons);
+router.post("/coupons/create", adminAuth, couponController.createCouponController);
+router.post("/coupons/:couponId/toggle-status", adminAuth, couponController.toggleCouponStatusController);
+router.post("/coupons/:couponId/delete", adminAuth, couponController.deleteCouponController);
+
+// Sales Reports & Exports
+router.get("/sales-report", adminAuth, reportController.loadSalesReport);
+router.get("/sales-report/export/excel", adminAuth, reportController.exportSalesExcelController);
+router.get("/sales-report/export/pdf", adminAuth, reportController.exportSalesPdfController);
 
 router.get("/categories", adminAuth, categoryController.loadCategories);
 router.post("/categories", adminAuth, categoryController.addCategoryController);

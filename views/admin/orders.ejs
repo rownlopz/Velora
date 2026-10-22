@@ -227,8 +227,20 @@
                                         else if (order.paymentStatus === "FAILED" || order.paymentStatus === "CANCELLED") paymentBg = "bg-rose-50 text-rose-700 border-rose-200";
 
                                         const oSt = (order.orderStatus || 'PENDING').toUpperCase();
-                                        const oRank = { PENDING: 0, PLACED: 0, PROCESSING: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 2.5, DELIVERED: 3 }[oSt] ?? -1;
-                                        const isTerminalOrder = ["CANCELLED", "RETURNED"].includes(oSt);
+                                        const allowedBulkNext = {
+                                            PENDING: ['PROCESSING', 'CANCELLED'],
+                                            PLACED: ['PROCESSING', 'CANCELLED'],
+                                            PROCESSING: ['SHIPPED', 'CANCELLED'],
+                                            SHIPPED: ['OUT_FOR_DELIVERY', 'DELIVERED'],
+                                            OUT_FOR_DELIVERY: ['DELIVERED'],
+                                            DELIVERED: [],
+                                            CANCELLED: [],
+                                            RETURN_REQUESTED: [],
+                                            RETURN_APPROVED: [],
+                                            RETURN_REJECTED: [],
+                                            RETURNED: []
+                                        }[oSt] || [];
+                                        const isTerminalOrder = allowedBulkNext.length === 0;
 
                                         const orderDate = new Date(order.placedAt || order.createdAt);
                                         const formattedDate = orderDate.toLocaleDateString('en-IN', {
@@ -296,9 +308,28 @@
 
                                         <!-- Amount -->
                                         <td class="px-6 py-4 whitespace-nowrap">
-                                            <p class="font-bold text-neutral-900 font-mono">
-                                                &#8377;<%= (order.pricing?.totalAmount != null ? order.pricing.totalAmount : 0).toLocaleString('en-IN') %>
-                                            </p>
+                                            <% const hasAdjustment = (order.pricing?.currentPayable != null && order.pricing.currentPayable < order.pricing.totalAmount) || (order.pricing?.walletRefundIssued > 0); %>
+                                            <% if (hasAdjustment) { %>
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-neutral-900 font-mono text-sm">
+                                                        &#8377;<%= (order.pricing?.currentPayable != null ? order.pricing.currentPayable : order.pricing.totalAmount).toLocaleString('en-IN') %>
+                                                    </span>
+                                                    <div class="flex items-center gap-1.5 mt-0.5">
+                                                        <span class="text-[10px] text-neutral-400 line-through font-mono">
+                                                            &#8377;<%= (order.pricing?.totalAmount || 0).toLocaleString('en-IN') %>
+                                                        </span>
+                                                        <% if (order.pricing?.walletRefundIssued > 0) { %>
+                                                            <span class="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                                                &#8377;<%= order.pricing.walletRefundIssued.toLocaleString('en-IN') %> ref
+                                                            </span>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+                                            <% } else { %>
+                                                <p class="font-bold text-neutral-900 font-mono">
+                                                    &#8377;<%= (order.pricing?.totalAmount != null ? order.pricing.totalAmount : 0).toLocaleString('en-IN') %>
+                                                </p>
+                                            <% } %>
                                             <span class="inline-block mt-0.5 text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 border border-neutral-200">
                                                 <%= order.paymentMethod || 'N/A' %>
                                             </span>
@@ -321,29 +352,29 @@
                                                         <%= isTerminalOrder ? 'disabled' : '' %>
                                                         class="h-8 pl-6 pr-6 rounded-lg text-xs font-semibold border appearance-none outline-none cursor-pointer transition shadow-xs <%= statusBg %> <%= isTerminalOrder ? 'opacity-70 cursor-not-allowed' : '' %>"
                                                     >
-                                                        <option value="PENDING" <%= ['PENDING', 'PLACED'].includes(oSt) ? 'selected' : '' %> <%= oRank > 0 ? 'disabled' : '' %>>
-                                                            Pending <%= oRank > 0 ? '(Locked)' : '' %>
+                                                        <option value="PENDING" <%= ['PENDING', 'PLACED'].includes(oSt) ? 'selected' : '' %> <%= !['PENDING', 'PLACED'].includes(oSt) ? 'disabled' : '' %>>
+                                                            Pending <%= !['PENDING', 'PLACED'].includes(oSt) ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="PROCESSING" <%= oSt === 'PROCESSING' ? 'selected' : '' %> <%= oRank > 1 ? 'disabled' : '' %>>
-                                                            Processing <%= oRank > 1 ? '(Locked)' : '' %>
+                                                        <option value="PROCESSING" <%= oSt === 'PROCESSING' ? 'selected' : '' %> <%= oSt !== 'PROCESSING' && !allowedBulkNext.includes('PROCESSING') ? 'disabled' : '' %>>
+                                                            Processing <%= oSt !== 'PROCESSING' && !allowedBulkNext.includes('PROCESSING') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="SHIPPED" <%= oSt === 'SHIPPED' ? 'selected' : '' %> <%= oRank > 2 ? 'disabled' : '' %>>
-                                                            Shipped <%= oRank > 2 ? '(Locked)' : '' %>
+                                                        <option value="SHIPPED" <%= oSt === 'SHIPPED' ? 'selected' : '' %> <%= oSt !== 'SHIPPED' && !allowedBulkNext.includes('SHIPPED') ? 'disabled' : '' %>>
+                                                            Shipped <%= oSt !== 'SHIPPED' && !allowedBulkNext.includes('SHIPPED') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="OUT_FOR_DELIVERY" <%= oSt === 'OUT_FOR_DELIVERY' ? 'selected' : '' %> <%= oRank > 2.5 ? 'disabled' : '' %>>
-                                                            Out for Delivery <%= oRank > 2.5 ? '(Locked)' : '' %>
+                                                        <option value="OUT_FOR_DELIVERY" <%= oSt === 'OUT_FOR_DELIVERY' ? 'selected' : '' %> <%= oSt !== 'OUT_FOR_DELIVERY' && !allowedBulkNext.includes('OUT_FOR_DELIVERY') ? 'disabled' : '' %>>
+                                                            Out for Delivery <%= oSt !== 'OUT_FOR_DELIVERY' && !allowedBulkNext.includes('OUT_FOR_DELIVERY') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="DELIVERED" <%= oSt === 'DELIVERED' ? 'selected' : '' %>>
-                                                            Delivered
+                                                        <option value="DELIVERED" <%= oSt === 'DELIVERED' ? 'selected' : '' %> <%= oSt !== 'DELIVERED' && !allowedBulkNext.includes('DELIVERED') ? 'disabled' : '' %>>
+                                                            Delivered <%= oSt !== 'DELIVERED' && !allowedBulkNext.includes('DELIVERED') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="CANCELLED" <%= oSt === 'CANCELLED' ? 'selected' : '' %> <%= oRank >= 2 ? 'disabled' : '' %>>
-                                                            Cancelled <%= oRank >= 2 ? '(Shipped)' : '' %>
+                                                        <option value="CANCELLED" <%= oSt === 'CANCELLED' ? 'selected' : '' %> <%= oSt !== 'CANCELLED' && !allowedBulkNext.includes('CANCELLED') ? 'disabled' : '' %>>
+                                                            Cancelled <%= oSt !== 'CANCELLED' && !allowedBulkNext.includes('CANCELLED') ? (['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(oSt) ? '(Shipped)' : '(Locked)') : '' %>
                                                         </option>
                                                         <option value="RETURN_REQUESTED" <%= oSt === 'RETURN_REQUESTED' ? 'selected' : '' %> disabled>
                                                             Return Requested
                                                         </option>
-                                                        <option value="RETURNED" <%= oSt === 'RETURNED' ? 'selected' : '' %> <%= oSt !== 'RETURN_REQUESTED' && oSt !== 'RETURN_APPROVED' && oSt !== 'RETURNED' ? 'disabled' : '' %>>
-                                                            Returned
+                                                        <option value="RETURNED" <%= oSt === 'RETURNED' ? 'selected' : '' %> disabled>
+                                                            Returned (Use Review)
                                                         </option>
                                                     </select>
                                                     <!-- Color dot overlay -->

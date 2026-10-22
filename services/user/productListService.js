@@ -1,25 +1,30 @@
 const mongoose = require("mongoose");
 const Product = require("../../models/product/productModel");
 const Category = require("../../models/product/categoryModel");
+const escapeRegex = require("../../utils/escapeRegex");
 
-
-const parseListingQuery = (query) => {
-    const search = (query.search || "").trim();
+const parseListingQuery = (query = {}) => {
+    const search = typeof query.search === "string" ? query.search.trim() : "";
     
-    const categories = (Array.isArray(query.category) ? query.category : (query.category || "").split(","))
-        .map(s => s.trim()).filter(Boolean);
-        
-    const sizes = (Array.isArray(query.size) ? query.size : (query.size || "").split(","))
-        .map(s => s.trim()).filter(Boolean);
-        
-    const colors = (Array.isArray(query.color) ? query.color : (query.color || "").split(","))
-        .map(s => s.trim()).filter(Boolean);
+    const parseArrayOrCsv = (val) => {
+        if (Array.isArray(val)) {
+            return val.map(s => (typeof s === "string" ? s.trim() : "")).filter(Boolean);
+        }
+        if (typeof val === "string") {
+            return val.split(",").map(s => s.trim()).filter(Boolean);
+        }
+        return [];
+    };
+
+    const categories = parseArrayOrCsv(query.category);
+    const sizes = parseArrayOrCsv(query.size);
+    const colors = parseArrayOrCsv(query.color);
 
     const minPrice = query.minPrice !== undefined && query.minPrice !== "" ? Number(query.minPrice) : undefined;
     const maxPrice = query.maxPrice !== undefined && query.maxPrice !== "" ? Number(query.maxPrice) : undefined;
 
     const allowedSorts = ["price-asc", "price-desc", "name-asc", "name-desc"];
-    const sort = allowedSorts.includes(query.sort) ? query.sort : "newest";
+    const sort = typeof query.sort === "string" && allowedSorts.includes(query.sort) ? query.sort : "newest";
 
     let page = Number(query.page);
     if (!Number.isInteger(page) || page < 1) page = 1;
@@ -44,20 +49,19 @@ const SORT_STAGES = {
     "newest": { createdAt: -1 },
 };
 
-
 const listProducts = async (filters, limit = 12) => {
     const { search, categories, sizes, colors, minPrice, maxPrice, sort, page } = filters;
     const skip = (page - 1) * limit;
 
     const pipeline = [];
 
- 
     // Only show ACTIVE, non-deleted products to users
     const baseMatch = { isDeleted: false, status: "ACTIVE" };
     if (search) {
+        const escaped = escapeRegex(search);
         baseMatch.$or = [
-            { name: { $regex: search, $options: "i" } },
-            { description: { $regex: search, $options: "i" } },
+            { name: { $regex: escaped, $options: "i" } },
+            { description: { $regex: escaped, $options: "i" } },
         ];
     }
     pipeline.push({ $match: baseMatch });
@@ -121,6 +125,35 @@ const listProducts = async (filters, limit = 12) => {
     // A product with zero active variants has no price info — exclude it.
     pipeline.push({ $match: { "activeVariants.0": { $exists: true } } });
 
+    const now = new Date();
+    pipeline.push({
+        $lookup: {
+            from: "offers",
+            let: { pId: "$_id", cId: "$categoryId" },
+            pipeline: [
+                {
+                    $match: {
+                        $expr: {
+                            $and: [
+                                { $eq: ["$isActive", true] },
+                                { $lte: ["$startDate", now] },
+                                { $gte: ["$endDate", now] },
+                                {
+                                    $or: [
+                                        { $and: [{ $eq: ["$offerType", "PRODUCT"] }, { $eq: ["$productId", "$$pId"] }] },
+                                        { $and: [{ $eq: ["$offerType", "CATEGORY"] }, { $eq: ["$categoryId", "$$cId"] }] },
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                },
+                { $sort: { discountValue: -1 } },
+            ],
+            as: "matchedOffers",
+        },
+    });
+
     pipeline.push({
         $addFields: {
             displayPrice: {
@@ -128,13 +161,58 @@ const listProducts = async (filters, limit = 12) => {
                     $map: {
                         input: "$activeVariants",
                         as: "v",
-                        in: { $ifNull: ["$$v.salePrice", "$$v.regularPrice"] },
+                        in: {
+                            $let: {
+                                vars: {
+                                    basePrice: { $ifNull: ["$$v.salePrice", "$$v.regularPrice"] },
+                                    regPrice: "$$v.regularPrice",
+                                    bestOffer: { $arrayElemAt: ["$matchedOffers", 0] },
+                                },
+                                in: {
+                                    $cond: [
+                                        { $gt: [{ $size: "$matchedOffers" }, 0] },
+                                        {
+                                            $cond: [
+                                                { $eq: ["$$bestOffer.discountType", "PERCENTAGE"] },
+                                                {
+                                                    $min: [
+                                                        "$$basePrice",
+                                                        {
+                                                            $subtract: [
+                                                                "$$regPrice",
+                                                                {
+                                                                    $cond: [
+                                                                        { $ne: ["$$bestOffer.maxDiscount", null] },
+                                                                        {
+                                                                            $min: [
+                                                                                { $divide: [{ $multiply: ["$$regPrice", "$$bestOffer.discountValue"] }, 100] },
+                                                                                "$$bestOffer.maxDiscount"
+                                                                            ]
+                                                                        },
+                                                                        { $divide: [{ $multiply: ["$$regPrice", "$$bestOffer.discountValue"] }, 100] }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    $min: [
+                                                        "$$basePrice",
+                                                        { $max: [0, { $subtract: ["$$regPrice", "$$bestOffer.discountValue"] }] }
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "$$basePrice"
+                                    ]
+                                }
+                            }
+                        },
                     },
                 },
             },
             totalStock: { $sum: "$activeVariants.stock" },
-            // isUnavailable is now always false since we filtered INACTIVE products above.
-            // We keep the field for template compatibility.
             isUnavailable: false,
         },
     });
@@ -169,8 +247,26 @@ const listProducts = async (filters, limit = 12) => {
     });
 
     const [result] = await Product.aggregate(pipeline);
-    const products = result.data;
+    const rawProducts = result.data || [];
     const totalProducts = result.totalCount[0] ? result.totalCount[0].count : 0;
+
+    const { getAuthoritativeItemPrice } = require("../common/pricingService");
+    const Variant = require("../../models/product/variantModel");
+
+    const products = await Promise.all(
+        rawProducts.map(async (p) => {
+            if (p.defaultVariantId) {
+                const v = await Variant.findById(p.defaultVariantId);
+                if (v) {
+                    const priceInfo = await getAuthoritativeItemPrice(v, p);
+                    if (priceInfo.displayPrice > 0) {
+                        return { ...p, displayPrice: priceInfo.displayPrice };
+                    }
+                }
+            }
+            return p;
+        })
+    );
 
     return {
         products,

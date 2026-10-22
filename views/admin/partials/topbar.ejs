@@ -56,11 +56,23 @@
             opacity:0;transform:translateX(24px);
             transition:opacity 0.25s ease,transform 0.25s ease;
         `;
-        el.innerHTML = `
-            <span style="font-size:15px;line-height:1;">${c.icon}</span>
-            <span style="flex:1;">${message}</span>
-            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;padding:0;margin-left:4px;opacity:0.7;">&times;</button>
-        `;
+        const iconSpan = document.createElement('span');
+        iconSpan.style.cssText = 'font-size:15px;line-height:1;';
+        iconSpan.textContent = c.icon;
+
+        const msgSpan = document.createElement('span');
+        msgSpan.style.cssText = 'flex:1;';
+        msgSpan.textContent = String(message != null ? message : '');
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = 'background:none;border:none;color:#fff;cursor:pointer;font-size:16px;padding:0;margin-left:4px;opacity:0.7;';
+        closeBtn.onclick = () => el.remove();
+
+        el.appendChild(iconSpan);
+        el.appendChild(msgSpan);
+        el.appendChild(closeBtn);
         container.appendChild(el);
 
         requestAnimationFrame(() => {

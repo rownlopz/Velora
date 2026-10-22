@@ -34,6 +34,18 @@ const variantSchema = new mongoose.Schema(
             min: 0,
         },
 
+        cancellationRestockKeys: {
+            type: [String],
+            default: [],
+            select: false,
+        },
+
+        returnRestockKeys: {
+            type: [String],
+            default: [],
+            select: false,
+        },
+
         regularPrice: {
             type: Number,
             required: true,

@@ -1,16 +1,20 @@
 const User = require("../../models/user/userModel");
 const bcrypt = require("bcrypt");
+const escapeRegex = require("../../utils/escapeRegex");
 
 const getUsers = async ({ search = "", status = "all", page = 1, limit = 10 }) => {
-    const skip = (page - 1) * limit;
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.max(1, parseInt(limit, 10) || 10);
+    const skip = (safePage - 1) * safeLimit;
 
     const query = { role: "USER" };
 
-    if (search.trim()) {
+    if (typeof search === "string" && search.trim()) {
+        const escaped = escapeRegex(search.trim());
         query.$or = [
-            { fullName: { $regex: search.trim(), $options: "i" } },
-            { email: { $regex: search.trim(), $options: "i" } },
-            { phone: { $regex: search.trim(), $options: "i" } }
+            { fullName: { $regex: escaped, $options: "i" } },
+            { email: { $regex: escaped, $options: "i" } },
+            { phone: { $regex: escaped, $options: "i" } }
         ];
     }
 

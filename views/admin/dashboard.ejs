@@ -3,231 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VELORA Admin - Customer Management</title>
+    <title><%= typeof title !== 'undefined' ? title : 'Dashboard | VELORA Admin' %></title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body class="bg-[#FAFAF8]">
 
     <div class="flex">
 
-        <%- include("partials/sidebar", { active: "customers" }) %>
+        <%- include("partials/sidebar", { active: "dashboard" }) %>
 
         <div class="flex-1 min-w-0">
 
             <%- include("partials/topbar") %>
 
-            <main class="px-8 py-8 max-w-6xl">
-
-                <p class="text-xs text-gray-400 uppercase tracking-widest mb-2">Admin / Customers</p>
+            <main class="px-8 py-8 max-w-7xl">
 
                 <div class="flex justify-between items-start mb-8">
                     <div>
-                        <h1 class="text-3xl font-bold text-gray-900">Customer Management</h1>
-                        <p class="text-gray-500 mt-1">
-                            Manage and view details of your <%= totalUsers.toLocaleString('en-IN') %> registered users.
-                        </p>
+                        <p class="text-xs text-gray-400 uppercase tracking-widest mb-1">Admin / Analytics</p>
+                        <h1 class="text-3xl font-bold text-gray-900">Store Dashboard</h1>
+                        <p class="text-gray-500 mt-1">Real-time performance overview, sales trends, and top performers.</p>
                     </div>
 
-                    <span class="h-11 px-5 leading-[2.6rem] bg-black text-white rounded-lg text-sm font-semibold cursor-not-allowed" title="Coming soon">
-                        + Add Customer
-                    </span>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center bg-white border border-gray-200 rounded-lg p-1">
+                            <a href="/admin/dashboard?filterType=monthly" class="px-3 py-1.5 text-xs font-semibold rounded-md transition <%= typeof filterType === 'undefined' || filterType === 'monthly' ? 'bg-black text-white' : 'text-gray-600 hover:text-black' %>">Monthly</a>
+                            <a href="/admin/dashboard?filterType=yearly" class="px-3 py-1.5 text-xs font-semibold rounded-md transition <%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'bg-black text-white' : 'text-gray-600 hover:text-black' %>">Yearly</a>
+                        </div>
+                        <a href="/admin/sales-report" class="h-10 px-4 inline-flex items-center gap-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                            View Sales Report
+                        </a>
+                    </div>
                 </div>
 
-                <!-- Search + Filter -->
-                <div class="bg-white p-6 rounded-xl border border-gray-200 mb-6">
+                <!-- Charts Section -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
 
-                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Search Customers</p>
-
-                    <form action="/admin/dashboard" method="GET" class="flex flex-wrap gap-3 items-end">
-
-                        <div class="flex-1 min-w-[240px]">
-                            <input
-                                type="text"
-                                name="search"
-                                value="<%= search %>"
-                                placeholder="Search by name, email or phone..."
-                                class="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black"
-                            >
-                        </div>
-
-                        <div>
-                            <label class="block text-[11px] text-gray-400 uppercase tracking-widest mb-1">Status</label>
-                            <select
-                                name="status"
-                                class="border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black bg-white"
-                            >
-                                <option value="all" <%= status === "all" ? "selected" : "" %>>All Users</option>
-                                <option value="active" <%= status === "active" ? "selected" : "" %>>Active</option>
-                                <option value="blocked" <%= status === "blocked" ? "selected" : "" %>>Blocked</option>
-                            </select>
-                        </div>
-
-                        <button type="submit" class="h-[46px] px-6 bg-black text-white rounded-lg">
-                            Search
-                        </button>
-
-                        <% if (search || status !== "all") { %>
-                            <a href="/admin/dashboard" class="h-[46px] px-6 border border-gray-300 rounded-lg flex items-center text-sm">
-                                Clear All
-                            </a>
-                        <% } %>
-
-                    </form>
-                </div>
-
-                <!-- Customer Table -->
-                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-
-                    <table class="w-full text-sm">
-                        <thead class="bg-gray-50 border-b border-gray-200">
-                            <tr class="text-left text-xs text-gray-400 uppercase tracking-widest">
-                                <th class="px-6 py-4 font-medium">Customer</th>
-                                <th class="px-6 py-4 font-medium">Email</th>
-                                <th class="px-6 py-4 font-medium">Join Date</th>
-                                <th class="px-6 py-4 font-medium text-right">Actions</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            <% if (users.length === 0) { %>
-                                <tr>
-                                    <td colspan="4" class="text-center py-14 text-gray-400">
-                                        No customers found
-                                    </td>
-                                </tr>
-                            <% } %>
-
-                            <% users.forEach(user => {
-                                const shortId = "VEL-" + String(user._id).slice(-4).toUpperCase();
-                                const joinDate = new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-                            %>
-                                <tr class="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-
-                                    <td class="px-6 py-4">
-                                        <div class="flex items-center gap-3">
-                                            <div class="relative shrink-0">
-                                                <div class="w-9 h-9 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xs font-semibold text-gray-500">
-                                                    <% if (user.avatar) { %>
-                                                        <img src="<%= user.avatar %>" alt="" class="w-full h-full object-cover">
-                                                    <% } else { %>
-                                                        <%= user.fullName ? user.fullName.charAt(0).toUpperCase() : "U" %>
-                                                    <% } %>
-                                                </div>
-                                                <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white <%= user.isActive ? 'bg-emerald-500' : 'bg-red-500' %>" title="<%= user.isActive ? 'Active' : 'Blocked' %>"></span>
-                                            </div>
-                                            <div>
-                                                <p class="font-semibold text-gray-900"><%= user.fullName %></p>
-                                                <p class="text-xs text-gray-400">ID: <%= shortId %></p>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td class="px-6 py-4 text-gray-600"><%= user.email %></td>
-
-                                    <td class="px-6 py-4 text-gray-600"><%= joinDate %></td>
-
-                                    <td class="px-6 py-4">
-                                        <div class="flex justify-end">
-                                            <form
-                                                id="toggleUserForm-<%= user._id %>"
-                                                action="/admin/users/<%= user._id %>/toggle-status"
-                                                method="POST"
-                                            >
-                                                <input type="hidden" name="search" value="<%= search %>">
-                                                <input type="hidden" name="status" value="<%= status %>">
-                                                <input type="hidden" name="page" value="<%= currentPage %>">
-
-                                                <% const actionVerb = user.isActive ? 'block' : 'unblock'; %>
-                                                <% const actionLabel = user.isActive ? 'Block' : 'Unblock'; %>
-                                                <button
-                                                    type="button"
-                                                    onclick="adminConfirm('Are you sure you want to <%= actionVerb %> this user?', document.getElementById('toggleUserForm-<%= user._id %>'), '<%= actionLabel %>')"
-                                                    class="px-4 py-2 border rounded-lg text-xs font-semibold
-                                                        <%= user.isActive
-                                                            ? 'border-red-200 text-red-600 hover:bg-red-50'
-                                                            : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' %>"
-                                                >
-                                                    <%= actionLabel %>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
-
-                                </tr>
-                            <% }) %>
-                        </tbody>
-                    </table>
-
-                    <!-- Pagination footer -->
-                    <div class="flex justify-between items-center px-6 py-4 border-t border-gray-200 text-sm text-gray-500">
-                        <p>Showing page <%= currentPage %> of <%= totalPages || 1 %> &mdash; <%= totalUsers.toLocaleString('en-IN') %> customers</p>
-
-                        <% if (totalPages > 1) { %>
-                            <div class="flex gap-2">
-                                <% for (let i = 1; i <= totalPages; i++) { %>
-                                    <a
-                                        href="/admin/dashboard?page=<%= i %>&search=<%= encodeURIComponent(search) %>&status=<%= encodeURIComponent(status) %>"
-                                        class="w-8 h-8 flex items-center justify-center rounded-lg border text-xs
-                                            <%= currentPage === i ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-200' %>"
-                                    >
-                                        <%= i %>
-                                    </a>
-                                <% } %>
+                    <!-- Revenue Trend Chart -->
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 class="font-semibold text-gray-900 text-base"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Monthly' %> Revenue Trend</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">Recognized revenue over <%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'trailing 5 years' : 'past 12 months' %></p>
                             </div>
-                        <% } %>
+                            <span class="text-xs px-2.5 py-1 bg-gray-100 rounded-md font-medium text-gray-600"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Trailing 12M' %></span>
+                        </div>
+                        <div class="h-64">
+                            <canvas id="revenueChart"></canvas>
+                        </div>
                     </div>
+
+                    <!-- Order Volume Chart -->
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 class="font-semibold text-gray-900 text-base"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Monthly' %> Order Volume</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">Total successful orders placed</p>
+                            </div>
+                            <span class="text-xs px-2.5 py-1 bg-gray-100 rounded-md font-medium text-gray-600"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Trailing 12M' %></span>
+                        </div>
+                        <div class="h-64">
+                            <canvas id="ordersChart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Top 10 Best Sellers Section -->
+                <div class="space-y-8">
+
+                    <!-- Top 10 Products -->
+                    <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                        <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-gray-900 text-lg">Top 10 Best-Selling Products</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">Ranked by net units sold (excluding cancelled and returned units)</p>
+                            </div>
+                            <span class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-md uppercase tracking-wider">Top Performers</span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 border-b border-gray-200 text-xs text-gray-400 uppercase tracking-widest text-left">
+                                    <tr>
+                                        <th class="px-6 py-4 font-medium">Rank</th>
+                                        <th class="px-6 py-4 font-medium">Product</th>
+                                        <th class="px-6 py-4 font-medium text-right">Units Sold</th>
+                                        <th class="px-6 py-4 font-medium text-right">Net Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <% if (!topProducts || topProducts.length === 0) { %>
+                                        <tr>
+                                            <td colspan="4" class="px-6 py-10 text-center text-gray-400 text-sm">No sales data recorded yet.</td>
+                                        </tr>
+                                    <% } else { %>
+                                        <% topProducts.forEach((p, idx) => { %>
+                                            <tr class="hover:bg-gray-50 transition">
+                                                <td class="px-6 py-4 font-semibold text-gray-400">#<%= idx + 1 %></td>
+                                                <td class="px-6 py-4">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden shrink-0">
+                                                            <% if (p.thumbnail) { %>
+                                                                <img src="<%= p.thumbnail %>" alt="" class="w-full h-full object-cover">
+                                                            <% } %>
+                                                        </div>
+                                                        <div>
+                                                            <p class="font-medium text-gray-900"><%= p.productName %></p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td class="px-6 py-4 text-right font-semibold text-gray-900"><%= p.totalUnitsSold.toLocaleString('en-IN') %></td>
+                                                <td class="px-6 py-4 text-right text-gray-700">&#8377;<%= p.totalRevenue.toLocaleString('en-IN') %></td>
+                                            </tr>
+                                        <% }) %>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Top 10 Categories and Brands Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                        <!-- Top 10 Categories -->
+                        <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                            <div class="p-6 border-b border-gray-100">
+                                <h3 class="font-bold text-gray-900 text-base">Top 10 Categories</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">By net units sold</p>
+                            </div>
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 border-b border-gray-200 text-xs text-gray-400 uppercase tracking-widest text-left">
+                                    <tr>
+                                        <th class="px-6 py-3 font-medium">Rank</th>
+                                        <th class="px-6 py-3 font-medium">Category</th>
+                                        <th class="px-6 py-3 font-medium text-right">Units</th>
+                                        <th class="px-6 py-3 font-medium text-right">Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <% if (!topCategories || topCategories.length === 0) { %>
+                                        <tr>
+                                            <td colspan="4" class="px-6 py-8 text-center text-gray-400 text-sm">No category sales yet.</td>
+                                        </tr>
+                                    <% } else { %>
+                                        <% topCategories.forEach((c, idx) => { %>
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-6 py-3.5 text-gray-400 font-semibold">#<%= idx + 1 %></td>
+                                                <td class="px-6 py-3.5 font-medium text-gray-900"><%= c.categoryName %></td>
+                                                <td class="px-6 py-3.5 text-right font-semibold text-gray-900"><%= c.totalUnitsSold.toLocaleString('en-IN') %></td>
+                                                <td class="px-6 py-3.5 text-right text-gray-700">&#8377;<%= c.totalRevenue.toLocaleString('en-IN') %></td>
+                                            </tr>
+                                        <% }) %>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Top 10 Brands -->
+                        <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                            <div class="p-6 border-b border-gray-100">
+                                <h3 class="font-bold text-gray-900 text-base">Top 10 Brands</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">By net units sold</p>
+                            </div>
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 border-b border-gray-200 text-xs text-gray-400 uppercase tracking-widest text-left">
+                                    <tr>
+                                        <th class="px-6 py-3 font-medium">Rank</th>
+                                        <th class="px-6 py-3 font-medium">Brand</th>
+                                        <th class="px-6 py-3 font-medium text-right">Units</th>
+                                        <th class="px-6 py-3 font-medium text-right">Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <% if (!topBrands || topBrands.length === 0) { %>
+                                        <tr>
+                                            <td colspan="4" class="px-6 py-8 text-center text-gray-400 text-sm">No brand sales yet.</td>
+                                        </tr>
+                                    <% } else { %>
+                                        <% topBrands.forEach((b, idx) => { %>
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-6 py-3.5 text-gray-400 font-semibold">#<%= idx + 1 %></td>
+                                                <td class="px-6 py-3.5 font-medium text-gray-900"><%= b.brandName %></td>
+                                                <td class="px-6 py-3.5 text-right font-semibold text-gray-900"><%= b.totalUnitsSold.toLocaleString('en-IN') %></td>
+                                                <td class="px-6 py-3.5 text-right text-gray-700">&#8377;<%= b.totalRevenue.toLocaleString('en-IN') %></td>
+                                            </tr>
+                                        <% }) %>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+
                 </div>
 
             </main>
+
         </div>
+
     </div>
 
+    <!-- Chart.js Initialization -->
+    <script>
+        const monthlyData = <%- JSON.stringify(monthlyStats || []).replace(/</g, '\\u003c') %>;
+
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const labels = monthlyData.map(d => d._id && d._id.month ? `${months[d._id.month - 1]} ${d._id.year}` : `${d._id.year}`);
+        const revenueValues = monthlyData.map(d => d.totalRevenue);
+        const orderValues = monthlyData.map(d => d.orderCount);
+
+        // Revenue Chart
+        new Chart(document.getElementById('revenueChart'), {
+            type: 'line',
+            data: {
+                labels: labels.length ? labels : ["No Data"],
+                datasets: [{
+                    label: 'Revenue (₹)',
+                    data: revenueValues.length ? revenueValues : [0],
+                    borderColor: '#000000',
+                    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) { return '₹' + value.toLocaleString('en-IN'); }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Orders Chart
+        new Chart(document.getElementById('ordersChart'), {
+            type: 'bar',
+            data: {
+                labels: labels.length ? labels : ["No Data"],
+                datasets: [{
+                    label: 'Orders',
+                    data: orderValues.length ? orderValues : [0],
+                    backgroundColor: '#1F2937',
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>
-
-<!-- Custom Confirm Modal for Admin -->
-<div id="adminConfirmOverlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
-    <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
-        <p id="adminConfirmMsg" class="text-sm text-gray-800 font-medium mb-6 leading-6"></p>
-        <div class="flex justify-end gap-3">
-            <button id="adminConfirmCancel" type="button"
-                class="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
-                Cancel
-            </button>
-            <button id="adminConfirmOk" type="button"
-                class="px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
-                Confirm
-            </button>
-        </div>
-    </div>
-</div>
-
-<script>
-    let _adminConfirmTarget = null;
-
-    function adminConfirm(message, formEl, okLabel) {
-        document.getElementById('adminConfirmMsg').textContent = message;
-        document.getElementById('adminConfirmOk').textContent = okLabel || 'Confirm';
-        _adminConfirmTarget = formEl;
-        document.getElementById('adminConfirmOverlay').classList.remove('hidden');
-    }
-
-    document.getElementById('adminConfirmCancel').addEventListener('click', () => {
-        document.getElementById('adminConfirmOverlay').classList.add('hidden');
-        _adminConfirmTarget = null;
-    });
-
-    document.getElementById('adminConfirmOk').addEventListener('click', () => {
-        document.getElementById('adminConfirmOverlay').classList.add('hidden');
-        if (_adminConfirmTarget) _adminConfirmTarget.submit();
-        _adminConfirmTarget = null;
-    });
-
-    document.getElementById('adminConfirmOverlay').addEventListener('click', function (e) {
-        if (e.target === this) {
-            this.classList.add('hidden');
-            _adminConfirmTarget = null;
-        }
-    });
-</script>

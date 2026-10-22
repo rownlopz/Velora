@@ -58,6 +58,17 @@ const loadWishlist = async (req, res) => {
         const page = parseInt(req.query.page, 10) || 1;
         const limit = 8;
         const result = await getWishlistDetails(req.session.userId, { page, limit });
+        const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
+        if (isAjax) {
+            return res.json({
+                success: true,
+                items: result.items,
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+            });
+        }
+
         res.render("user/wishlist", {
             title: "My Wishlist",
             items: result.items,

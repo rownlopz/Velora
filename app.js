@@ -11,11 +11,17 @@ const userRoute = require("./routes/user/userRoute");
 
 const passport = require("./config/passport");
 
+const { startReservationExpiryCron } = require("./services/user/orderService");
+
 const app = express();
 //Connect Database
 connectDB();
 //Middleware
-app.use(express.json());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 app.use(express.urlencoded({ extended: true}));
 app.use(passport.initialize());
 
@@ -35,4 +41,5 @@ app.use("/", userRoute);
 
 app.listen(process.env.PORT || 3000, () =>{
     console.log(`Server running on http://localhost:${ process.env.PORT || 3000}`);
+    startReservationExpiryCron();
 })

@@ -112,6 +112,19 @@
                 </p>
             </div>
 
+            <div>
+                <label class="auth-label">
+                    Referral Code <span class="text-xs text-gray-400 font-normal">(Optional &ndash; Get &#8377;50 Welcome Bonus)</span>
+                </label>
+                <input
+                    type="text"
+                    name="referralCode"
+                    id="referralCode"
+                    value="<%= typeof referralCode !== 'undefined' ? referralCode : '' %>"
+                    class="auth-input uppercase tracking-wider"
+                    placeholder="Enter referral code (e.g. VEL123456)">
+            </div>
+
             <button type="submit" class="primary-btn">
                 CREATE ACCOUNT
             </button>

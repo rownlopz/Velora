@@ -68,7 +68,7 @@
                             <% } %>
 
                             <p class="text-sm mt-2 font-medium">
-                                <% if (item.currentPrice) { %>
+                                <% if (item.currentPrice != null) { %>
                                     &#8377;<%= item.currentPrice.toLocaleString('en-IN') %>
                                 <% } else { %>
                                     &mdash;
@@ -133,6 +133,48 @@
 
 <script>
 (function () {
+    function handleWishlistCountTransition(newGlobalCount, message, type = 'info') {
+        if (typeof updateNavWishlistCount === 'function') {
+            updateNavWishlistCount(newGlobalCount);
+        }
+        const countEl = document.getElementById('wishlistCountText');
+        if (countEl) {
+            countEl.textContent = newGlobalCount + ' item' + (newGlobalCount === 1 ? '' : 's');
+        }
+
+        if (newGlobalCount === 0) {
+            const grid = document.getElementById('wishlistGrid');
+            if (grid) grid.remove();
+            const pagination = document.querySelector('main .flex.justify-center.items-center');
+            if (pagination) pagination.remove();
+            const emptyContainer = document.getElementById('emptyWishlist');
+            if (!emptyContainer) {
+                const mainContainer = document.querySelector('main .max-w-screen-lg');
+                if (mainContainer) {
+                    mainContainer.insertAdjacentHTML('beforeend', `
+                        <div id="emptyWishlist" class="text-center py-24">
+                            <svg class="mx-auto mb-5 text-gray-300" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg>
+                            <p class="text-gray-400">Your wishlist is empty.</p>
+                            <a href="/products" class="inline-block mt-4 text-sm font-semibold underline">Browse Collections</a>
+                        </div>`);
+                }
+            }
+            if (typeof showToast === 'function') showToast(message, type);
+            return;
+        }
+
+        const limit = 8;
+        const maxPages = Math.ceil(newGlobalCount / limit) || 1;
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentPage = parseInt(urlParams.get('page'), 10) || 1;
+
+        if (currentPage > maxPages) {
+            window.location.href = `/wishlist?page=${maxPages}`;
+        } else {
+            window.location.reload();
+        }
+    }
+
     // ---- Remove from wishlist ----
     document.addEventListener('click', async function (e) {
         const btn = e.target.closest('.remove-wishlist-btn');
@@ -147,13 +189,14 @@
             });
             const data = await res.json();
             if (data.success) {
-                window.location.reload();
+                const count = typeof data.wishlistCount === 'number' ? data.wishlistCount : 0;
+                handleWishlistCountTransition(count, 'Removed from wishlist', 'info');
             } else {
-                showToast(data.message || 'Unable to remove item', 'error');
+                if (typeof showToast === 'function') showToast(data.message || 'Unable to remove item', 'error');
                 btn.disabled = false;   
             }
         } catch (err) {
-            showToast('Something went wrong', 'error');
+            if (typeof showToast === 'function') showToast('Something went wrong', 'error');
             btn.disabled = false;
         }
     });
@@ -190,15 +233,27 @@
             }
 
             if (data.success) {
-                window.location.reload();
+                if (typeof updateNavCartCount === 'function' && typeof data.cartCount === 'number') {
+                    updateNavCartCount(data.cartCount);
+                }
+                // Fetch updated wishlist count
+                const countRes = await fetch('/wishlist', {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const countData = await countRes.json().catch(() => ({}));
+                const remainingCount = typeof countData.totalItems === 'number'
+                    ? countData.totalItems
+                    : Math.max(0, (parseInt(document.getElementById('wishlistCountText')?.textContent, 10) || 1) - 1);
+
+                handleWishlistCountTransition(remainingCount, 'Moved to cart', 'success');
             } else {
-                showToast(data.message || 'Unable to add to cart', 'error');
+                if (typeof showToast === 'function') showToast(data.message || 'Unable to add to cart', 'error');
                 btn.disabled = false;
                 btn.textContent = originalText;
             }
 
         } catch (err) {
-            showToast('Something went wrong', 'error');
+            if (typeof showToast === 'function') showToast('Something went wrong', 'error');
             btn.disabled = false;
             btn.textContent = originalText;
         }

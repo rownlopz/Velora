@@ -278,6 +278,7 @@
                                                     type="number"
                                                     id="stock-input-<%= variant._id %>"
                                                     value="<%= stock %>"
+                                                    data-current-stock="<%= stock %>"
                                                     min="0"
                                                     class="w-16 h-8 text-center border border-neutral-300 rounded-lg text-xs font-bold font-mono text-neutral-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition"
                                                 >
@@ -316,11 +317,11 @@
 
                                         <!-- Price -->
                                         <td class="px-6 py-4 whitespace-nowrap font-mono text-xs">
-                                            <% if (variant.salePrice) { %>
-                                                <span class="font-bold text-neutral-900">&#8377;<%= variant.salePrice.toLocaleString('en-IN') %></span>
-                                                <span class="text-neutral-400 line-through text-[11px] ml-1">&#8377;<%= variant.regularPrice.toLocaleString('en-IN') %></span>
+                                            <% if (variant.salePrice != null && variant.salePrice !== '') { %>
+                                                <span class="font-bold text-neutral-900">&#8377;<%= Number(variant.salePrice).toLocaleString('en-IN') %></span>
+                                                <span class="text-neutral-400 line-through text-[11px] ml-1">&#8377;<%= Number(variant.regularPrice).toLocaleString('en-IN') %></span>
                                             <% } else { %>
-                                                <span class="font-bold text-neutral-900">&#8377;<%= variant.regularPrice.toLocaleString('en-IN') %></span>
+                                                <span class="font-bold text-neutral-900">&#8377;<%= Number(variant.regularPrice).toLocaleString('en-IN') %></span>
                                             <% } %>
                                         </td>
 
@@ -397,12 +398,15 @@
     <script>
         async function saveStock(variantId) {
             const input = document.getElementById(`stock-input-${variantId}`);
-            const newStock = parseInt(input.value, 10);
+            const val = (input.value || '').trim();
 
-            if (isNaN(newStock) || newStock < 0) {
-                if (window.showAdminToast) showAdminToast('Please enter a valid stock quantity (>= 0)', 'error');
+            if (!/^\d+$/.test(val)) {
+                if (window.showAdminToast) showAdminToast('Please enter a valid whole stock quantity (>= 0)', 'error');
                 return;
             }
+
+            const newStock = parseInt(val, 10);
+            const expectedStock = input.dataset.currentStock !== undefined ? parseInt(input.dataset.currentStock, 10) : undefined;
 
             try {
                 const res = await fetch(`/admin/inventory/${variantId}/update`, {
@@ -411,15 +415,22 @@
                         'Content-Type': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: JSON.stringify({ stock: newStock })
+                    body: JSON.stringify({ stock: newStock, expectedStock })
                 });
 
                 const data = await res.json();
                 if (data.success) {
+                    input.value = data.newStock;
+                    input.dataset.currentStock = data.newStock;
                     if (window.showAdminToast) showAdminToast(data.message, 'success');
                     updateBadgeDOM(variantId, data.newStock);
                 } else {
                     if (window.showAdminToast) showAdminToast(data.message || 'Error updating stock', 'error');
+                    if (data.currentStock !== undefined) {
+                        input.value = data.currentStock;
+                        input.dataset.currentStock = data.currentStock;
+                        updateBadgeDOM(variantId, data.currentStock);
+                    }
                 }
             } catch (err) {
                 if (window.showAdminToast) showAdminToast('Network error while saving stock', 'error');
@@ -429,7 +440,10 @@
         async function quickAdjustStock(variantId, delta) {
             const input = document.getElementById(`stock-input-${variantId}`);
             const currentStock = parseInt(input.value, 10) || 0;
-            if (currentStock + delta < 0) return;
+            if (currentStock + delta < 0) {
+                if (window.showAdminToast) showAdminToast('Cannot reduce stock below zero', 'warning');
+                return;
+            }
 
             try {
                 const res = await fetch(`/admin/inventory/${variantId}/adjust`, {
@@ -444,6 +458,7 @@
                 const data = await res.json();
                 if (data.success) {
                     input.value = data.newStock;
+                    input.dataset.currentStock = data.newStock;
                     if (window.showAdminToast) showAdminToast(data.message, 'info');
                     updateBadgeDOM(variantId, data.newStock);
                 } else {

@@ -1,21 +1,23 @@
 const Category = require("../../models/product/categoryModel");
 const slugify = require("../../utils/slugify");
-
+const escapeRegex = require("../../utils/escapeRegex");
 
 const getCategories = async ({ search = "", page = 1, limit = 10 }) => {
-    const skip = (page - 1) * limit;
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.max(1, parseInt(limit, 10) || 10);
+    const skip = (safePage - 1) * safeLimit;
 
     const query = { isDeleted: false };
 
-    if (search.trim()) {
-        query.name = { $regex: search.trim(), $options: "i" };
+    if (typeof search === "string" && search.trim()) {
+        query.name = { $regex: escapeRegex(search.trim()), $options: "i" };
     }
 
     const [categories, totalCategories] = await Promise.all([
         Category.find(query)
             .sort({ createdAt: -1 }) // newest first
             .skip(skip)
-            .limit(limit),
+            .limit(safeLimit),
 
         Category.countDocuments(query),
     ]);
@@ -23,8 +25,8 @@ const getCategories = async ({ search = "", page = 1, limit = 10 }) => {
     return {
         categories,
         totalCategories,
-        totalPages: Math.ceil(totalCategories / limit),
-        currentPage: page,
+        totalPages: Math.ceil(totalCategories / safeLimit),
+        currentPage: safePage,
     };
 };
 
@@ -36,12 +38,12 @@ const getCategoryById = async (categoryId) => {
     return { success: true, category };
 };
 
-
 const findDuplicate = async (name, slug, excludeId = null) => {
+    const cleanName = typeof name === "string" ? name.trim() : "";
     const query = {
         isDeleted: false,
         $or: [
-            { name: { $regex: `^${name.trim()}$`, $options: "i" } },
+            { name: { $regex: `^${escapeRegex(cleanName)}$`, $options: "i" } },
             { slug },
         ],
     };

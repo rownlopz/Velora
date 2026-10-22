@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VELORA Admin - Customer Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-[#FAFAF8]">
+
+    <div class="flex">
+
+        <%- include("partials/sidebar", { active: "customers" }) %>
+
+        <div class="flex-1 min-w-0">
+
+            <%- include("partials/topbar") %>
+
+            <main class="px-8 py-8 max-w-6xl">
+
+                <p class="text-xs text-gray-400 uppercase tracking-widest mb-2">Admin / Customers</p>
+
+                <div class="flex justify-between items-start mb-8">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900">Customer Management</h1>
+                        <p class="text-gray-500 mt-1">
+                            Manage and view details of your <%= totalUsers.toLocaleString('en-IN') %> registered users.
+                        </p>
+                    </div>
+
+                    <span class="h-11 px-5 leading-[2.6rem] bg-black text-white rounded-lg text-sm font-semibold cursor-not-allowed" title="Coming soon">
+                        + Add Customer
+                    </span>
+                </div>
+
+                <!-- Search + Filter -->
+                <div class="bg-white p-6 rounded-xl border border-gray-200 mb-6">
+
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Search Customers</p>
+
+                    <form action="/admin/customers" method="GET" class="flex flex-wrap gap-3 items-end">
+
+                        <div class="flex-1 min-w-[240px]">
+                            <input
+                                type="text"
+                                name="search"
+                                value="<%= search %>"
+                                placeholder="Search by name, email or phone..."
+                                class="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] text-gray-400 uppercase tracking-widest mb-1">Status</label>
+                            <select
+                                name="status"
+                                class="border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-black bg-white"
+                            >
+                                <option value="all" <%= status === "all" ? "selected" : "" %>>All Users</option>
+                                <option value="active" <%= status === "active" ? "selected" : "" %>>Active</option>
+                                <option value="blocked" <%= status === "blocked" ? "selected" : "" %>>Blocked</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="h-[46px] px-6 bg-black text-white rounded-lg">
+                            Search
+                        </button>
+
+                        <% if (search || status !== "all") { %>
+                            <a href="/admin/customers" class="h-[46px] px-6 border border-gray-300 rounded-lg flex items-center text-sm">
+                                Clear All
+                            </a>
+                        <% } %>
+
+                    </form>
+                </div>
+
+                <!-- Customer Table -->
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr class="text-left text-xs text-gray-400 uppercase tracking-widest">
+                                <th class="px-6 py-4 font-medium">Customer</th>
+                                <th class="px-6 py-4 font-medium">Email</th>
+                                <th class="px-6 py-4 font-medium">Join Date</th>
+                                <th class="px-6 py-4 font-medium text-right">Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            <% if (users.length === 0) { %>
+                                <tr>
+                                    <td colspan="4" class="text-center py-14 text-gray-400">
+                                        No customers found
+                                    </td>
+                                </tr>
+                            <% } %>
+
+                            <% users.forEach(user => {
+                                const shortId = "VEL-" + String(user._id).slice(-4).toUpperCase();
+                                const joinDate = new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                            %>
+                                <tr class="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="relative shrink-0">
+                                                <div class="w-9 h-9 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xs font-semibold text-gray-500">
+                                                    <% if (user.avatar) { %>
+                                                        <img src="<%= user.avatar %>" alt="" class="w-full h-full object-cover">
+                                                    <% } else { %>
+                                                        <%= user.fullName ? user.fullName.charAt(0).toUpperCase() : "U" %>
+                                                    <% } %>
+                                                </div>
+                                                <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white <%= user.isActive ? 'bg-emerald-500' : 'bg-red-500' %>" title="<%= user.isActive ? 'Active' : 'Blocked' %>"></span>
+                                            </div>
+                                            <div>
+                                                <p class="font-semibold text-gray-900"><%= user.fullName %></p>
+                                                <p class="text-xs text-gray-400">ID: <%= shortId %></p>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td class="px-6 py-4 text-gray-600"><%= user.email %></td>
+
+                                    <td class="px-6 py-4 text-gray-600"><%= joinDate %></td>
+
+                                    <td class="px-6 py-4">
+                                        <div class="flex justify-end">
+                                            <form
+                                                id="toggleUserForm-<%= user._id %>"
+                                                action="/admin/users/<%= user._id %>/toggle-status"
+                                                method="POST"
+                                            >
+                                                <input type="hidden" name="search" value="<%= search %>">
+                                                <input type="hidden" name="status" value="<%= status %>">
+                                                <input type="hidden" name="page" value="<%= currentPage %>">
+
+                                                <% const actionVerb = user.isActive ? 'block' : 'unblock'; %>
+                                                <% const actionLabel = user.isActive ? 'Block' : 'Unblock'; %>
+                                                <button
+                                                    type="button"
+                                                    onclick="adminConfirm('Are you sure you want to <%= actionVerb %> this user?', document.getElementById('toggleUserForm-<%= user._id %>'), '<%= actionLabel %>')"
+                                                    class="px-4 py-2 border rounded-lg text-xs font-semibold
+                                                        <%= user.isActive
+                                                            ? 'border-red-200 text-red-600 hover:bg-red-50'
+                                                            : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' %>"
+                                                >
+                                                    <%= actionLabel %>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+
+                    <!-- Pagination footer -->
+                    <div class="flex justify-between items-center px-6 py-4 border-t border-gray-200 text-sm text-gray-500">
+                        <p>Showing page <%= currentPage %> of <%= totalPages || 1 %> &mdash; <%= totalUsers.toLocaleString('en-IN') %> customers</p>
+
+                        <% if (totalPages > 1) { %>
+                            <div class="flex gap-2">
+                                <% for (let i = 1; i <= totalPages; i++) { %>
+                                    <a
+                                        href="/admin/dashboard?page=<%= i %>&search=<%= encodeURIComponent(search) %>&status=<%= encodeURIComponent(status) %>"
+                                        class="w-8 h-8 flex items-center justify-center rounded-lg border text-xs
+                                            <%= currentPage === i ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-200' %>"
+                                    >
+                                        <%= i %>
+                                    </a>
+                                <% } %>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+</body>
+</html>
+
+<!-- Custom Confirm Modal for Admin -->
+<div id="adminConfirmOverlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+        <p id="adminConfirmMsg" class="text-sm text-gray-800 font-medium mb-6 leading-6"></p>
+        <div class="flex justify-end gap-3">
+            <button id="adminConfirmCancel" type="button"
+                class="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition">
+                Cancel
+            </button>
+            <button id="adminConfirmOk" type="button"
+                class="px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                Confirm
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let _adminConfirmTarget = null;
+
+    function adminConfirm(message, formEl, okLabel) {
+        document.getElementById('adminConfirmMsg').textContent = message;
+        document.getElementById('adminConfirmOk').textContent = okLabel || 'Confirm';
+        _adminConfirmTarget = formEl;
+        document.getElementById('adminConfirmOverlay').classList.remove('hidden');
+    }
+
+    document.getElementById('adminConfirmCancel').addEventListener('click', () => {
+        document.getElementById('adminConfirmOverlay').classList.add('hidden');
+        _adminConfirmTarget = null;
+    });
+
+    document.getElementById('adminConfirmOk').addEventListener('click', () => {
+        document.getElementById('adminConfirmOverlay').classList.add('hidden');
+        if (_adminConfirmTarget) _adminConfirmTarget.submit();
+        _adminConfirmTarget = null;
+    });
+
+    document.getElementById('adminConfirmOverlay').addEventListener('click', function (e) {
+        if (e.target === this) {
+            this.classList.add('hidden');
+            _adminConfirmTarget = null;
+        }
+    });
+</script>

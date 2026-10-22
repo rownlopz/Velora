@@ -17,10 +17,12 @@ const getOrCreateCart = async (userId) => {
 };
 
 
-const getCartDetails = async (userId) => {
+const { calculateCartPricing } = require("../common/pricingService");
+
+const getCartDetails = async (userId, customCouponCode = null) => {
     const cart = await getOrCreateCart(userId);
 
-    const items = await Promise.all(
+    const rawItems = await Promise.all(
         cart.items.map(async (item) => {
             const variant = await Variant.findById(item.variantId);
             const product = variant ? await Product.findById(variant.productId) : null;
@@ -30,18 +32,13 @@ const getCartDetails = async (userId) => {
             }
 
             const categoryUnlisted = !category || category.isDeleted === true || category.isActive === false;
-            // A product is truly unavailable (unlisted) if it is INACTIVE, hard-deleted, missing, or category is unlisted
             const productUnlisted = !product || product.isDeleted || product.status !== "ACTIVE" || categoryUnlisted;
-            // A variant is unavailable if it no longer exists or is deactivated.
             const variantUnavailable = !variant || !variant.isActive;
 
-            const isAvailable = !!( 
+            const isAvailable = !!(
                 !productUnlisted && !variantUnavailable &&
                 variant.stock > 0
             );
-
-            const currentPrice = variant ? (variant.salePrice || variant.regularPrice) : item.priceSnapshot;
-            const cappedQuantity = variant ? Math.min(item.quantity, variant.stock) : item.quantity;
 
             return {
                 variantId: item.variantId,
@@ -50,37 +47,111 @@ const getCartDetails = async (userId) => {
                 product,
                 variant,
                 isAvailable,
-                productUnlisted,   // true = product was unlisted by admin
-                currentPrice,
-                lineTotal: isAvailable ? currentPrice * cappedQuantity : 0,
+                productUnlisted,
                 stockExceeded: variant ? item.quantity > variant.stock : false,
             };
         })
     );
 
     // Auto-remove unlisted/deleted products from the cart document.
-    const unlistedVariantIds = items
-        .filter(i => i.productUnlisted || !i.variant)
-        .map(i => i.variantId.toString());
+    const unlistedVariantIds = rawItems
+        .filter((i) => i.productUnlisted || !i.variant)
+        .map((i) => i.variantId.toString());
 
     if (unlistedVariantIds.length > 0) {
         await Cart.updateOne(
             { userId },
-            { $pull: { items: { variantId: { $in: unlistedVariantIds.map(id => require("mongoose").Types.ObjectId.createFromHexString(id)) } } } }
+            { $pull: { items: { variantId: { $in: unlistedVariantIds.map((id) => require("mongoose").Types.ObjectId.createFromHexString(id)) } } } }
         );
     }
 
-    // Only return items that are NOT unlisted products.
-    const visibleItems = items.filter(i => !i.productUnlisted && i.variant);
+    const visibleItems = rawItems.filter((i) => !i.productUnlisted && i.variant);
 
-    const subtotal = visibleItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    // Determine coupon code to evaluate
+    const effectiveCouponCode = customCouponCode !== null
+        ? customCouponCode
+        : (cart.appliedCoupon && cart.appliedCoupon.code ? cart.appliedCoupon.code : "");
+
+    const pricing = await calculateCartPricing(visibleItems, effectiveCouponCode, userId);
+
+    // If a saved coupon is no longer valid, automatically clear it from cart
+    if (cart.appliedCoupon && cart.appliedCoupon.code && pricing.couponError) {
+        await Cart.updateOne({ userId }, { $set: { appliedCoupon: null } });
+    } else if (pricing.appliedCoupon && (!cart.appliedCoupon || cart.appliedCoupon.code !== pricing.appliedCoupon.code)) {
+        await Cart.updateOne(
+            { userId },
+            {
+                $set: {
+                    appliedCoupon: {
+                        couponId: pricing.appliedCoupon.couponId,
+                        code: pricing.appliedCoupon.code,
+                        discountType: pricing.appliedCoupon.discountType,
+                        discountValue: pricing.appliedCoupon.discountValue,
+                        discountAmount: pricing.couponDiscount,
+                        appliedAt: new Date(),
+                    },
+                },
+            }
+        );
+    }
+
+    // Merge pricing outputs back into items
+    const enrichedItems = pricing.items.map((pi, idx) => {
+        const raw = visibleItems[idx];
+        return {
+            ...raw,
+            ...pi,
+            currentPrice: pi.effectiveUnitPrice,
+            lineTotal: raw.isAvailable ? pi.lineTotal : 0,
+        };
+    });
+
     const hasUnavailableItems = visibleItems.some((i) => !i.isAvailable || i.stockExceeded);
 
     return {
-        items: visibleItems,
-        subtotal,
+        items: enrichedItems,
+        rawSubtotal: pricing.rawSubtotal,
+        subtotal: pricing.subtotal,
+        totalOfferDiscount: pricing.totalOfferDiscount,
+        couponDiscount: pricing.couponDiscount,
+        appliedCoupon: pricing.appliedCoupon,
+        couponError: pricing.couponError,
+        shippingFee: pricing.shippingFee,
+        shippingThreshold: pricing.shippingThreshold,
+        totalAmount: pricing.totalAmount,
         hasUnavailableItems,
         removedUnlistedCount: unlistedVariantIds.length,
+    };
+};
+
+const applyCoupon = async (userId, couponCode) => {
+    if (!couponCode || typeof couponCode !== "string" || !couponCode.trim()) {
+        return { success: false, message: "Please enter a coupon code." };
+    }
+
+    const details = await getCartDetails(userId, couponCode.trim());
+    if (details.couponError) {
+        return { success: false, message: details.couponError };
+    }
+
+    if (!details.appliedCoupon) {
+        return { success: false, message: "Coupon could not be applied." };
+    }
+
+    return {
+        success: true,
+        message: `Coupon "${details.appliedCoupon.code}" applied successfully! You saved ₹${details.couponDiscount.toLocaleString("en-IN")}.`,
+        details,
+    };
+};
+
+const removeCoupon = async (userId) => {
+    await Cart.updateOne({ userId }, { $set: { appliedCoupon: null } });
+    const details = await getCartDetails(userId, "");
+    return {
+        success: true,
+        message: "Coupon removed.",
+        details,
     };
 };
 
@@ -93,6 +164,7 @@ const addToCart = async (userId, variantId, requestedQuantity = 1) => {
     }
 
     const { variant } = availability;
+    const effectivePrice = variant.salePrice != null ? variant.salePrice : variant.regularPrice;
     const cart = await getOrCreateCart(userId);
 
     const existingItem = cart.items.find((item) => item.variantId.toString() === variantId.toString());
@@ -105,12 +177,12 @@ const addToCart = async (userId, variantId, requestedQuantity = 1) => {
 
     if (existingItem) {
         existingItem.quantity = newQuantity;
-        existingItem.priceSnapshot = variant.salePrice || variant.regularPrice;
+        existingItem.priceSnapshot = effectivePrice;
     } else {
         cart.items.push({
             variantId,
             quantity: newQuantity,
-            priceSnapshot: variant.salePrice || variant.regularPrice,
+            priceSnapshot: effectivePrice,
         });
     }
 
@@ -168,5 +240,7 @@ module.exports = {
     addToCart,
     changeQuantity,
     removeFromCart,
+    applyCoupon,
+    removeCoupon,
     MAX_QUANTITY_PER_ITEM,
 };

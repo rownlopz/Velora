@@ -3,6 +3,7 @@ const Wishlist = require("../../models/user/wishlistModel");
 const Variant = require("../../models/product/variantModel");
 const Product = require("../../models/product/productModel");
 const Category = require("../../models/product/categoryModel");
+const { getAuthoritativeItemPrice } = require("../common/pricingService");
 
 const getOrCreateWishlist = async (userId) => {
     let wishlist = await Wishlist.findOne({ userId });
@@ -95,9 +96,11 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8 } = {}) => {
             const isInStock = !!(variant && variant.stock > 0);
             const isAvailable = isListed;
 
-            const currentPrice = variant
-                ? (variant.salePrice != null ? variant.salePrice : variant.regularPrice)
-                : null;
+            let currentPrice = null;
+            if (variant) {
+                const authoritative = await getAuthoritativeItemPrice(variant, product);
+                currentPrice = authoritative.effectiveUnitPrice;
+            }
 
             return {
                 variantId: item.variantId,

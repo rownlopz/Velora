@@ -43,6 +43,7 @@
             <a href="/products" class="<%= typeof active !== 'undefined' && active === 'products' ? 'font-semibold border-b-2 border-black pb-1' : 'text-gray-600 hover:text-black transition' %>">Collections</a>
             <a href="/categories" class="<%= typeof active !== 'undefined' && active === 'categories' ? 'font-semibold border-b-2 border-black pb-1' : 'text-gray-600 hover:text-black transition' %>">Categories</a>
             <a href="/orders" class="<%= typeof active !== 'undefined' && active === 'orders' ? 'font-semibold border-b-2 border-black pb-1' : 'text-gray-600 hover:text-black transition' %>">Orders</a>
+            <a href="/wallet" class="<%= typeof active !== 'undefined' && active === 'wallet' ? 'font-semibold border-b-2 border-black pb-1' : 'text-gray-600 hover:text-black transition' %>">Wallet</a>
             <span class="text-gray-400 cursor-not-allowed" title="Coming soon">Contact</span>
         </nav>
 
@@ -119,11 +120,23 @@
             opacity:0;transform:translateX(24px);
             transition:opacity 0.25s ease,transform 0.25s ease;
         `;
-        toast.innerHTML = `
-            <span style="font-size:15px;line-height:1;">${c.icon}</span>
-            <span style="flex:1;">${message}</span>
-            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;padding:0;margin-left:4px;opacity:0.7;">&times;</button>
-        `;
+        const iconSpan = document.createElement('span');
+        iconSpan.style.cssText = 'font-size:15px;line-height:1;';
+        iconSpan.textContent = c.icon;
+
+        const msgSpan = document.createElement('span');
+        msgSpan.style.cssText = 'flex:1;';
+        msgSpan.textContent = String(message != null ? message : '');
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = 'background:none;border:none;color:#fff;cursor:pointer;font-size:16px;padding:0;margin-left:4px;opacity:0.7;';
+        closeBtn.onclick = () => toast.remove();
+
+        toast.appendChild(iconSpan);
+        toast.appendChild(msgSpan);
+        toast.appendChild(closeBtn);
         container.appendChild(toast);
 
         // Animate in

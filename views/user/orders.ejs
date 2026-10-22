@@ -175,8 +175,19 @@
                                 <!-- Total Amount -->
                                 <div>
                                     <span class="block text-[11px] font-medium uppercase tracking-wider text-neutral-400 mb-0.5">Total Amount</span>
+                                    <% const hasAdjustment = (order.pricing?.currentPayable != null && order.pricing.currentPayable < order.pricing.totalAmount) || (order.pricing?.walletRefundIssued > 0); %>
                                     <div class="flex items-center gap-1.5 flex-wrap">
-                                        <span class="text-xs sm:text-sm font-bold text-neutral-900">&#8377;<%= order.pricing.totalAmount.toLocaleString('en-IN') %></span>
+                                        <% if (hasAdjustment) { %>
+                                            <span class="text-xs sm:text-sm font-bold text-neutral-900">&#8377;<%= (order.pricing.currentPayable != null ? order.pricing.currentPayable : order.pricing.totalAmount).toLocaleString('en-IN') %></span>
+                                            <span class="text-[10px] text-neutral-400 line-through">&#8377;<%= order.pricing.totalAmount.toLocaleString('en-IN') %></span>
+                                            <% if (order.pricing?.walletRefundIssued > 0) { %>
+                                                <span class="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">
+                                                    &#8377;<%= order.pricing.walletRefundIssued.toLocaleString('en-IN') %> refunded
+                                                </span>
+                                            <% } %>
+                                        <% } else { %>
+                                            <span class="text-xs sm:text-sm font-bold text-neutral-900">&#8377;<%= order.pricing.totalAmount.toLocaleString('en-IN') %></span>
+                                        <% } %>
                                         <span class="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-neutral-200/70 text-neutral-700">
                                             <%= order.paymentMethod %>
                                         </span>

@@ -25,9 +25,13 @@
             // before the shopper picks anything — the cheapest in-stock one.
             const inStockVariants = variants.filter(v => v.stock > 0);
             const defaultVariant = (inStockVariants.length ? inStockVariants : variants)
-                .slice().sort((a, b) => (a.salePrice || a.regularPrice) - (b.salePrice || b.regularPrice))[0] || {};
+                .slice().sort((a, b) => {
+                    const priceA = a.salePrice != null ? a.salePrice : a.regularPrice;
+                    const priceB = b.salePrice != null ? b.salePrice : b.regularPrice;
+                    return priceA - priceB;
+                })[0] || {};
 
-            const discountPercent = defaultVariant && defaultVariant.salePrice
+            const discountPercent = defaultVariant && defaultVariant.salePrice != null && defaultVariant.salePrice < defaultVariant.regularPrice
                 ? Math.round(((defaultVariant.regularPrice - defaultVariant.salePrice) / defaultVariant.regularPrice) * 100)
                 : 0;
         %>
@@ -290,13 +294,17 @@
                     // price, and availability are re-verified server-side when the
                     // form is submitted, never trusted from this data alone.
                     const VARIANTS = <%- JSON.stringify(variants.map(v => ({
-                        _id: v._id, color: v.color, size: v.size, stock: v.stock,
-                        regularPrice: v.regularPrice, salePrice: v.salePrice,
-                    }))) %>;
+                        _id: String(v._id),
+                        color: v.color || '',
+                        size: v.size || '',
+                        stock: Number(v.stock),
+                        regularPrice: Number(v.regularPrice),
+                        salePrice: v.salePrice != null ? Number(v.salePrice) : null,
+                    }))).replace(/</g, '\\u003c') %>;
 
-                    let selectedColor = "<%= defaultVariant.color %>";
-                    let selectedSize = "<%= defaultVariant.size %>";
-                    let userWishlistIds = <%- JSON.stringify(typeof wishlistVariantIds !== 'undefined' ? wishlistVariantIds : []) %>;
+                    let selectedColor = <%- JSON.stringify(defaultVariant && defaultVariant.color != null ? defaultVariant.color : '').replace(/</g, '\\u003c') %>;
+                    let selectedSize = <%- JSON.stringify(defaultVariant && defaultVariant.size != null ? defaultVariant.size : '').replace(/</g, '\\u003c') %>;
+                    let userWishlistIds = <%- JSON.stringify(typeof wishlistVariantIds !== 'undefined' ? wishlistVariantIds : []).replace(/</g, '\\u003c') %>;
                     // Server-rendered flag — never re-enables Add-to-Cart for unavailable products.
                     const IS_UNAVAILABLE = <%= typeof isUnavailable !== 'undefined' && isUnavailable ? 'true' : 'false' %>;
 

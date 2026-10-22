@@ -33,6 +33,61 @@ const runStartupMigrations = async () => {
                 );
             }
         }
+
+        // Deduplicate product slugs before ensuring unique index on products.slug
+        const productCollection = db.collection("products");
+        if (productCollection) {
+            const duplicateSlugGroups = await productCollection
+                .aggregate([
+                    { $match: { slug: { $exists: true, $ne: null } } },
+                    { $group: { _id: "$slug", count: { $sum: 1 }, docs: { $push: { _id: "$_id", name: "$name", slug: "$slug" } } } },
+                    { $match: { count: { $gt: 1 } } }
+                ])
+                .toArray();
+
+            for (const group of duplicateSlugGroups) {
+                // Keep the first document, rename subsequent duplicates without deleting any
+                const docs = group.docs;
+                for (let i = 1; i < docs.length; i++) {
+                    const doc = docs[i];
+                    let counter = i + 1;
+                    let newSlug = `${group._id}-${counter}`;
+                    while (await productCollection.findOne({ slug: newSlug })) {
+                        counter++;
+                        newSlug = `${group._id}-${counter}`;
+                    }
+                    await productCollection.updateOne(
+                        { _id: doc._id },
+                        { $set: { slug: newSlug } }
+                    );
+                }
+            }
+
+            // Fill missing or blank slugs safely
+            const missingSlugProducts = await productCollection
+                .find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: "" }] })
+                .toArray();
+
+            for (const doc of missingSlugProducts) {
+                const base = (doc.name || "product").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "product";
+                let candidate = base;
+                let c = 1;
+                while (await productCollection.findOne({ slug: candidate })) {
+                    c++;
+                    candidate = `${base}-${c}`;
+                }
+                await productCollection.updateOne(
+                    { _id: doc._id },
+                    { $set: { slug: candidate } }
+                );
+            }
+
+            try {
+                await productCollection.createIndex({ slug: 1 }, { unique: true });
+            } catch (idxErr) {
+                console.error("Product slug index creation warning:", idxErr.message);
+            }
+        }
     } catch (err) {
         console.error("Startup migration warning:", err.message);
     }

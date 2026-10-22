@@ -153,8 +153,21 @@
                                 <% order.items.forEach((item) => { %>
                                     <%
                                         const itmSt = (item.status || 'PENDING').toUpperCase();
-                                        const itmRank = { PENDING: 0, PLACED: 0, ACTIVE: 0, PROCESSING: 1, SHIPPED: 2, DELIVERED: 3 }[itmSt] ?? -1;
-                                        const itmIsTerminal = ["CANCELLED", "RETURNED", "RETURN_REJECTED"].includes(itmSt);
+                                        const allowedItemNext = {
+                                            PENDING: ['PROCESSING', 'CANCELLED'],
+                                            PLACED: ['PROCESSING', 'CANCELLED'],
+                                            ACTIVE: ['PROCESSING', 'CANCELLED'],
+                                            PROCESSING: ['SHIPPED', 'CANCELLED'],
+                                            SHIPPED: ['OUT_FOR_DELIVERY', 'DELIVERED'],
+                                            OUT_FOR_DELIVERY: ['DELIVERED'],
+                                            DELIVERED: [],
+                                            CANCELLED: [],
+                                            RETURN_REQUESTED: [],
+                                            RETURN_APPROVED: [],
+                                            RETURN_REJECTED: [],
+                                            RETURNED: []
+                                        }[itmSt] || [];
+                                        const itmIsTerminal = ["CANCELLED", "RETURNED", "RETURN_REJECTED", "DELIVERED"].includes(itmSt) || allowedItemNext.length === 0;
 
                                         let itmBadgeClass = "bg-neutral-100 text-neutral-700 border-neutral-200";
                                         if (itmSt === 'PENDING' || itmSt === 'PLACED' || itmSt === 'ACTIVE') itmBadgeClass = "bg-blue-50 text-blue-700 border-blue-200";
@@ -277,30 +290,30 @@
                                                 </div>
 
                                             <!-- Standard Order Process Item Status Dropdown -->
-                                            <% } else if (!itmIsTerminal) { %>
+                                            <% } else if (!itmIsTerminal && allowedItemNext.length > 0) { %>
                                                 <form action="/admin/orders/<%= order._id %>/items/<%= item._id %>/status" method="POST" class="flex flex-wrap items-center gap-2.5 w-full">
                                                     <span class="text-neutral-500 font-medium text-[11px] uppercase tracking-wider">Item Status:</span>
                                                     <select
                                                         name="status"
                                                         class="h-8 border border-neutral-300 rounded-lg px-2.5 text-xs font-semibold bg-white text-neutral-800 outline-none focus:border-black"
                                                     >
-                                                        <option value="PENDING" <%= ['PENDING', 'PLACED', 'ACTIVE'].includes(itmSt) ? 'selected' : '' %> <%= itmRank > 0 ? 'disabled' : '' %>>
-                                                            Pending <%= itmRank > 0 ? '(Locked)' : '' %>
+                                                        <option value="PENDING" <%= ['PENDING', 'PLACED', 'ACTIVE'].includes(itmSt) ? 'selected' : '' %> <%= !['PENDING', 'PLACED', 'ACTIVE'].includes(itmSt) ? 'disabled' : '' %>>
+                                                            Pending <%= !['PENDING', 'PLACED', 'ACTIVE'].includes(itmSt) ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="PROCESSING" <%= itmSt === 'PROCESSING' ? 'selected' : '' %> <%= itmRank > 1 ? 'disabled' : '' %>>
-                                                            Processing <%= itmRank > 1 ? '(Locked)' : '' %>
+                                                        <option value="PROCESSING" <%= itmSt === 'PROCESSING' ? 'selected' : '' %> <%= itmSt !== 'PROCESSING' && !allowedItemNext.includes('PROCESSING') ? 'disabled' : '' %>>
+                                                            Processing <%= itmSt !== 'PROCESSING' && !allowedItemNext.includes('PROCESSING') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="SHIPPED" <%= itmSt === 'SHIPPED' ? 'selected' : '' %> <%= itmRank > 2 ? 'disabled' : '' %>>
-                                                            Shipped <%= itmRank > 2 ? '(Locked)' : '' %>
+                                                        <option value="SHIPPED" <%= itmSt === 'SHIPPED' ? 'selected' : '' %> <%= itmSt !== 'SHIPPED' && !allowedItemNext.includes('SHIPPED') ? 'disabled' : '' %>>
+                                                            Shipped <%= itmSt !== 'SHIPPED' && !allowedItemNext.includes('SHIPPED') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="OUT_FOR_DELIVERY" <%= itmSt === 'OUT_FOR_DELIVERY' ? 'selected' : '' %> <%= itmRank > 2.5 ? 'disabled' : '' %>>
-                                                            Out for Delivery <%= itmRank > 2.5 ? '(Locked)' : '' %>
+                                                        <option value="OUT_FOR_DELIVERY" <%= itmSt === 'OUT_FOR_DELIVERY' ? 'selected' : '' %> <%= itmSt !== 'OUT_FOR_DELIVERY' && !allowedItemNext.includes('OUT_FOR_DELIVERY') ? 'disabled' : '' %>>
+                                                            Out for Delivery <%= itmSt !== 'OUT_FOR_DELIVERY' && !allowedItemNext.includes('OUT_FOR_DELIVERY') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="DELIVERED" <%= itmSt === 'DELIVERED' ? 'selected' : '' %>>
-                                                            Delivered
+                                                        <option value="DELIVERED" <%= itmSt === 'DELIVERED' ? 'selected' : '' %> <%= itmSt !== 'DELIVERED' && !allowedItemNext.includes('DELIVERED') ? 'disabled' : '' %>>
+                                                            Delivered <%= itmSt !== 'DELIVERED' && !allowedItemNext.includes('DELIVERED') ? '(Locked)' : '' %>
                                                         </option>
-                                                        <option value="CANCELLED" <%= itmSt === 'CANCELLED' ? 'selected' : '' %> <%= itmRank >= 2 ? 'disabled' : '' %>>
-                                                            Cancel Item <%= itmRank >= 2 ? '(Shipped)' : '' %>
+                                                        <option value="CANCELLED" <%= itmSt === 'CANCELLED' ? 'selected' : '' %> <%= itmSt !== 'CANCELLED' && !allowedItemNext.includes('CANCELLED') ? 'disabled' : '' %>>
+                                                            Cancel Item <%= itmSt !== 'CANCELLED' && !allowedItemNext.includes('CANCELLED') ? (['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(itmSt) ? '(Shipped)' : '(Locked)') : '' %>
                                                         </option>
                                                     </select>
                                                     <input
@@ -481,9 +494,35 @@
                                     </div>
                                 <% } %>
 
-                                <div class="pt-3 border-t border-neutral-100 flex justify-between items-center text-sm font-bold text-neutral-900">
-                                    <span>Total Amount</span>
-                                    <span class="font-mono text-base">&#8377;<%= (order.pricing?.totalAmount != null ? order.pricing.totalAmount : 0).toLocaleString('en-IN') %></span>
+                                <div class="pt-2 border-t border-neutral-100 flex justify-between items-center text-neutral-600">
+                                    <span>Original Order Total</span>
+                                    <span class="font-mono text-neutral-900">&#8377;<%= ((order.pricing?.originalTotalAmount != null ? order.pricing.originalTotalAmount : order.pricing?.totalAmount) || 0).toLocaleString('en-IN') %></span>
+                                </div>
+
+                                <% if (order.pricing?.cancellationDeduction && order.pricing.cancellationDeduction > 0) { %>
+                                    <div class="flex justify-between items-center text-rose-600">
+                                        <span>Cancelled Items Deduction</span>
+                                        <span class="font-mono">-&#8377;<%= order.pricing.cancellationDeduction.toLocaleString('en-IN') %></span>
+                                    </div>
+                                <% } %>
+
+                                <% if (order.pricing?.returnCredit && order.pricing.returnCredit > 0) { %>
+                                    <div class="flex justify-between items-center text-orange-600">
+                                        <span>Return Adjustment</span>
+                                        <span class="font-mono">-&#8377;<%= order.pricing.returnCredit.toLocaleString('en-IN') %></span>
+                                    </div>
+                                <% } %>
+
+                                <% if (order.pricing?.walletRefundIssued && order.pricing.walletRefundIssued > 0) { %>
+                                    <div class="flex justify-between items-center text-emerald-700 font-semibold">
+                                        <span>Wallet Refund Issued</span>
+                                        <span class="font-mono">&#8377;<%= order.pricing.walletRefundIssued.toLocaleString('en-IN') %></span>
+                                    </div>
+                                <% } %>
+
+                                <div class="pt-3 border-t border-neutral-200 flex justify-between items-center text-sm font-bold text-neutral-900">
+                                    <span>Current Payable</span>
+                                    <span class="font-mono text-base text-neutral-900">&#8377;<%= ((order.pricing?.currentPayable != null ? order.pricing.currentPayable : order.pricing?.totalAmount) || 0).toLocaleString('en-IN') %></span>
                                 </div>
                             </div>
 

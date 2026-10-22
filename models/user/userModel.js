@@ -70,6 +70,17 @@ const userSchema = new mongoose.Schema(
             sparse: true,
         },
 
+        referralRewardClawedBack: {
+            type: Boolean,
+            default: false,
+        },
+
+        defaultAddressId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Address",
+            default: null,
+        },
+
         lastLogin: {
             type: Date,
             default: null,

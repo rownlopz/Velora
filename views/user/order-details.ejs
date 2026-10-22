@@ -313,7 +313,18 @@
                                 <span>&#8377;<%= displayedShip.toLocaleString('en-IN') %></span>
                             <% } %>
                         </div>
-                        <% if (order.pricing?.discount > 0) { %>
+                        <% if (order.pricing?.offerDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700">
+                                <span>Offer Savings</span>
+                                <span>-&#8377;<%= order.pricing.offerDiscount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <% if (order.pricing?.couponDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700 font-medium">
+                                <span>Coupon (<%= order.pricing.couponCode || 'Code' %>)</span>
+                                <span>-&#8377;<%= order.pricing.couponDiscount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } else if (order.pricing?.discount > 0 && !(order.pricing?.offerDiscount > 0)) { %>
                             <div class="flex justify-between text-emerald-700">
                                 <span>Discount</span>
                                 <span>-&#8377;<%= order.pricing.discount.toLocaleString('en-IN') %></span>
@@ -331,13 +342,27 @@
                                 <span>-&#8377;<%= order.pricing.returnCredit.toLocaleString('en-IN') %></span>
                             </div>
                         <% } %>
+                        <% if (order.pricing?.walletRefundIssued > 0) { %>
+                            <div class="flex justify-between text-emerald-700 font-medium">
+                                <span>Wallet Refund Credited</span>
+                                <span>&#8377;<%= order.pricing.walletRefundIssued.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
                         <div class="border-t border-gray-200 pt-3 flex justify-between text-sm font-semibold text-gray-900">
                             <span><%= (order.pricing?.cancellationDeduction > 0 || order.pricing?.returnCredit > 0) ? 'Payable Total' : 'Total' %></span>
                             <span>&#8377;<%= ((order.pricing?.currentPayable !== undefined ? order.pricing.currentPayable : order.pricing?.totalAmount) || 0).toLocaleString('en-IN') %></span>
                         </div>
                     </div>
 
-                    <% if (order.paymentMethod === 'COD' && order.orderStatus !== 'CANCELLED') { %>
+                    <% if (order.paymentMethod === 'ONLINE' && (order.paymentStatus === 'FAILED' || order.paymentStatus === 'PENDING') && order.orderStatus !== 'CANCELLED') { %>
+                        <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                            <p class="text-xs font-semibold text-amber-900">Payment Incomplete</p>
+                            <p class="text-[11px] text-amber-700 leading-relaxed">Your order is preserved, but payment is pending or failed.</p>
+                            <a href="/orders/<%= order._id %>/payment-failed" class="inline-block w-full text-center py-2 bg-black text-white text-xs font-semibold uppercase tracking-wider rounded-lg hover:bg-gray-800 transition">
+                                Complete Payment
+                            </a>
+                        </div>
+                    <% } else if (order.paymentMethod === 'COD' && order.orderStatus !== 'CANCELLED') { %>
                         <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl text-[11px] text-stone-700">
                             <strong>Cash on Delivery:</strong> Please prepare exact cash of &#8377;<%= ((order.pricing?.currentPayable !== undefined ? order.pricing.currentPayable : order.pricing?.totalAmount) || 0).toLocaleString('en-IN') %> at the time of delivery.
                         </div>

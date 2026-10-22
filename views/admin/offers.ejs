@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= typeof title !== 'undefined' ? title : 'Offer Management | VELORA Admin' %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#FAFAF8]">
+
+    <div class="flex">
+
+        <%- include("partials/sidebar", { active: "offers" }) %>
+
+        <div class="flex-1 min-w-0">
+
+            <%- include("partials/topbar") %>
+
+            <main class="px-8 py-8 max-w-7xl">
+
+                <div class="flex justify-between items-start mb-8">
+                    <div>
+                        <p class="text-xs text-gray-400 uppercase tracking-widest mb-1">Admin / Marketing</p>
+                        <h1 class="text-3xl font-bold text-gray-900">Offer Management</h1>
+                        <p class="text-gray-500 mt-1">Configure product-specific and category-wide promotional offers.</p>
+                    </div>
+
+                    <button type="button" onclick="openOfferModal()"
+                        class="h-11 px-5 inline-flex items-center gap-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                        + Create Offer
+                    </button>
+                </div>
+
+                <!-- Filter & Search Bar -->
+                <div class="bg-white p-5 rounded-xl border border-gray-200 mb-6 flex flex-wrap items-center justify-between gap-4">
+                    <form action="/admin/offers" method="GET" class="flex flex-wrap items-center gap-3">
+                        <input type="text" name="search" value="<%= search %>" placeholder="Search by offer title..."
+                            class="h-10 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none w-64">
+
+                        <select name="offerType" class="h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                            <option value="ALL" <%= offerType === 'ALL' ? 'selected' : '' %>>All Types</option>
+                            <option value="PRODUCT" <%= offerType === 'PRODUCT' ? 'selected' : '' %>>Product Offers</option>
+                            <option value="CATEGORY" <%= offerType === 'CATEGORY' ? 'selected' : '' %>>Category Offers</option>
+                        </select>
+
+                        <select name="status" class="h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                            <option value="ALL" <%= status === 'ALL' ? 'selected' : '' %>>All Statuses</option>
+                            <option value="ACTIVE" <%= status === 'ACTIVE' ? 'selected' : '' %>>Active</option>
+                            <option value="INACTIVE" <%= status === 'INACTIVE' ? 'selected' : '' %>>Inactive</option>
+                        </select>
+
+                        <button type="submit" class="h-10 px-5 bg-black text-white rounded-lg text-sm font-semibold">Filter</button>
+                        <% if (search || offerType !== 'ALL' || status !== 'ALL') { %>
+                            <a href="/admin/offers" class="text-xs text-gray-500 hover:text-black underline ml-2">Clear</a>
+                        <% } %>
+                    </form>
+
+                    <p class="text-xs text-gray-400 font-medium">Total: <%= totalOffers %> offers</p>
+                </div>
+
+                <!-- Offers Table -->
+                <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 border-b border-gray-200 text-xs text-gray-400 uppercase tracking-widest text-left">
+                                <tr>
+                                    <th class="px-6 py-4 font-medium">Offer Name</th>
+                                    <th class="px-6 py-4 font-medium">Type</th>
+                                    <th class="px-6 py-4 font-medium">Target</th>
+                                    <th class="px-6 py-4 font-medium">Discount</th>
+                                    <th class="px-6 py-4 font-medium">Validity</th>
+                                    <th class="px-6 py-4 font-medium">Status</th>
+                                    <th class="px-6 py-4 font-medium text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <% if (!offers || offers.length === 0) { %>
+                                    <tr>
+                                        <td colspan="7" class="px-6 py-12 text-center text-gray-400 text-sm">No offers created yet.</td>
+                                    </tr>
+                                <% } else { %>
+                                    <% offers.forEach((off) => { %>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 font-semibold text-gray-900"><%= off.name %></td>
+                                            <td class="px-6 py-4">
+                                                <span class="text-[11px] font-bold px-2 py-0.5 rounded <%= off.offerType === 'PRODUCT' ? 'bg-indigo-50 text-indigo-700' : 'bg-purple-50 text-purple-700' %>">
+                                                    <%= off.offerType %>
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-4 text-gray-700">
+                                                <% if (off.offerType === 'PRODUCT' && off.productId) { %>
+                                                    <%= off.productId.name %>
+                                                <% } else if (off.offerType === 'CATEGORY' && off.categoryId) { %>
+                                                    <%= off.categoryId.name %>
+                                                <% } else { %>
+                                                    <span class="text-gray-400">N/A</span>
+                                                <% } %>
+                                            </td>
+                                            <td class="px-6 py-4 font-semibold text-gray-900">
+                                                <%= off.discountType === 'PERCENTAGE' ? off.discountValue + '%' : '₹' + off.discountValue %>
+                                                <% if (off.maxDiscount) { %>
+                                                    <span class="text-[11px] text-gray-400 font-normal">(Capped at ₹<%= off.maxDiscount %>)</span>
+                                                <% } %>
+                                            </td>
+                                            <td class="px-6 py-4 text-xs text-gray-600">
+                                                <%= new Date(off.startDate).toLocaleDateString('en-IN') %> &ndash; <%= new Date(off.endDate).toLocaleDateString('en-IN') %>
+                                            </td>
+                                            <td class="px-6 py-4">
+                                                <form action="/admin/offers/<%= off._id %>/toggle-status" method="POST" class="inline">
+                                                    <button type="submit" class="text-xs font-semibold px-2.5 py-1 rounded <%= off.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700' %>">
+                                                        <%= off.isActive ? 'Active' : 'Inactive' %>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                            <td class="px-6 py-4 text-right">
+                                                <form action="/admin/offers/<%= off._id %>/delete" method="POST" class="inline" onsubmit="return confirm('Delete this offer permanently?');">
+                                                    <button type="submit" class="text-xs text-red-600 hover:text-red-800 font-medium ml-2">Delete</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <% }) %>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+
+        </div>
+
+    </div>
+
+    <!-- Create Offer Modal -->
+    <div id="offerModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
+                <h3 class="text-lg font-bold text-gray-900">Create New Offer</h3>
+                <button type="button" onclick="closeOfferModal()" class="text-gray-400 hover:text-black">&times;</button>
+            </div>
+
+            <form action="/admin/offers/create" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Offer Title</label>
+                    <input type="text" name="name" required placeholder="e.g. Summer Oxford Sale"
+                        class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Offer Type</label>
+                        <select name="offerType" id="modalOfferType" onchange="toggleOfferTarget()"
+                            class="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                            <option value="PRODUCT">Product Offer</option>
+                            <option value="CATEGORY">Category Offer</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Discount Type</label>
+                        <select name="discountType" class="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                            <option value="PERCENTAGE">Percentage (%)</option>
+                            <option value="FLAT">Flat Amount (₹)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="productSelectContainer">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Select Product</label>
+                    <select name="productId" class="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                        <% (products || []).forEach(p => { %>
+                            <option value="<%= p._id %>"><%= p.name %> (<%= p.brand || 'No brand' %>)</option>
+                        <% }) %>
+                    </select>
+                </div>
+
+                <div id="categorySelectContainer" class="hidden">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Select Category</label>
+                    <select name="categoryId" class="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                        <% (categories || []).forEach(c => { %>
+                            <option value="<%= c._id %>"><%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Discount Value</label>
+                        <input type="number" name="discountValue" required min="1" step="any" placeholder="e.g. 20"
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Max Cap (₹, Optional)</label>
+                        <input type="number" name="maxDiscount" min="0" placeholder="e.g. 500"
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Start Date</label>
+                        <input type="date" name="startDate" required
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">End Date</label>
+                        <input type="date" name="endDate" required
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                    <button type="button" onclick="closeOfferModal()" class="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+                    <button type="submit" class="px-5 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800">Save Offer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openOfferModal() {
+            document.getElementById("offerModal").classList.remove("hidden");
+            document.getElementById("offerModal").classList.add("flex");
+        }
+        function closeOfferModal() {
+            document.getElementById("offerModal").classList.add("hidden");
+            document.getElementById("offerModal").classList.remove("flex");
+        }
+        function toggleOfferTarget() {
+            const type = document.getElementById("modalOfferType").value;
+            const prod = document.getElementById("productSelectContainer");
+            const cat = document.getElementById("categorySelectContainer");
+            if (type === "PRODUCT") {
+                prod.classList.remove("hidden");
+                cat.classList.add("hidden");
+            } else {
+                prod.classList.add("hidden");
+                cat.classList.remove("hidden");
+            }
+        }
+    </script>
+</body>
+</html>

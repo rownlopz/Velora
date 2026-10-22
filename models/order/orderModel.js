@@ -38,6 +38,21 @@ const orderItemSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        brand: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        categoryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Category",
+            default: null,
+        },
+        categoryName: {
+            type: String,
+            default: "",
+            trim: true,
+        },
         quantity: {
             type: Number,
             required: true,
@@ -84,9 +99,55 @@ const orderItemSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        originalUnitPrice: {
+            type: Number,
+            default: function () {
+                return this.regularPrice || this.unitPrice;
+            },
+            min: 0,
+        },
+        effectiveUnitPrice: {
+            type: Number,
+            default: function () {
+                return this.unitPrice;
+            },
+            min: 0,
+        },
+        offerId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Offer",
+            default: null,
+        },
+        offerName: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        offerDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        totalOfferDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         allocatedDiscount: {
             type: Number,
             default: 0,
+            min: 0,
+        },
+        allocatedCouponDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        finalPayable: {
+            type: Number,
+            default: function () {
+                return Math.max(0, this.lineTotal - (this.allocatedCouponDiscount || 0));
+            },
             min: 0,
         },
         cancellationReason: {
@@ -124,12 +185,32 @@ const orderItemSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        isStockRestored: {
+            type: Boolean,
+            default: false,
+        },
+        restockedQuantity: {
+            type: Number,
+            default: 0,
+        },
+        refundIssued: {
+            type: Boolean,
+            default: false,
+        },
+        refundAmount: {
+            type: Number,
+            default: 0,
+        },
         restockedAt: {
             type: Date,
             default: null,
         },
         restockedBy: {
             type: String,
+            default: null,
+        },
+        restockClaimAt: {
+            type: Date,
             default: null,
         },
     },
@@ -147,6 +228,97 @@ const shippingAddressSchema = new mongoose.Schema(
         state: { type: String, required: true },
         pinCode: { type: Number, required: true },
         country: { type: String, required: true },
+    },
+    { _id: false }
+);
+
+const orderPricingSchema = new mongoose.Schema(
+    {
+        subtotal: {
+            type: Number,
+            required: true,
+            min: 0,
+        },
+        shippingFee: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        discount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        offerDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        couponDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        couponCode: {
+            type: String,
+            default: null,
+            trim: true,
+        },
+        couponId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Coupon",
+            default: null,
+        },
+        totalAmount: {
+            type: Number,
+            required: true,
+            min: 0,
+        },
+        originalSubtotal: {
+            type: Number,
+            default: function () {
+                return this.subtotal;
+            },
+        },
+        originalShippingFee: {
+            type: Number,
+            default: function () {
+                return this.shippingFee;
+            },
+        },
+        originalDiscount: {
+            type: Number,
+            default: function () {
+                return this.discount;
+            },
+        },
+        originalTotalAmount: {
+            type: Number,
+            default: function () {
+                return this.totalAmount;
+            },
+        },
+        cancellationDeduction: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        returnCredit: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        walletRefundIssued: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        currentPayable: {
+            type: Number,
+            default: function () {
+                return this.totalAmount;
+            },
+        },
     },
     { _id: false }
 );
@@ -183,73 +355,21 @@ const orderSchema = new mongoose.Schema(
         },
         items: {
             type: [orderItemSchema],
-            required: true,
+            required: [true, "Order items are required."],
+            validate: {
+                validator: function (val) {
+                    return Array.isArray(val) && val.length > 0;
+                },
+                message: "Order must contain at least one item.",
+            },
         },
         shippingAddress: {
             type: shippingAddressSchema,
             required: true,
         },
         pricing: {
-            subtotal: {
-                type: Number,
-                required: true,
-                min: 0,
-            },
-            shippingFee: {
-                type: Number,
-                default: 0,
-                min: 0,
-            },
-            discount: {
-                type: Number,
-                default: 0,
-                min: 0,
-            },
-            totalAmount: {
-                type: Number,
-                required: true,
-                min: 0,
-            },
-            originalSubtotal: {
-                type: Number,
-                default: function () {
-                    return this.subtotal;
-                },
-            },
-            originalShippingFee: {
-                type: Number,
-                default: function () {
-                    return this.shippingFee;
-                },
-            },
-            originalDiscount: {
-                type: Number,
-                default: function () {
-                    return this.discount;
-                },
-            },
-            originalTotalAmount: {
-                type: Number,
-                default: function () {
-                    return this.totalAmount;
-                },
-            },
-            cancellationDeduction: {
-                type: Number,
-                default: 0,
-                min: 0,
-            },
-            returnCredit: {
-                type: Number,
-                default: 0,
-                min: 0,
-            },
-            currentPayable: {
-                type: Number,
-                default: function () {
-                    return this.totalAmount;
-                },
-            },
+            type: orderPricingSchema,
+            required: true,
         },
         paymentMethod: {
             type: String,
@@ -264,6 +384,35 @@ const orderSchema = new mongoose.Schema(
         paidAt: {
             type: Date,
             default: null,
+        },
+        razorpayOrderId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        razorpayPaymentId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        razorpaySignature: {
+            type: String,
+            default: null,
+        },
+        paymentAttempts: {
+            type: [
+                {
+                    gateway: { type: String, default: "RAZORPAY" },
+                    attemptId: { type: String, default: null },
+                    razorpayOrderId: { type: String, default: null },
+                    razorpayPaymentId: { type: String, default: null },
+                    amount: { type: Number, default: 0 },
+                    status: { type: String, default: "PENDING" },
+                    errorReason: { type: String, default: null },
+                    createdAt: { type: Date, default: Date.now },
+                },
+            ],
+            default: [],
         },
         orderStatus: {
             type: String,
@@ -325,6 +474,26 @@ const orderSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        referralClawbackApplied: {
+            type: Boolean,
+            default: false,
+        },
+        referralClawbackPending: {
+            type: Boolean,
+            default: false,
+        },
+        isWalletDebited: {
+            type: Boolean,
+            default: false,
+        },
+        retryLockUntil: {
+            type: Date,
+            default: null,
+        },
+        expirationClaimAt: {
+            type: Date,
+            default: null,
+        },
     },
     {
         timestamps: true,
@@ -340,6 +509,23 @@ orderSchema.pre("validate", function () {
     }
     if (!this.checkoutToken) {
         this.checkoutToken = "chk_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10);
+    }
+    if (this.pricing) {
+        if (this.pricing.originalSubtotal == null && this.pricing.subtotal != null) {
+            this.pricing.originalSubtotal = this.pricing.subtotal;
+        }
+        if (this.pricing.originalShippingFee == null && this.pricing.shippingFee != null) {
+            this.pricing.originalShippingFee = this.pricing.shippingFee;
+        }
+        if (this.pricing.originalDiscount == null && this.pricing.discount != null) {
+            this.pricing.originalDiscount = this.pricing.discount;
+        }
+        if (this.pricing.originalTotalAmount == null && this.pricing.totalAmount != null) {
+            this.pricing.originalTotalAmount = this.pricing.totalAmount;
+        }
+        if (this.pricing.currentPayable == null && this.pricing.totalAmount != null) {
+            this.pricing.currentPayable = this.pricing.totalAmount;
+        }
     }
 });
 

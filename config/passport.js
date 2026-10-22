@@ -28,13 +28,30 @@ passport.use(
                         return done(null, false, { message: "Your account has been blocked by admin. Please contact support." });
                     }
 
+                    let userChanged = false;
                     // existing local account signing in with Google for the first time
                     if (!user.googleId) {
                         user.googleId = profile.id;
                         user.isEmailVerified = true;
+                        userChanged = true;
+                    }
+                    if (!user.referralId) {
+                        let candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                        while (await User.exists({ referralId: candidateRef })) {
+                            candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                        }
+                        user.referralId = candidateRef;
+                        userChanged = true;
+                    }
+                    if (userChanged) {
                         await user.save();
                     }
                     return done(null, user);
+                }
+
+                let candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                while (await User.exists({ referralId: candidateRef })) {
+                    candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
                 }
 
                 user = await User.create({
@@ -46,6 +63,7 @@ passport.use(
                     avatar: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
                     role: "USER",
                     isActive: true,
+                    referralId: candidateRef,
                 });
 
                 return done(null, user);

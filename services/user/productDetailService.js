@@ -4,6 +4,8 @@ const Category = require("../../models/product/categoryModel");
 const Review = require("../../models/product/reviewModel");
 
 
+const { getAuthoritativeItemPrice } = require("../common/pricingService");
+
 const getProductDetail = async (slug) => {
     const product = await Product.findOne({ slug, isDeleted: false }).populate("categoryId", "name slug isActive isDeleted");
 
@@ -28,12 +30,26 @@ const getProductDetail = async (slug) => {
 
     const isUnavailable = false; // Only active products in active categories reach here
 
-    const variants = await Variant.find({ productId: product._id, isActive: true }).sort({ createdAt: 1 });
+    const rawVariants = await Variant.find({ productId: product._id, isActive: true }).sort({ createdAt: 1 });
 
-    if (variants.length === 0) {
+    if (rawVariants.length === 0) {
         // No purchasable variants at all — nothing to show.
         return { success: false, reason: "UNAVAILABLE", message: "This product is currently unavailable." };
     }
+
+    const variants = await Promise.all(
+        rawVariants.map(async (v) => {
+            const pricing = await getAuthoritativeItemPrice(v, product);
+            const obj = v.toObject ? v.toObject() : v;
+            return {
+                ...obj,
+                effectivePrice: pricing.effectiveUnitPrice,
+                appliedOffer: pricing.appliedOffer,
+                displayPrice: pricing.displayPrice,
+                salePrice: pricing.effectiveUnitPrice < pricing.regularPrice ? pricing.effectiveUnitPrice : obj.salePrice,
+            };
+        })
+    );
 
     const [reviews, reviewStats] = await Promise.all([
         Review.find({ productId: product._id }).sort({ createdAt: -1 }).limit(10),

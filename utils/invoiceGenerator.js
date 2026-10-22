@@ -57,47 +57,46 @@ const generateInvoicePdf = (order, res) => {
 
             let headerBottom = 138;
             if (isOrderCancelled) {
-                doc.rect(50, 136, 495, 22).fillAndStroke("#fee2e2", "#fca5a5");
                 const cancelText = `ORDER CANCELLED on ${order.cancelledAt ? new Date(order.cancelledAt).toLocaleDateString("en-IN") : "N/A"}${order.cancellationReason ? " | Reason: " + order.cancellationReason : ""}`;
+                doc.fontSize(8).font("Helvetica-Bold");
+                const bannerTextHeight = doc.heightOfString(cancelText, { width: 485, align: "center" });
+                const bannerHeight = Math.max(22, bannerTextHeight + 8);
+                doc.rect(50, 136, 495, bannerHeight).fillAndStroke("#fee2e2", "#fca5a5");
                 doc
-                    .fontSize(8)
-                    .font("Helvetica-Bold")
                     .fillColor("#991b1b")
-                    .text(cancelText, 55, 142, { width: 485, align: "center" });
-                headerBottom = 166;
+                    .text(cancelText, 55, 140, { width: 485, align: "center" });
+                headerBottom = 136 + bannerHeight + 8;
             }
 
             doc.moveTo(50, headerBottom).lineTo(545, headerBottom).strokeColor("#e5e7eb").lineWidth(1).stroke();
 
-            // Shipping Address with safe line wrapping
-            const shipTop = headerBottom + 10;
+            // Shipping Address with dynamic text measurement
+            let shipY = headerBottom + 10;
             doc
                 .fontSize(9)
                 .font("Helvetica-Bold")
                 .fillColor("#111111")
-                .text("SHIPPING & BILLING ADDRESS:", 50, shipTop)
-                .font("Helvetica")
-                .fontSize(8.5)
-                .fillColor("#333333")
-                .text(`${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`, 50, shipTop + 14)
-                .text(
-                    `${order.shippingAddress.addressLine1}${order.shippingAddress.addressLine2 ? ", " + order.shippingAddress.addressLine2 : ""}`,
-                    50,
-                    shipTop + 26,
-                    { width: 350 }
-                )
-                .text(
-                    `${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pinCode}`,
-                    50,
-                    shipTop + 38
-                )
-                .text(
-                    `${order.shippingAddress.country} | Phone: ${order.shippingAddress.phone}`,
-                    50,
-                    shipTop + 50
-                );
+                .text("SHIPPING & BILLING ADDRESS:", 50, shipY);
+            shipY += 14;
 
-            return shipTop + 68;
+            doc.font("Helvetica").fontSize(8.5).fillColor("#333333");
+            const fullName = `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`;
+            doc.text(fullName, 50, shipY);
+            shipY += doc.heightOfString(fullName, { width: 350 }) + 3;
+
+            const addrLine = `${order.shippingAddress.addressLine1}${order.shippingAddress.addressLine2 ? ", " + order.shippingAddress.addressLine2 : ""}`;
+            doc.text(addrLine, 50, shipY, { width: 350 });
+            shipY += doc.heightOfString(addrLine, { width: 350 }) + 3;
+
+            const cityState = `${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pinCode}`;
+            doc.text(cityState, 50, shipY);
+            shipY += doc.heightOfString(cityState, { width: 350 }) + 3;
+
+            const countryPhone = `${order.shippingAddress.country} | Phone: ${order.shippingAddress.phone}`;
+            doc.text(countryPhone, 50, shipY);
+            shipY += doc.heightOfString(countryPhone, { width: 350 }) + 10;
+
+            return shipY;
         } else {
             // Continuation header for multipage documents
             doc
@@ -139,7 +138,7 @@ const generateInvoicePdf = (order, res) => {
         }
     };
 
-    // Render Items
+    // Render Items with dynamic height measurement
     order.items.forEach((item) => {
         const itemStatus = (item.status || "PENDING").toUpperCase();
         const isItemCancelled = itemStatus === "CANCELLED" || isOrderCancelled;
@@ -160,15 +159,23 @@ const generateInvoicePdf = (order, res) => {
 
         doc.fontSize(8).font("Helvetica");
         const descHeight = doc.heightOfString(itemDesc, { width: 250 });
-        let extraHeight = 0;
+
+        doc.fontSize(7.5);
+        let reasonHeight = 0;
+        let reasonText = "";
         if (isItemCancelled && item.cancellationReason) {
-            extraHeight += 12;
-        }
-        if (item.adminFeedback) {
-            extraHeight += 12;
+            reasonText = `Reason: ${item.cancellationReason}`;
+            reasonHeight = doc.heightOfString(reasonText, { width: 240 }) + 4;
         }
 
-        const rowHeight = Math.max(descHeight, 14) + extraHeight + 8;
+        let feedbackHeight = 0;
+        let feedbackText = "";
+        if (item.adminFeedback) {
+            feedbackText = `Admin Feedback: ${item.adminFeedback}`;
+            feedbackHeight = doc.heightOfString(feedbackText, { width: 240 }) + 4;
+        }
+
+        const rowHeight = Math.max(descHeight, 14) + reasonHeight + feedbackHeight + 8;
         checkPageBreak(rowHeight);
 
         // Print row details
@@ -189,30 +196,35 @@ const generateInvoicePdf = (order, res) => {
 
         doc.text(amountText, 455, currentY, { width: 90, align: "right" });
 
-        let subY = currentY + Math.max(descHeight, 14);
+        let subY = currentY + Math.max(descHeight, 14) + 2;
 
-        if (isItemCancelled && item.cancellationReason) {
+        if (reasonText) {
             doc
                 .fontSize(7.5)
                 .fillColor("#b91c1c")
-                .text(`Reason: ${item.cancellationReason}`, 60, subY, { width: 240 });
-            subY += 12;
+                .text(reasonText, 60, subY, { width: 240 });
+            subY += doc.heightOfString(reasonText, { width: 240 }) + 4;
         }
 
-        if (item.adminFeedback) {
+        if (feedbackText) {
             doc
                 .fontSize(7.5)
                 .fillColor("#4b5563")
-                .text(`Admin Feedback: ${item.adminFeedback}`, 60, subY, { width: 240 });
-            subY += 12;
+                .text(feedbackText, 60, subY, { width: 240 });
+            subY += doc.heightOfString(feedbackText, { width: 240 }) + 4;
         }
 
         currentY += rowHeight;
         doc.moveTo(50, currentY - 2).lineTo(545, currentY - 2).strokeColor("#f3f4f6").lineWidth(0.5).stroke();
     });
 
-    // Summary Section
-    checkPageBreak(130);
+    // Summary Section with dynamic height calculation
+    let summaryHeight = 65; // base lines + dividers + total
+    if (order.pricing?.discount > 0) summaryHeight += 15;
+    if (order.pricing?.cancellationDeduction > 0) summaryHeight += 15;
+    if (order.pricing?.returnCredit > 0) summaryHeight += 15;
+
+    checkPageBreak(summaryHeight + 30);
 
     doc.moveTo(50, currentY + 2).lineTo(545, currentY + 2).strokeColor("#e5e7eb").lineWidth(1).stroke();
     currentY += 12;
@@ -246,11 +258,31 @@ const generateInvoicePdf = (order, res) => {
             { width: summaryValWidth, align: "right" }
         );
 
-    if (order.pricing?.discount > 0) {
+    if (order.pricing?.offerDiscount > 0) {
+        currentY += 15;
+        doc
+            .text("Offer Savings:", summaryLabelX, currentY)
+            .text(`-INR ${order.pricing.offerDiscount.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
+    }
+
+    if (order.pricing?.couponDiscount > 0) {
+        currentY += 15;
+        doc
+            .text(`Coupon (${order.pricing.couponCode || 'Code'}):`, summaryLabelX, currentY)
+            .text(`-INR ${order.pricing.couponDiscount.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
+    } else if (order.pricing?.discount > 0 && !(order.pricing?.offerDiscount > 0)) {
         currentY += 15;
         doc
             .text("Discount:", summaryLabelX, currentY)
             .text(`-INR ${order.pricing.discount.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
+    }
+
+    if (order.pricing?.walletRefundIssued > 0) {
+        currentY += 15;
+        doc
+            .fillColor("#b91c1c")
+            .text("Wallet Refund Issued:", summaryLabelX, currentY)
+            .text(`INR ${order.pricing.walletRefundIssued.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
     }
 
     if (order.pricing?.cancellationDeduction > 0) {

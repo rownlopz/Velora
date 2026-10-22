@@ -102,13 +102,13 @@
                                             </div>
 
                                             <div class="grid grid-cols-3 gap-3">
-                                                <div>
+                                                 <div>
                                                     <label class="block text-[11px] text-gray-400 uppercase mb-1">Regular Price</label>
-                                                    <input type="number" step="0.01" min="0" name="variants[<%= i %>][regularPrice]" value="<%= v.regularPrice || '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                    <input type="number" step="0.01" min="0" name="variants[<%= i %>][regularPrice]" value="<%= (v.regularPrice !== undefined && v.regularPrice !== null) ? v.regularPrice : '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
                                                 </div>
                                                 <div>
                                                     <label class="block text-[11px] text-gray-400 uppercase mb-1">Sale Price</label>
-                                                    <input type="number" step="0.01" min="0" name="variants[<%= i %>][salePrice]" value="<%= v.salePrice || '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
+                                                    <input type="number" step="0.01" min="0" name="variants[<%= i %>][salePrice]" value="<%= (v.salePrice !== undefined && v.salePrice !== null) ? v.salePrice : '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-black">
                                                 </div>
                                                 <div>
                                                     <label class="block text-[11px] text-gray-400 uppercase mb-1">Stock</label>

@@ -23,7 +23,7 @@ const getInventory = async ({
     // 2. Fetch categories for filter dropdown
     const categories = await Category.find({ isDeleted: false }).sort({ name: 1 }).lean();
 
-    // 3. Overall Inventory KPI Statistics across all active products
+    // 3. Overall Inventory KPI Statistics across all active products (Finding 12)
     const [overallStats] = await Variant.aggregate([
         {
             $lookup: {
@@ -39,15 +39,24 @@ const getInventory = async ({
             $group: {
                 _id: null,
                 totalVariants: { $sum: 1 },
-                totalStockUnits: { $sum: "$stock" },
+                activeVariants: { $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] } },
+                inactiveVariants: { $sum: { $cond: [{ $eq: ["$isActive", false] }, 1, 0] } },
+                totalStockUnits: { $sum: { $cond: [{ $eq: ["$isActive", true] }, "$stock", 0] } },
                 outOfStockCount: {
-                    $sum: { $cond: [{ $eq: ["$stock", 0] }, 1, 0] },
+                    $sum: {
+                        $cond: [
+                            { $and: [{ $eq: ["$isActive", true] }, { $eq: ["$stock", 0] }] },
+                            1,
+                            0,
+                        ],
+                    },
                 },
                 lowStockCount: {
                     $sum: {
                         $cond: [
                             {
                                 $and: [
+                                    { $eq: ["$isActive", true] },
                                     { $gt: ["$stock", 0] },
                                     { $lte: ["$stock", 10] },
                                 ],
@@ -63,6 +72,8 @@ const getInventory = async ({
 
     const stats = overallStats || {
         totalVariants: 0,
+        activeVariants: 0,
+        inactiveVariants: 0,
         totalStockUnits: 0,
         outOfStockCount: 0,
         lowStockCount: 0,
@@ -103,17 +114,21 @@ const getInventory = async ({
         });
     }
 
-    // Filter by Stock Status
+    // Filter by Stock Status (Finding 12: accurately filter active / inactive / stock levels)
     if (status === "out_of_stock") {
-        pipeline.push({ $match: { stock: 0 } });
+        pipeline.push({ $match: { isActive: true, stock: 0 } });
     } else if (status === "low_stock") {
-        pipeline.push({ $match: { stock: { $gt: 0, $lte: 10 } } });
+        pipeline.push({ $match: { isActive: true, stock: { $gt: 0, $lte: 10 } } });
     } else if (status === "in_stock") {
-        pipeline.push({ $match: { stock: { $gt: 10 } } });
+        pipeline.push({ $match: { isActive: true, stock: { $gt: 10 } } });
+    } else if (status === "inactive") {
+        pipeline.push({ $match: { isActive: false } });
+    } else if (status === "active") {
+        pipeline.push({ $match: { isActive: true } });
     }
 
     // Filter by Search (Product Name, Brand, SKU, Color, Size)
-    if (search && search.trim()) {
+    if (typeof search === "string" && search.trim()) {
         const escapedTerm = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const regex = new RegExp(escapedTerm, "i");
         pipeline.push({
@@ -169,66 +184,153 @@ const getInventory = async ({
 };
 
 /**
- * Update stock count for a specific variant
+ * Strict integer parser: rejects floats, non-finite values, and trailing characters.
+ * E.g. "12abc" -> null, "1.5" -> null, 1.5 -> null, "12" -> 12.
  */
-const updateVariantStock = async (variantId, newStock) => {
+const parseStrictInteger = (val) => {
+    if (typeof val === "number") {
+        if (!Number.isFinite(val) || !Number.isInteger(val)) return null;
+        return val;
+    }
+    if (typeof val === "string") {
+        const trimmed = val.trim();
+        if (!/^-?\d+$/.test(trimmed)) return null;
+        const num = Number(trimmed);
+        if (!Number.isSafeInteger(num)) return null;
+        return num;
+    }
+    return null;
+};
+
+/**
+ * Update stock count for a specific variant using conditional atomic updates.
+ * If expectedStock is provided, guards against stale overwrites of concurrent checkouts/restocks.
+ */
+const updateVariantStock = async (variantId, newStock, expectedStock = undefined) => {
     if (!variantId || !mongoose.Types.ObjectId.isValid(variantId)) {
         return { success: false, message: "Invalid variant ID." };
     }
 
-    const stockNumber = parseInt(newStock, 10);
-    if (isNaN(stockNumber) || stockNumber < 0) {
+    const stockNumber = parseStrictInteger(newStock);
+    if (stockNumber === null || stockNumber < 0) {
         return { success: false, message: "Stock quantity must be a non-negative whole number." };
     }
 
-    const variant = await Variant.findById(variantId);
-    if (!variant) {
-        return { success: false, message: "Variant not found." };
+    // If expectedStock was supplied (e.g. from UI with optimistic concurrency control),
+    // ensure the current DB stock matches expectedStock to prevent stale overwrites.
+    if (expectedStock !== undefined && expectedStock !== null && expectedStock !== "") {
+        const expectedNum = parseStrictInteger(expectedStock);
+        if (expectedNum !== null) {
+            const updated = await Variant.findOneAndUpdate(
+                { _id: variantId, stock: expectedNum },
+                { $set: { stock: stockNumber } },
+                { new: true }
+            );
+
+            if (!updated) {
+                const currentVariant = await Variant.findById(variantId);
+                if (!currentVariant) {
+                    return { success: false, message: "Variant not found." };
+                }
+                return {
+                    success: false,
+                    message: `Stock conflict: current stock (${currentVariant.stock}) changed from expected (${expectedNum}). Please refresh before editing.`,
+                    currentStock: currentVariant.stock,
+                };
+            }
+
+            return {
+                success: true,
+                message: `Stock updated to ${stockNumber} units.`,
+                newStock: updated.stock,
+                variantId,
+            };
+        }
     }
 
-    variant.stock = stockNumber;
-    await variant.save();
+    // Atomic update without read-modify-save race
+    const updated = await Variant.findOneAndUpdate(
+        { _id: variantId },
+        { $set: { stock: stockNumber } },
+        { new: true }
+    );
+
+    if (!updated) {
+        return { success: false, message: "Variant not found." };
+    }
 
     return {
         success: true,
         message: `Stock updated to ${stockNumber} units.`,
-        newStock: stockNumber,
+        newStock: updated.stock,
         variantId,
     };
 };
 
 /**
- * Increment or decrement variant stock by delta
+ * Increment or decrement variant stock by delta using atomic operations.
+ * Enforces stock never drops below 0 and avoids read-modify-save overwrites.
  */
 const adjustVariantStock = async (variantId, delta) => {
     if (!variantId || !mongoose.Types.ObjectId.isValid(variantId)) {
         return { success: false, message: "Invalid variant ID." };
     }
 
-    const deltaNum = parseInt(delta, 10);
-    if (isNaN(deltaNum) || deltaNum === 0) {
-        return { success: false, message: "Invalid stock adjustment value." };
+    const deltaNum = parseStrictInteger(delta);
+    if (deltaNum === null || deltaNum === 0) {
+        return { success: false, message: "Invalid stock adjustment value. Must be a non-zero whole integer." };
     }
 
-    const variant = await Variant.findById(variantId);
-    if (!variant) {
-        return { success: false, message: "Variant not found." };
+    if (deltaNum > 0) {
+        // Atomic increment
+        const updated = await Variant.findOneAndUpdate(
+            { _id: variantId },
+            { $inc: { stock: deltaNum } },
+            { new: true }
+        );
+
+        if (!updated) {
+            return { success: false, message: "Variant not found." };
+        }
+
+        return {
+            success: true,
+            message: `Stock adjusted by +${deltaNum}. New stock: ${updated.stock}.`,
+            newStock: updated.stock,
+            variantId,
+        };
+    } else {
+        // Atomic decrement with condition that stock >= decrementAmount
+        const decrementAmount = Math.abs(deltaNum);
+        const updated = await Variant.findOneAndUpdate(
+            { _id: variantId, stock: { $gte: decrementAmount } },
+            { $inc: { stock: deltaNum } },
+            { new: true }
+        );
+
+        if (!updated) {
+            const variantExists = await Variant.findById(variantId);
+            if (!variantExists) {
+                return { success: false, message: "Variant not found." };
+            }
+            return {
+                success: false,
+                message: `Cannot reduce stock below zero. Current stock is ${variantExists.stock}.`,
+            };
+        }
+
+        return {
+            success: true,
+            message: `Stock adjusted by ${deltaNum}. New stock: ${updated.stock}.`,
+            newStock: updated.stock,
+            variantId,
+        };
     }
-
-    const nextStock = Math.max(0, variant.stock + deltaNum);
-    variant.stock = nextStock;
-    await variant.save();
-
-    return {
-        success: true,
-        message: `Stock adjusted by ${deltaNum > 0 ? "+" : ""}${deltaNum}. New stock: ${nextStock}.`,
-        newStock: nextStock,
-        variantId,
-    };
 };
 
 module.exports = {
     getInventory,
     updateVariantStock,
     adjustVariantStock,
+    parseStrictInteger,
 };

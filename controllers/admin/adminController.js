@@ -51,7 +51,7 @@ const logoutController = (req, res) => {
     });
 };
 
-const loadDashboard = async (req, res) => {
+const loadCustomers = async (req, res) => {
     try {
         const search = req.query.search || "";
         const status = req.query.status || "all";
@@ -64,7 +64,9 @@ const loadDashboard = async (req, res) => {
             limit: 10
         });
 
-        res.render("admin/dashboard", {
+        res.render("admin/customers", {
+            title: "Customer Management | VELORA Admin",
+            active: "customers",
             users: result.users,
             search,
             status,
@@ -90,7 +92,7 @@ const toggleUserStatusController = async (req, res) => {
         }
 
         const params = new URLSearchParams({ search, status, page });
-        res.redirect(`/admin/dashboard?${params.toString()}`);
+        res.redirect(`/admin/customers?${params.toString()}`);
     } catch (error) {
         console.error("Toggle User Error:", error);
         res.status(500).send("Something went wrong");
@@ -101,6 +103,7 @@ module.exports = {
     loadLogin,
     loginController,
     logoutController,
-    loadDashboard,
+    loadDashboard: loadCustomers,
+    loadCustomers,
     toggleUserStatusController
 };

@@ -188,14 +188,34 @@ function calculateOrderStatusFromItems(items = []) {
     return "DELIVERED";
 }
 
+/**
+ * Determines whether COD payment should be marked COMPLETED.
+ * Payment is completed only when:
+ * 1. No items are in pre-delivery pipeline (PENDING, PLACED, ACTIVE, PROCESSING, SHIPPED, OUT_FOR_DELIVERY).
+ * 2. At least one item has been delivered/fulfilled (DELIVERED, RETURN_REQUESTED, RETURN_APPROVED, RETURN_REJECTED, RETURNED).
+ * 3. Does NOT complete if all items were cancelled.
+ */
+function shouldCompleteCodPayment(items = []) {
+    if (!items || items.length === 0) return false;
+    const preDelivery = ["PENDING", "PLACED", "ACTIVE", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"];
+    const hasPreDelivery = items.some((i) => preDelivery.includes((i.status || "").toUpperCase()));
+    if (hasPreDelivery) return false;
+
+    const fulfilled = ["DELIVERED", "RETURN_REQUESTED", "RETURN_APPROVED", "RETURN_REJECTED", "RETURNED"];
+    return items.some((i) => fulfilled.includes((i.status || "").toUpperCase()));
+}
+
 module.exports = {
     ORDER_STATUS_HIERARCHY,
     MAIN_FLOW_STATUSES,
     ALL_VALID_ORDER_STATUSES,
     PREDEFINED_CANCELLATION_REASONS,
+    ALLOWED_ITEM_TRANSITIONS,
     validateStatusTransition,
     isItemCancellableByUser,
     isItemReturnableByUser,
     getPermissibleNextStatuses,
     calculateOrderStatusFromItems,
+    shouldCompleteCodPayment,
 };
+
