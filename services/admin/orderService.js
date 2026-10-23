@@ -433,6 +433,20 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
 
         await latestOrder.save();
         await syncOrderRefundAccounting(latestOrder._id);
+
+        if (isAllCancelled && latestOrder.pricing?.couponId && !latestOrder.pricing?.isCouponReleased) {
+            try {
+                const { releaseCouponUsage } = require("../admin/couponService");
+                await releaseCouponUsage(latestOrder.pricing.couponId, latestOrder.userId, latestOrder.orderNumber);
+                await Order.updateOne(
+                    { _id: latestOrder._id },
+                    { $set: { "pricing.isCouponReleased": true, "pricing.couponReleasedAt": new Date() } }
+                );
+            } catch (couponErr) {
+                console.error("Failed to release coupon on admin cancellation:", couponErr);
+            }
+        }
+
         const refreshedLatestOrder = await Order.findById(latestOrder._id);
         if (refreshedLatestOrder) {
             latestOrder.pricing = refreshedLatestOrder.pricing;
@@ -754,6 +768,20 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
 
         await Order.updateOne({ _id: orderId }, updateOps);
         await syncOrderRefundAccounting(orderId);
+
+        if (isAllCancelled && orderForCalc.pricing?.couponId && !orderForCalc.pricing?.isCouponReleased) {
+            try {
+                const { releaseCouponUsage } = require("../admin/couponService");
+                await releaseCouponUsage(orderForCalc.pricing.couponId, orderForCalc.userId, orderForCalc.orderNumber);
+                await Order.updateOne(
+                    { _id: orderId },
+                    { $set: { "pricing.isCouponReleased": true, "pricing.couponReleasedAt": new Date() } }
+                );
+            } catch (couponErr) {
+                console.error("Failed to release coupon on admin item cancellation:", couponErr);
+            }
+        }
+
         const finalOrder = await Order.findById(orderId);
 
         return {

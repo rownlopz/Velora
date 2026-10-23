@@ -266,6 +266,13 @@ const generateInvoicePdf = (order, res) => {
             { width: summaryValWidth, align: "right" }
         );
 
+    if (order.pricing?.saleDiscount > 0) {
+        currentY += 15;
+        doc
+            .text("Sale Savings:", summaryLabelX, currentY)
+            .text(`-INR ${order.pricing.saleDiscount.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
+    }
+
     if (order.pricing?.offerDiscount > 0) {
         currentY += 15;
         doc

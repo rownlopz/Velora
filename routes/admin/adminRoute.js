@@ -33,6 +33,7 @@ router.post("/users/:userId/toggle-status", adminAuth, adminController.toggleUse
 
 // Marketing: Offers Management
 router.get("/offers", adminAuth, offerController.loadOffers);
+router.get("/offers/:offerId", adminAuth, offerController.getOfferController);
 router.post("/offers/create", adminAuth, offerController.createOfferController);
 router.post("/offers/:offerId/edit", adminAuth, offerController.updateOfferController);
 router.post("/offers/:offerId/toggle-status", adminAuth, offerController.toggleOfferStatusController);
@@ -40,7 +41,9 @@ router.post("/offers/:offerId/delete", adminAuth, offerController.deleteOfferCon
 
 // Marketing: Coupons Management
 router.get("/coupons", adminAuth, couponController.loadCoupons);
+router.get("/coupons/:couponId", adminAuth, couponController.getCouponController);
 router.post("/coupons/create", adminAuth, couponController.createCouponController);
+router.post("/coupons/:couponId/edit", adminAuth, couponController.updateCouponController);
 router.post("/coupons/:couponId/toggle-status", adminAuth, couponController.toggleCouponStatusController);
 router.post("/coupons/:couponId/delete", adminAuth, couponController.deleteCouponController);
 

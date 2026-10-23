@@ -319,6 +319,12 @@
                                 <span>&#8377;<%= order.pricing.taxAmount.toLocaleString('en-IN') %></span>
                             </div>
                         <% } %>
+                        <% if (order.pricing?.saleDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700">
+                                <span>Sale Savings</span>
+                                <span>-&#8377;<%= order.pricing.saleDiscount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
                         <% if (order.pricing?.offerDiscount > 0) { %>
                             <div class="flex justify-between text-emerald-700">
                                 <span>Offer Savings</span>

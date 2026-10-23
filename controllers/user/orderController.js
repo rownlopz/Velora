@@ -22,9 +22,7 @@ const {
 const { applyCoupon, removeCoupon } = require("../../services/user/cartService");
 const { getWalletDetails } = require("../../services/user/walletService");
 
-/**
- * Clean helper to handle action responses (AJAX JSON vs HTML redirect)
- */
+// Clean helper to handle action responses (AJAX JSON vs HTML redirect)
 const handleActionResponse = (req, res, result, redirectUrl, fallbackMsg = "Action failed") => {
     const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
     if (!result.success) {
@@ -54,7 +52,8 @@ const loadCheckout = async (req, res) => {
             items: result.items,
             rawSubtotal: result.rawSubtotal,
             subtotal: result.subtotal,
-            totalOfferDiscount: result.totalOfferDiscount,
+            totalOfferDiscount: result.totalOfferDiscount || 0,
+            totalSaleDiscount: result.totalSaleDiscount || 0,
             couponDiscount: result.couponDiscount,
             appliedCoupon: result.appliedCoupon,
             couponError: result.couponError,
@@ -235,6 +234,10 @@ const loadPaymentFailed = async (req, res) => {
             return res.redirect(`/orders/${result.order._id}/payment-success`);
         }
 
+        if (result.order.orderStatus === "CANCELLED") {
+            return res.redirect(`/orders/${result.order._id}?notice=${encodeURIComponent("This order has been cancelled.")}`);
+        }
+
         res.render("user/payment-failed", {
             title: "Payment Failed",
             order: result.order,
@@ -250,14 +253,53 @@ const loadPaymentFailed = async (req, res) => {
 const retryPaymentController = async (req, res) => {
     try {
         const result = await retryOrderPayment(req.session.userId, req.params.orderId);
-        if (!result.success) {
-            return res.status(400).json({ success: false, message: result.message, isAlreadyPaid: result.isAlreadyPaid, retryable: result.retryable });
+
+        // 1. Order is already paid or successfully recovered to COMPLETED status
+        if (result.isAlreadyPaid || (result.order && result.order.paymentStatus === "COMPLETED")) {
+            const destOrder = result.order;
+            const redirectUrl = destOrder.paymentMethod === "COD"
+                ? `/orders/${destOrder._id}/success`
+                : `/orders/${destOrder._id}/payment-success`;
+
+            return res.json({
+                success: true,
+                isAlreadyPaid: true,
+                order: destOrder,
+                redirectUrl,
+                message: result.message || "Payment has already been confirmed.",
+            });
         }
+
+        // 2. Late payment belongs to a cancelled order and was refunded to wallet
+        if (result.isCancelledLateRefund || result.isAlreadyRefunded) {
+            const destOrder = result.order;
+            const noticeMsg = result.message || "Order was cancelled and payment has been refunded to your wallet.";
+            const redirectUrl = `/orders/${destOrder._id}?notice=${encodeURIComponent(noticeMsg)}`;
+
+            return res.json({
+                success: false,
+                isCancelledLateRefund: true,
+                order: destOrder,
+                redirectUrl,
+                message: noticeMsg,
+            });
+        }
+
+        // 3. Genuine failure (unresolved lookup, lock contention, verification error, cancelled order without payment)
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+                retryable: result.retryable,
+                requiresRecovery: result.requiresRecovery,
+            });
+        }
+
+        // 4. Safely retryable with valid new Razorpay checkout configuration
         return res.json({
             success: true,
             order: result.order,
             razorpay: result.razorpay,
-            isAlreadyPaid: result.isAlreadyPaid,
             message: result.message,
         });
     } catch (error) {

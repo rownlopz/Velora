@@ -305,6 +305,17 @@ const toggleOfferStatus = async (offerId) => {
     };
 };
 
+const getOfferById = async (offerId) => {
+    if (!offerId || !mongoose.Types.ObjectId.isValid(offerId)) {
+        return { success: false, message: "Invalid offer ID." };
+    }
+    const offer = await Offer.findById(offerId).populate("productId", "name brand").populate("categoryId", "name").lean();
+    if (!offer) {
+        return { success: false, message: "Offer not found." };
+    }
+    return { success: true, offer };
+};
+
 const deleteOffer = async (offerId) => {
     if (!offerId || !mongoose.Types.ObjectId.isValid(offerId)) {
         return { success: false, message: "Invalid offer ID." };
@@ -317,6 +328,7 @@ const deleteOffer = async (offerId) => {
 module.exports = {
     parseDateBoundary,
     getOffers,
+    getOfferById,
     createOffer,
     updateOffer,
     toggleOfferStatus,

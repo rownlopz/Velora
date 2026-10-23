@@ -247,19 +247,25 @@
                         <% if (typeof rawSubtotal !== 'undefined' && rawSubtotal > subtotal) { %>
                             <div class="flex justify-between text-gray-400 line-through text-xs">
                                 <span>Original Price</span>
-                                <span>&#8377;<%= rawSubtotal.toLocaleString('en-IN') %></span>
+                                <span id="summaryOriginalPrice">&#8377;<%= rawSubtotal.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <% if (typeof totalSaleDiscount !== 'undefined' && totalSaleDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700 text-xs" id="saleSavingsRow">
+                                <span>Sale Savings</span>
+                                <span id="summarySaleDiscount">-&#8377;<%= totalSaleDiscount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
+                        <% if (typeof totalOfferDiscount !== 'undefined' && totalOfferDiscount > 0) { %>
+                            <div class="flex justify-between text-emerald-700 text-xs" id="offerSavingsRow">
+                                <span>Offer Savings</span>
+                                <span id="summaryOfferDiscount">-&#8377;<%= totalOfferDiscount.toLocaleString('en-IN') %></span>
                             </div>
                         <% } %>
                         <div class="flex justify-between text-gray-600">
                             <span>Subtotal</span>
                             <span id="summarySubtotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
-                        <% if (typeof totalOfferDiscount !== 'undefined' && totalOfferDiscount > 0) { %>
-                            <div class="flex justify-between text-emerald-700">
-                                <span>Offer Savings</span>
-                                <span>-&#8377;<%= totalOfferDiscount.toLocaleString('en-IN') %></span>
-                            </div>
-                        <% } %>
                         <% if (typeof couponDiscount !== 'undefined' && couponDiscount > 0) { %>
                             <div class="flex justify-between text-emerald-700 font-medium">
                                 <span>Coupon Deduction</span>

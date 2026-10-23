@@ -29,8 +29,11 @@ const getCoupons = async (options = {}) => {
     }
 
     if (typeof search === "string" && search.trim()) {
-        const escaped = escapeRegex(search.trim().toUpperCase());
-        filter.code = { $regex: escaped, $options: "i" };
+        const escaped = escapeRegex(search.trim());
+        filter.$or = [
+            { code: { $regex: escaped, $options: "i" } },
+            { description: { $regex: escaped, $options: "i" } },
+        ];
     }
 
     const parsedPage = Math.max(1, Number(page) || 1);
@@ -70,7 +73,7 @@ const createCoupon = async (data) => {
         perUserLimit = 1,
         startDate,
         endDate,
-    } = data;
+    } = data || {};
 
     if (!code || typeof code !== "string" || !code.trim()) {
         return { success: false, message: "Coupon code is required." };
@@ -80,11 +83,14 @@ const createCoupon = async (data) => {
     if (!/^[A-Z0-9_-]{3,20}$/.test(normalizedCode)) {
         return {
             success: false,
-            message: "Coupon code must be 3-20 characters long and contain only letters, numbers, hyphens, and underscores.",
+            message: "Coupon code must be 3-20 characters long and contain only uppercase letters, numbers, hyphens, and underscores.",
         };
     }
 
-    const existing = await Coupon.findOne({ code: normalizedCode });
+    // Case-insensitive / whitespace-normalized uniqueness check
+    const existing = await Coupon.findOne({
+        code: { $regex: new RegExp(`^${escapeRegex(normalizedCode)}$`, "i") },
+    });
     if (existing) {
         return { success: false, message: `Coupon with code "${normalizedCode}" already exists.` };
     }
@@ -98,8 +104,8 @@ const createCoupon = async (data) => {
         return { success: false, message: "Discount value must be a positive number." };
     }
 
-    if (discountType === "PERCENTAGE" && numValue > 90) {
-        return { success: false, message: "Percentage discount cannot exceed 90%." };
+    if (discountType === "PERCENTAGE" && numValue > 100) {
+        return { success: false, message: "Percentage discount cannot exceed 100%." };
     }
 
     if (!startDate || !endDate) {
@@ -120,25 +126,25 @@ const createCoupon = async (data) => {
     if (minPurchase !== undefined && minPurchase !== null && String(minPurchase).trim() !== "") {
         const parsedMin = Number(minPurchase);
         if (!Number.isFinite(parsedMin) || parsedMin < 0) {
-            return { success: false, message: "Minimum purchase amount must be a non-negative number." };
+            return { success: false, message: "Minimum purchase amount must be a finite, non-negative number." };
         }
-        numMinPurchase = parsedMin;
+        numMinPurchase = Math.round(parsedMin * 100) / 100;
     }
 
     let parsedMaxDiscount = null;
-    if (maxDiscount !== undefined && maxDiscount !== null && String(maxDiscount).trim() !== "") {
+    if (discountType === "PERCENTAGE" && maxDiscount !== undefined && maxDiscount !== null && String(maxDiscount).trim() !== "") {
         const numMax = Number(maxDiscount);
         if (!Number.isFinite(numMax) || numMax <= 0) {
             return { success: false, message: "Maximum discount must be a positive number." };
         }
-        parsedMaxDiscount = numMax;
+        parsedMaxDiscount = Math.round(numMax * 100) / 100;
     }
 
     let parsedUsageLimit = null;
     if (usageLimit !== undefined && usageLimit !== null && String(usageLimit).trim() !== "") {
         const numLimit = Number(usageLimit);
         if (!Number.isInteger(numLimit) || numLimit < 1) {
-            return { success: false, message: "Global usage limit must be a positive integer (at least 1)." };
+            return { success: false, message: "Usage limit must be a positive integer (at least 1)." };
         }
         parsedUsageLimit = numLimit;
     }
@@ -152,21 +158,200 @@ const createCoupon = async (data) => {
         parsedPerUser = numPerUser;
     }
 
-    const coupon = await Coupon.create({
-        code: normalizedCode,
-        description: description.trim(),
-        discountType,
-        discountValue: numValue,
-        minPurchase: numMinPurchase,
-        maxDiscount: parsedMaxDiscount,
-        usageLimit: parsedUsageLimit,
-        perUserLimit: parsedPerUser,
-        startDate: start,
-        endDate: end,
-        isActive: true,
-    });
+    try {
+        const coupon = await Coupon.create({
+            code: normalizedCode,
+            description: typeof description === "string" ? description.trim() : "",
+            discountType,
+            discountValue: Math.round(numValue * 100) / 100,
+            minPurchase: numMinPurchase,
+            maxDiscount: parsedMaxDiscount,
+            usageLimit: parsedUsageLimit,
+            perUserLimit: parsedPerUser,
+            startDate: start,
+            endDate: end,
+            isActive: true,
+        });
 
-    return { success: true, message: "Coupon created successfully.", coupon };
+        return { success: true, message: "Coupon created successfully.", coupon };
+    } catch (dbErr) {
+        if (dbErr.code === 11000) {
+            return { success: false, message: `Coupon with code "${normalizedCode}" already exists.` };
+        }
+        if (dbErr.name === "ValidationError") {
+            const errorMessages = Object.values(dbErr.errors).map((e) => e.message).join(" ");
+            return { success: false, message: errorMessages || "Database validation failed." };
+        }
+        throw dbErr;
+    }
+};
+
+const getCouponById = async (couponId) => {
+    if (!couponId || !mongoose.Types.ObjectId.isValid(couponId)) {
+        return { success: false, message: "Invalid coupon ID." };
+    }
+    const coupon = await Coupon.findById(couponId).lean();
+    if (!coupon) {
+        return { success: false, message: "Coupon not found." };
+    }
+    return { success: true, coupon };
+};
+
+const updateCoupon = async (couponId, data = {}) => {
+    if (!couponId || !mongoose.Types.ObjectId.isValid(couponId)) {
+        return { success: false, message: "Invalid coupon ID." };
+    }
+
+    const coupon = await Coupon.findById(couponId);
+    if (!coupon) {
+        return { success: false, message: "Coupon not found." };
+    }
+
+    const {
+        code,
+        description,
+        discountType,
+        discountValue,
+        minPurchase,
+        maxDiscount,
+        usageLimit,
+        perUserLimit,
+        startDate,
+        endDate,
+    } = data;
+
+    // Validate Code
+    let normalizedCode = coupon.code;
+    if (code !== undefined) {
+        if (!code || typeof code !== "string" || !code.trim()) {
+            return { success: false, message: "Coupon code is required." };
+        }
+        normalizedCode = code.trim().toUpperCase();
+        if (!/^[A-Z0-9_-]{3,20}$/.test(normalizedCode)) {
+            return {
+                success: false,
+                message: "Coupon code must be 3-20 characters long and contain only uppercase letters, numbers, hyphens, and underscores.",
+            };
+        }
+
+        // Check duplicate code excluding this coupon
+        const existing = await Coupon.findOne({
+            _id: { $ne: couponId },
+            code: { $regex: new RegExp(`^${escapeRegex(normalizedCode)}$`, "i") },
+        });
+        if (existing) {
+            return { success: false, message: `Coupon with code "${normalizedCode}" already exists.` };
+        }
+    }
+
+    // Validate Discount Type
+    const newDiscountType = discountType !== undefined ? discountType : coupon.discountType;
+    if (!["PERCENTAGE", "FLAT"].includes(newDiscountType)) {
+        return { success: false, message: "Invalid discount type. Must be PERCENTAGE or FLAT." };
+    }
+
+    // Validate Discount Value
+    const valToValidate = discountValue !== undefined ? discountValue : coupon.discountValue;
+    const numValue = Number(valToValidate);
+    if (!Number.isFinite(numValue) || numValue <= 0) {
+        return { success: false, message: "Discount value must be a positive number." };
+    }
+    if (newDiscountType === "PERCENTAGE" && numValue > 100) {
+        return { success: false, message: "Percentage discount cannot exceed 100%." };
+    }
+
+    // Validate Min Purchase
+    let numMinPurchase = coupon.minPurchase;
+    if (minPurchase !== undefined) {
+        const parsedMin = Number(minPurchase);
+        if (!Number.isFinite(parsedMin) || parsedMin < 0) {
+            return { success: false, message: "Minimum purchase amount must be a finite, non-negative number." };
+        }
+        numMinPurchase = Math.round(parsedMin * 100) / 100;
+    }
+
+    // Validate Max Discount
+    let parsedMaxDiscount = coupon.maxDiscount;
+    if (newDiscountType === "FLAT") {
+        parsedMaxDiscount = null;
+    } else if (maxDiscount !== undefined) {
+        if (maxDiscount !== null && String(maxDiscount).trim() !== "") {
+            const numMax = Number(maxDiscount);
+            if (!Number.isFinite(numMax) || numMax <= 0) {
+                return { success: false, message: "Maximum discount must be a positive number." };
+            }
+            parsedMaxDiscount = Math.round(numMax * 100) / 100;
+        } else {
+            parsedMaxDiscount = null;
+        }
+    }
+
+    // Validate Usage Limit
+    let parsedUsageLimit = coupon.usageLimit;
+    if (usageLimit !== undefined) {
+        if (usageLimit !== null && String(usageLimit).trim() !== "") {
+            const numLimit = Number(usageLimit);
+            if (!Number.isInteger(numLimit) || numLimit < 1) {
+                return { success: false, message: "Usage limit must be a positive integer (at least 1)." };
+            }
+            parsedUsageLimit = numLimit;
+        } else {
+            parsedUsageLimit = null;
+        }
+    }
+
+    // Validate Per User Limit
+    let parsedPerUser = coupon.perUserLimit;
+    if (perUserLimit !== undefined) {
+        if (perUserLimit !== null && String(perUserLimit).trim() !== "") {
+            const numPerUser = Number(perUserLimit);
+            if (!Number.isInteger(numPerUser) || numPerUser < 1) {
+                return { success: false, message: "Per-user limit must be a positive integer (at least 1)." };
+            }
+            parsedPerUser = numPerUser;
+        } else {
+            parsedPerUser = 1;
+        }
+    }
+
+    // Validate Dates
+    const start = startDate ? parseDateBoundary(startDate, false) : coupon.startDate;
+    const end = endDate ? parseDateBoundary(endDate, true) : coupon.endDate;
+
+    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return { success: false, message: "Invalid date format." };
+    }
+    if (start > end) {
+        return { success: false, message: "Start date must be on or before end date." };
+    }
+
+    try {
+        coupon.code = normalizedCode;
+        if (description !== undefined) {
+            coupon.description = typeof description === "string" ? description.trim() : "";
+        }
+        coupon.discountType = newDiscountType;
+        coupon.discountValue = Math.round(numValue * 100) / 100;
+        coupon.minPurchase = numMinPurchase;
+        coupon.maxDiscount = parsedMaxDiscount;
+        coupon.usageLimit = parsedUsageLimit;
+        coupon.perUserLimit = parsedPerUser;
+        coupon.startDate = start;
+        coupon.endDate = end;
+
+        await coupon.save();
+
+        return { success: true, message: "Coupon updated successfully.", coupon };
+    } catch (dbErr) {
+        if (dbErr.code === 11000) {
+            return { success: false, message: `Coupon with code "${normalizedCode}" already exists.` };
+        }
+        if (dbErr.name === "ValidationError") {
+            const errorMessages = Object.values(dbErr.errors).map((e) => e.message).join(" ");
+            return { success: false, message: errorMessages || "Database validation failed." };
+        }
+        throw dbErr;
+    }
 };
 
 const toggleCouponStatus = async (couponId) => {
@@ -307,7 +492,9 @@ const releaseCouponUsage = async (couponId, userId, reservationKey = null) => {
 module.exports = {
     parseDateBoundary,
     getCoupons,
+    getCouponById,
     createCoupon,
+    updateCoupon,
     toggleCouponStatus,
     deleteCoupon,
     recordCouponUsage,

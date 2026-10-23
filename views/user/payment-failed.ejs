@@ -82,8 +82,19 @@
     const retryBtn = document.getElementById('retryPaymentBtn');
     if (!retryBtn) return;
 
-    retryBtn.addEventListener('click', async function () {
-        if (retryBtn.disabled) return;
+    let isRetrying = false;
+
+    function resetButton(btn, originalHtml) {
+        isRetrying = false;
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
+
+    retryBtn.addEventListener('click', async function (e) {
+        e.preventDefault();
+        if (isRetrying || retryBtn.disabled) return;
+
+        isRetrying = true;
         retryBtn.disabled = true;
         const originalText = retryBtn.innerHTML;
         retryBtn.innerHTML = '<span>Initiating Gateway...</span>';
@@ -98,16 +109,40 @@
                 },
             });
 
-            const data = await res.json();
-            if (data.isAlreadyPaid) {
-                alert(data.message || 'Payment has already been confirmed.');
-                window.location.href = '/orders/<%= order._id %>/payment-success';
+            let data;
+            try {
+                data = await res.json();
+            } catch (jsonErr) {
+                alert('Invalid response from server. Please try again.');
+                resetButton(retryBtn, originalText);
                 return;
             }
-            if (!data.success || !data.razorpay) {
+
+            // 1. Handle already-paid or successfully recovered purchase BEFORE checking for Razorpay config
+            if (data.isAlreadyPaid || (data.success && data.order && data.order.paymentStatus === 'COMPLETED')) {
+                const targetUrl = data.redirectUrl || '/orders/<%= order._id %>/payment-success';
+                window.location.href = targetUrl;
+                return;
+            }
+
+            // 2. Handle late payment recovered for a cancelled order (refunded to wallet)
+            if (data.isCancelledLateRefund || (data.order && data.order.orderStatus === 'CANCELLED' && data.order.paymentStatus === 'REFUNDED')) {
+                const targetUrl = data.redirectUrl || ('/orders/<%= order._id %>?notice=' + encodeURIComponent(data.message || 'This order was cancelled. Your payment has been refunded to your wallet.'));
+                window.location.href = targetUrl;
+                return;
+            }
+
+            // 3. Handle unsuccessful retry or gateway lookup error (e.g. bug #3 retryable lookup error)
+            if (!res.ok || !data.success || !data.razorpay) {
                 alert(data.message || 'Unable to retry payment at this time.');
-                retryBtn.disabled = false;
-                retryBtn.innerHTML = originalText;
+                resetButton(retryBtn, originalText);
+                return;
+            }
+
+            // 4. Open Razorpay checkout ONLY when valid razorpay config is returned
+            if (!data.razorpay.keyId || !data.razorpay.orderId) {
+                alert('Payment gateway configuration error. Please contact support.');
+                resetButton(retryBtn, originalText);
                 return;
             }
 
@@ -122,6 +157,7 @@
                 theme: { color: '#000000' },
                 handler: async function (response) {
                     try {
+                        retryBtn.innerHTML = '<span>Verifying Payment...</span>';
                         const verifyRes = await fetch('/checkout/verify-razorpay', {
                             method: 'POST',
                             headers: {
@@ -150,8 +186,7 @@
                 },
                 modal: {
                     ondismiss: function () {
-                        retryBtn.disabled = false;
-                        retryBtn.innerHTML = originalText;
+                        resetButton(retryBtn, originalText);
                     },
                 },
             };
@@ -160,15 +195,13 @@
             rzp.on('payment.failed', function (resp) {
                 const desc = resp.error ? resp.error.description : 'Payment retry failed';
                 alert('Payment failed: ' + desc);
-                retryBtn.disabled = false;
-                retryBtn.innerHTML = originalText;
+                resetButton(retryBtn, originalText);
             });
             rzp.open();
         } catch (err) {
             console.error('Retry error:', err);
             alert('Something went wrong. Please check your network and try again.');
-            retryBtn.disabled = false;
-            retryBtn.innerHTML = originalText;
+            resetButton(retryBtn, originalText);
         }
     });
 })();

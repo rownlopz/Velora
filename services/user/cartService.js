@@ -98,11 +98,17 @@ const getCartDetails = async (userId, customCouponCode = null) => {
     // Merge pricing outputs back into items
     const enrichedItems = pricing.items.map((pi, idx) => {
         const raw = visibleItems[idx];
+        const isAvail = raw.isAvailable && pi.isAvailable !== false;
         return {
             ...raw,
             ...pi,
+            isAvailable: isAvail,
             currentPrice: pi.effectiveUnitPrice,
-            lineTotal: raw.isAvailable ? pi.lineTotal : 0,
+            lineTotal: isAvail ? pi.lineTotal : 0,
+            allocatedCouponDiscount: isAvail ? (pi.allocatedCouponDiscount || 0) : 0,
+            allocatedDiscount: isAvail ? (pi.allocatedDiscount || 0) : 0,
+            allocatedTax: isAvail ? (pi.allocatedTax || 0) : 0,
+            finalPayable: isAvail ? (pi.finalPayable || 0) : 0,
         };
     });
 
@@ -112,7 +118,8 @@ const getCartDetails = async (userId, customCouponCode = null) => {
         items: enrichedItems,
         rawSubtotal: pricing.rawSubtotal,
         subtotal: pricing.subtotal,
-        totalOfferDiscount: pricing.totalOfferDiscount,
+        totalOfferDiscount: pricing.totalOfferDiscount || 0,
+        totalSaleDiscount: pricing.totalSaleDiscount || 0,
         couponDiscount: pricing.couponDiscount,
         appliedCoupon: pricing.appliedCoupon,
         couponError: pricing.couponError,

@@ -34,6 +34,7 @@ const SHIPPING_THRESHOLD = 10000;
 const SHIPPING_FLAT_FEE = 100;
 
 const calculateShippingFee = (subtotal) => {
+    if (!subtotal || subtotal <= 0) return 0;
     return subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT_FEE;
 };
 
@@ -69,6 +70,7 @@ const getCheckoutDetails = async (userId) => {
         rawSubtotal: cartDetails.rawSubtotal,
         subtotal: cartDetails.subtotal,
         totalOfferDiscount: cartDetails.totalOfferDiscount || 0,
+        totalSaleDiscount: cartDetails.totalSaleDiscount || 0,
         couponDiscount: cartDetails.couponDiscount || 0,
         appliedCoupon: cartDetails.appliedCoupon || null,
         couponError: cartDetails.couponError || null,
@@ -252,6 +254,8 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 offerName: item.offerName || "",
                 offerDiscount: item.offerDiscount || 0,
                 totalOfferDiscount: (item.offerDiscount || 0) * item.quantity,
+                saleDiscount: item.saleDiscount || 0,
+                totalSaleDiscount: (item.saleDiscount || 0) * item.quantity,
                 allocatedCouponDiscount: item.allocatedCouponDiscount || 0,
                 allocatedDiscount: item.allocatedCouponDiscount || 0,
                 allocatedTax: item.allocatedTax || 0,
@@ -316,6 +320,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 shippingFee: cartDetails.shippingFee,
                 discount: (cartDetails.totalOfferDiscount || 0) + (cartDetails.couponDiscount || 0),
                 offerDiscount: cartDetails.totalOfferDiscount || 0,
+                saleDiscount: cartDetails.totalSaleDiscount || 0,
                 couponDiscount: cartDetails.couponDiscount || 0,
                 couponCode: cartDetails.appliedCoupon ? cartDetails.appliedCoupon.code : null,
                 couponId: appliedCouponId,
@@ -1278,10 +1283,38 @@ const retryOrderPayment = async (userId, orderId) => {
     }
 
     if (order.paymentStatus === "COMPLETED") {
-        return { success: false, isAlreadyPaid: true, message: "This order has already been paid successfully." };
+        return { success: true, isAlreadyPaid: true, message: "This order has already been paid successfully.", order };
     }
 
     if (order.orderStatus === "CANCELLED") {
+        // Even if cancelled, check if a previous attempt was captured by the gateway so it can be refunded to wallet
+        const gatewayState = await inspectOrderGatewayPaymentState(order);
+        if (gatewayState.status === "CAPTURED") {
+            const secret = process.env.RAZORPAY_KEY_SECRET;
+            const signature = secret
+                ? crypto.createHmac("sha256", secret.trim()).update(`${gatewayState.capturedGatewayOrderId}|${gatewayState.capturedPayment.id}`).digest("hex")
+                : "";
+
+            try {
+                const verifyResult = await verifyRazorpayPayment(userId, {
+                    orderId: order._id,
+                    razorpayOrderId: gatewayState.capturedGatewayOrderId,
+                    razorpayPaymentId: gatewayState.capturedPayment.id,
+                    razorpaySignature: signature,
+                });
+                if (verifyResult && (verifyResult.isCancelledLateRefund || verifyResult.isAlreadyRefunded)) {
+                    return {
+                        success: false,
+                        isCancelledLateRefund: true,
+                        isAlreadyRefunded: verifyResult.isAlreadyRefunded,
+                        message: verifyResult.message,
+                        order: verifyResult.order || order,
+                    };
+                }
+            } catch (err) {
+                console.error("Error verifying captured payment on cancelled order:", err);
+            }
+        }
         return { success: false, message: "This order has been cancelled and cannot be paid." };
     }
 
@@ -1367,12 +1400,21 @@ const retryOrderPayment = async (userId, orderId) => {
                 message: "A previous payment attempt was captured by the gateway. Order payment is now confirmed.",
                 order: verifyResult.order,
             };
+        } else if (verifyResult && (verifyResult.isCancelledLateRefund || verifyResult.isAlreadyRefunded)) {
+            return {
+                success: false,
+                isCancelledLateRefund: true,
+                isAlreadyRefunded: verifyResult.isAlreadyRefunded,
+                message: verifyResult.message,
+                order: verifyResult.order || order,
+            };
         } else {
             // If recovery/verification fails after finding a captured payment, do not fall through and create a new payment attempt
             return {
                 success: false,
                 message: verifyResult?.message || "We found a captured payment for this order, but could not complete verification. Please contact support.",
                 order,
+                requiresRecovery: verifyResult?.requiresRecovery,
             };
         }
     }
@@ -1449,7 +1491,7 @@ const retryOrderPayment = async (userId, orderId) => {
         await releaseLock();
         const fresh = await Order.findById(orderId);
         if (fresh && fresh.paymentStatus === "COMPLETED") {
-            return { success: false, isAlreadyPaid: true, message: "Payment was already completed by another attempt.", order: fresh };
+            return { success: true, isAlreadyPaid: true, message: "Payment was already completed by another attempt.", order: fresh };
         }
         return { success: false, message: "Order is no longer eligible for payment retry.", order: fresh };
     }
@@ -2102,6 +2144,19 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
 
     await Order.updateOne({ _id: orderId }, updateOps);
     await syncOrderRefundAccounting(orderId);
+
+    if (isAllCancelled && latestOrder.pricing?.couponId && !latestOrder.pricing?.isCouponReleased) {
+        try {
+            await releaseCouponUsage(latestOrder.pricing.couponId, latestOrder.userId, latestOrder.orderNumber);
+            await Order.updateOne(
+                { _id: orderId },
+                { $set: { "pricing.isCouponReleased": true, "pricing.couponReleasedAt": new Date() } }
+            );
+        } catch (couponErr) {
+            console.error("Failed to release coupon on cancellation:", couponErr);
+        }
+    }
+
     const finalOrder = await Order.findOne({ _id: orderId, userId });
 
     let refundMsg = "";
@@ -2312,6 +2367,19 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
 
     await Order.updateOne({ _id: orderId }, updateOpsItem);
     await syncOrderRefundAccounting(orderId);
+
+    if (isAllCancelledItem && freshOrder.pricing?.couponId && !freshOrder.pricing?.isCouponReleased) {
+        try {
+            await releaseCouponUsage(freshOrder.pricing.couponId, freshOrder.userId, freshOrder.orderNumber);
+            await Order.updateOne(
+                { _id: orderId },
+                { $set: { "pricing.isCouponReleased": true, "pricing.couponReleasedAt": new Date() } }
+            );
+        } catch (couponErr) {
+            console.error("Failed to release coupon on item cancellation:", couponErr);
+        }
+    }
+
     const finalOrder = await Order.findOne({ _id: orderId, userId });
 
     let itemRefundMsg = "";

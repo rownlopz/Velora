@@ -4,9 +4,6 @@ const {
     adjustVariantStock,
 } = require("../../services/admin/inventoryService");
 
-/**
- * Lists all product variants with inventory metrics, filters, search, and sorting
- */
 const loadInventory = async (req, res) => {
     try {
         const {
@@ -44,9 +41,6 @@ const loadInventory = async (req, res) => {
     }
 };
 
-/**
- * Update variant stock count
- */
 const updateStockController = async (req, res) => {
     const isAjax =
         req.headers["x-requested-with"] === "XMLHttpRequest" ||
@@ -84,9 +78,6 @@ const updateStockController = async (req, res) => {
     }
 };
 
-/**
- * Increment or decrement stock by delta (+1, -1, +5, etc.)
- */
 const quickAdjustStockController = async (req, res) => {
     const isAjax =
         req.headers["x-requested-with"] === "XMLHttpRequest" ||

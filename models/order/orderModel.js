@@ -133,6 +133,16 @@ const orderItemSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        saleDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        totalSaleDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         allocatedDiscount: {
             type: Number,
             default: 0,
@@ -263,6 +273,11 @@ const orderPricingSchema = new mongoose.Schema(
             min: 0,
         },
         offerDiscount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        saleDiscount: {
             type: Number,
             default: 0,
             min: 0,
