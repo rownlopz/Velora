@@ -59,40 +59,35 @@ const getProductDetail = async (slug) => {
         ]),
     ]);
 
-    const relatedProducts = await Product.aggregate([
-        {
-            $match: {
-                _id: { $ne: product._id },
-                categoryId: product.categoryId._id || product.categoryId,
-                isDeleted: false,
-                status: "ACTIVE",
-            },
-        },
-        { $limit: 4 },
-        {
-            $lookup: {
-                from: "variants",
-                let: { productId: "$_id" },
-                pipeline: [{ $match: { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true } }],
-                as: "activeVariants",
-            },
-        },
-        { $match: { "activeVariants.0": { $exists: true } } },
-        {
-            $addFields: {
-                displayPrice: {
-                    $min: {
-                        $map: {
-                            input: "$activeVariants",
-                            as: "v",
-                            in: { $ifNull: ["$$v.salePrice", "$$v.regularPrice"] },
-                        },
-                    },
-                },
-            },
-        },
-        { $project: { name: 1, slug: 1, thumbnail: 1, displayPrice: 1 } },
-    ]);
+    const rawRelated = await Product.find({
+        _id: { $ne: product._id },
+        categoryId: product.categoryId._id || product.categoryId,
+        isDeleted: false,
+        status: "ACTIVE",
+    }).limit(4).lean();
+
+    const relatedProducts = (
+        await Promise.all(
+            rawRelated.map(async (rp) => {
+                const relVariants = await Variant.find({ productId: rp._id, isActive: true });
+                if (!relVariants || relVariants.length === 0) return null;
+                let minPrice = Infinity;
+                for (const v of relVariants) {
+                    const priceInfo = await getAuthoritativeItemPrice(v, rp);
+                    if (priceInfo.displayPrice > 0 && priceInfo.displayPrice < minPrice) {
+                        minPrice = priceInfo.displayPrice;
+                    }
+                }
+                return {
+                    _id: rp._id,
+                    name: rp.name,
+                    slug: rp.slug,
+                    thumbnail: rp.thumbnail,
+                    displayPrice: Number.isFinite(minPrice) ? minPrice : 0,
+                };
+            })
+        )
+    ).filter(Boolean);
 
     const totalStock = variants.reduce((sum, v) => sum + v.stock, 0);
 

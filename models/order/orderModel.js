@@ -163,6 +163,10 @@ const orderItemSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        cancelledBeforePayment: {
+            type: Boolean,
+            default: false,
+        },
         returnReason: {
             type: String,
             default: "",
@@ -200,6 +204,15 @@ const orderItemSchema = new mongoose.Schema(
         refundAmount: {
             type: Number,
             default: 0,
+        },
+        refundStatus: {
+            type: String,
+            default: "NONE",
+        },
+        allocatedTax: {
+            type: Number,
+            default: 0,
+            min: 0,
         },
         restockedAt: {
             type: Date,
@@ -313,11 +326,63 @@ const orderPricingSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        taxRate: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        taxableAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        taxAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        originalTaxAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        isCouponReleased: {
+            type: Boolean,
+            default: false,
+        },
+        couponReleasedAt: {
+            type: Date,
+            default: null,
+        },
+        shippingRefundStatus: {
+            type: String,
+            default: "NONE",
+        },
+        refundAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        purchaseRefundTotal: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        duplicateRefundTotal: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         currentPayable: {
             type: Number,
             default: function () {
                 return this.totalAmount;
             },
+        },
+        collectedAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
         },
     },
     { _id: false }
@@ -490,7 +555,15 @@ const orderSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+        retryLockToken: {
+            type: String,
+            default: null,
+        },
         expirationClaimAt: {
+            type: Date,
+            default: null,
+        },
+        refundedAt: {
             type: Date,
             default: null,
         },

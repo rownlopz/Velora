@@ -487,6 +487,13 @@
                                     </span>
                                 </div>
 
+                                <% if (order.pricing?.taxAmount > 0) { %>
+                                    <div class="flex justify-between items-center text-neutral-600">
+                                        <span>Tax (5%)</span>
+                                        <span class="font-mono text-neutral-900">&#8377;<%= order.pricing.taxAmount.toLocaleString('en-IN') %></span>
+                                    </div>
+                                <% } %>
+
                                 <% if (order.pricing?.discount && order.pricing.discount > 0) { %>
                                     <div class="flex justify-between items-center text-emerald-600">
                                         <span>Discount</span>

@@ -313,6 +313,12 @@
                                 <span>&#8377;<%= displayedShip.toLocaleString('en-IN') %></span>
                             <% } %>
                         </div>
+                        <% if (order.pricing?.taxAmount > 0) { %>
+                            <div class="flex justify-between text-gray-600">
+                                <span>Estimated Tax (5%)</span>
+                                <span>&#8377;<%= order.pricing.taxAmount.toLocaleString('en-IN') %></span>
+                            </div>
+                        <% } %>
                         <% if (order.pricing?.offerDiscount > 0) { %>
                             <div class="flex justify-between text-emerald-700">
                                 <span>Offer Savings</span>

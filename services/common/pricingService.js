@@ -25,6 +25,7 @@ const getBestActiveOffer = async (productId, categoryId, now = new Date(), regul
         endDate: { $gte: now },
         $or: [
             { offerType: "PRODUCT", productId: productId },
+            { offerType: "PRODUCT", productIds: productId },
             ...(categoryId ? [{ offerType: "CATEGORY", categoryId: categoryId }] : []),
         ],
     };
@@ -147,68 +148,100 @@ const getAuthoritativeItemPrice = async (variant, product, now = new Date()) => 
     };
 };
 
+const TAX_RATE = 0.05; // 5% fixed tax rate
+
 /**
- * Allocates an order-level coupon discount deterministically across line items in integer paise.
- * Ensures sum(allocatedDiscounts) === totalCouponDiscount exactly.
+ * Allocates coupon discount and fixed 5% tax deterministically across line items in integer paise.
+ * Ensures:
+ * 1. sum(allocatedCouponDiscounts) === totalCouponDiscount exactly
+ * 2. sum(allocatedTaxes) === totalTaxAmount exactly
+ * 3. item.finalPayable === itemTaxable + itemAllocatedTax
+ * 4. sum(item.finalPayable) + shippingFee === totalAmount exactly
  */
-const allocateCouponDiscount = (items, totalCouponDiscount) => {
+const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) => {
     if (!items || items.length === 0) return items;
-    if (!totalCouponDiscount || totalCouponDiscount <= 0) {
-        return items.map((item) => ({
-            ...item,
-            allocatedCouponDiscount: 0,
-            finalPayable: item.lineTotal,
-        }));
-    }
 
     const totalSubtotalPaise = Math.round(
         items.reduce((sum, i) => sum + (Number(i.lineTotal) || 0), 0) * 100
     );
-    const couponPaise = Math.round(Number(totalCouponDiscount) * 100);
+    const couponPaise = Math.round((Number(totalCouponDiscount) || 0) * 100);
 
-    if (totalSubtotalPaise <= 0 || couponPaise <= 0) {
-        return items.map((item) => ({
-            ...item,
-            allocatedCouponDiscount: 0,
-            finalPayable: item.lineTotal,
-        }));
-    }
-
-    let allocatedSumPaise = 0;
+    // 1. Coupon allocation in integer paise
+    let allocatedCouponSumPaise = 0;
     const allocatedItems = items.map((item) => {
         const itemLineTotalPaise = Math.round((Number(item.lineTotal) || 0) * 100);
-        const itemSharePaise = Math.floor((itemLineTotalPaise * couponPaise) / totalSubtotalPaise);
-        allocatedSumPaise += itemSharePaise;
+        let itemCouponSharePaise = 0;
+        if (totalSubtotalPaise > 0 && couponPaise > 0) {
+            itemCouponSharePaise = Math.floor((itemLineTotalPaise * couponPaise) / totalSubtotalPaise);
+        }
+        allocatedCouponSumPaise += itemCouponSharePaise;
         return {
             ...item,
             itemLineTotalPaise,
-            allocatedPaise: itemSharePaise,
+            itemCouponSharePaise,
         };
     });
 
-    // Distribute remainder paise to largest item to ensure exact sum match
-    let remainderPaise = couponPaise - allocatedSumPaise;
-    if (remainderPaise > 0) {
+    // Distribute remainder coupon paise to largest line total items
+    let remainderCouponPaise = couponPaise - allocatedCouponSumPaise;
+    if (remainderCouponPaise > 0) {
         const sortedIndices = allocatedItems
             .map((item, idx) => ({ idx, total: item.itemLineTotalPaise }))
             .sort((a, b) => b.total - a.total);
 
-        for (let i = 0; i < sortedIndices.length && remainderPaise > 0; i++) {
-            allocatedItems[sortedIndices[i].idx].allocatedPaise += 1;
-            remainderPaise -= 1;
+        for (let i = 0; i < sortedIndices.length && remainderCouponPaise > 0; i++) {
+            allocatedItems[sortedIndices[i].idx].itemCouponSharePaise += 1;
+            remainderCouponPaise -= 1;
+        }
+    }
+
+    // 2. Tax calculation and allocation in integer paise
+    // Taxable merchandise amount = merchandise subtotal after offers minus coupon discount
+    const taxableAmountPaise = Math.max(0, totalSubtotalPaise - couponPaise);
+    const totalTaxPaise = Math.round((taxableAmountPaise * Math.round(taxRate * 100)) / 100);
+
+    let allocatedTaxSumPaise = 0;
+    allocatedItems.forEach((item) => {
+        const itemTaxablePaise = Math.max(0, item.itemLineTotalPaise - item.itemCouponSharePaise);
+        let itemTaxSharePaise = 0;
+        if (taxableAmountPaise > 0 && totalTaxPaise > 0) {
+            itemTaxSharePaise = Math.floor((itemTaxablePaise * totalTaxPaise) / taxableAmountPaise);
+        }
+        item.itemTaxablePaise = itemTaxablePaise;
+        item.itemTaxSharePaise = itemTaxSharePaise;
+        allocatedTaxSumPaise += itemTaxSharePaise;
+    });
+
+    // Distribute remainder tax paise to largest taxable items
+    let remainderTaxPaise = totalTaxPaise - allocatedTaxSumPaise;
+    if (remainderTaxPaise > 0) {
+        const sortedIndices = allocatedItems
+            .map((item, idx) => ({ idx, taxable: item.itemTaxablePaise }))
+            .sort((a, b) => b.taxable - a.taxable);
+
+        for (let i = 0; i < sortedIndices.length && remainderTaxPaise > 0; i++) {
+            allocatedItems[sortedIndices[i].idx].itemTaxSharePaise += 1;
+            remainderTaxPaise -= 1;
         }
     }
 
     return allocatedItems.map((item) => {
-        const allocatedCouponDiscount = item.allocatedPaise / 100;
-        const finalPayable = Math.max(0, (item.itemLineTotalPaise - item.allocatedPaise) / 100);
-        const { itemLineTotalPaise, allocatedPaise, ...cleanItem } = item;
+        const allocatedCouponDiscount = item.itemCouponSharePaise / 100;
+        const allocatedTax = item.itemTaxSharePaise / 100;
+        const finalPayable = (item.itemTaxablePaise + item.itemTaxSharePaise) / 100;
+        const { itemLineTotalPaise, itemCouponSharePaise, itemTaxablePaise, itemTaxSharePaise, ...cleanItem } = item;
         return {
             ...cleanItem,
             allocatedCouponDiscount,
+            allocatedDiscount: allocatedCouponDiscount,
+            allocatedTax,
             finalPayable,
         };
     });
+};
+
+const allocateCouponDiscount = (items, totalCouponDiscount) => {
+    return allocateCouponAndTax(items, totalCouponDiscount, 0);
 };
 
 /**
@@ -323,11 +356,21 @@ const calculateCartPricing = async (cartItems, couponCode = "", userId = null) =
         }
     }
 
+    const subtotalPaise = Math.round(effectiveSubtotal * 100);
+    const couponDiscountPaise = Math.round(couponDiscount * 100);
+    const taxableAmountPaise = Math.max(0, subtotalPaise - couponDiscountPaise);
+    const taxAmountPaise = Math.round((taxableAmountPaise * 5) / 100);
     const shippingFee = calculateShippingFee(effectiveSubtotal);
-    const totalAmount = Math.max(0, Math.round((effectiveSubtotal - couponDiscount + shippingFee) * 100) / 100);
+    const shippingFeePaise = Math.round(shippingFee * 100);
 
-    // Allocate order-level coupon discount deterministically across items
-    const finalItems = allocateCouponDiscount(pricedItems, couponDiscount);
+    const totalAmountPaise = Math.max(0, taxableAmountPaise + taxAmountPaise + shippingFeePaise);
+
+    const taxableAmount = taxableAmountPaise / 100;
+    const taxAmount = taxAmountPaise / 100;
+    const totalAmount = totalAmountPaise / 100;
+
+    // Allocate order-level coupon discount and 5% tax deterministically across items
+    const finalItems = allocateCouponAndTax(pricedItems, couponDiscount, TAX_RATE);
 
     return {
         items: finalItems,
@@ -337,6 +380,9 @@ const calculateCartPricing = async (cartItems, couponCode = "", userId = null) =
         couponDiscount,
         appliedCoupon,
         couponError,
+        taxRate: TAX_RATE,
+        taxableAmount,
+        taxAmount,
         shippingFee,
         shippingThreshold: SHIPPING_THRESHOLD,
         totalAmount,
@@ -361,11 +407,13 @@ const calculateOfferSavings = (regularPrice, offer) => {
 module.exports = {
     SHIPPING_THRESHOLD,
     SHIPPING_FLAT_FEE,
+    TAX_RATE,
     calculateShippingFee,
     getBestActiveOffer,
     calculateOfferSavings,
     calculateItemPrice,
     getAuthoritativeItemPrice,
     allocateCouponDiscount,
+    allocateCouponAndTax,
     calculateCartPricing,
 };

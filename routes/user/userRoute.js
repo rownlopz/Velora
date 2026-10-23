@@ -34,6 +34,7 @@ const orderController = require("../../controllers/user/orderController");
 // Protected User Routes
 router.get("/", userAuth, userController.loadHome);
 router.get("/products", productController.loadProducts);
+router.get("/products/:slug/variants", productController.getProductVariantsController);
 router.get("/products/:slug", productController.loadProductDetail);
 router.get("/categories", productController.loadCategories);
 
@@ -56,6 +57,7 @@ router.post("/checkout/remove-coupon", userAuth, orderController.removeCouponCon
 
 // Razorpay Online Payment Verification & Retry
 router.post("/checkout/verify-razorpay", userAuth, orderController.verifyRazorpayPaymentController);
+router.get("/orders/:orderId/payment-status", userAuth, orderController.getPaymentStatusController);
 router.get("/orders/:orderId/payment-success", userAuth, orderController.loadPaymentSuccess);
 router.get("/orders/:orderId/payment-failed", userAuth, orderController.loadPaymentFailed);
 router.post("/orders/:orderId/retry-payment", userAuth, orderController.retryPaymentController);

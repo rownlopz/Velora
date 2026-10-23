@@ -14,8 +14,12 @@ const walletService = require("./walletService");
 const { getOrCreateWallet, creditWallet, debitWallet } = walletService;
 const Transaction = require("../../models/user/transactionModel");
 const Wallet = require("../../models/user/walletModel");
-const { getRazorpayInstance } = require("../../config/razorpay");
+const { getRazorpayInstance, isRazorpayConfigured } = require("../../config/razorpay");
 const { recordCouponUsage, releaseCouponUsage } = require("../admin/couponService");
+const {
+    isCancellationRefundEligible,
+    syncOrderRefundAccounting,
+} = require("../admin/orderService");
 const restoreCancellationStock = require("../../helpers/restoreCancellationStock");
 const {
     validateStatusTransition,
@@ -25,8 +29,8 @@ const {
     PREDEFINED_CANCELLATION_REASONS,
 } = require("../../helpers/orderStatusHelper");
 
-// Standard transparent shipping rule: Free delivery above ₹1,000, else ₹100
-const SHIPPING_THRESHOLD = 1000;
+// Standard transparent shipping rule: Free delivery above ₹1,0000, else ₹100
+const SHIPPING_THRESHOLD = 10000;
 const SHIPPING_FLAT_FEE = 100;
 
 const calculateShippingFee = (subtotal) => {
@@ -68,6 +72,9 @@ const getCheckoutDetails = async (userId) => {
         couponDiscount: cartDetails.couponDiscount || 0,
         appliedCoupon: cartDetails.appliedCoupon || null,
         couponError: cartDetails.couponError || null,
+        taxRate: cartDetails.taxRate || 0.05,
+        taxableAmount: cartDetails.taxableAmount != null ? cartDetails.taxableAmount : (cartDetails.subtotal - (cartDetails.couponDiscount || 0)),
+        taxAmount: cartDetails.taxAmount || 0,
         shippingFee: cartDetails.shippingFee,
         shippingThreshold: cartDetails.shippingThreshold,
         totalAmount: cartDetails.totalAmount,
@@ -89,6 +96,13 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
         return { success: false, message: "Invalid payment method selected." };
     }
 
+    if (normalizedMethod === "ONLINE" && !isRazorpayConfigured()) {
+        return {
+            success: false,
+            message: "Online payment gateway is not properly configured. Please select COD or Wallet payment.",
+        };
+    }
+
     if (!addressId || !mongoose.Types.ObjectId.isValid(addressId)) {
         return { success: false, message: "Please select a valid delivery address." };
     }
@@ -102,18 +116,25 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
     if (trimmedToken) {
         const existingOrder = await Order.findOne({ checkoutToken: trimmedToken, userId });
         if (existingOrder) {
+            if (existingOrder.orderStatus === "CANCELLED" || existingOrder.paymentStatus === "FAILED") {
+                return {
+                    success: false,
+                    message: "Previous checkout attempt for this session failed or was cancelled.",
+                    order: existingOrder,
+                    isFailed: true,
+                };
+            }
             return { success: true, order: existingOrder, isExisting: true };
         }
     }
 
     const claimNow = new Date();
-    const checkoutClaimToken = trimmedToken || `chk_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const requestLeaseId = `chk_lease_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
     const cart = await Cart.findOneAndUpdate(
         {
             userId,
             "items.0": { $exists: true },
             $or: [
-                { checkoutClaimToken: trimmedToken || checkoutClaimToken },
                 { checkoutClaimUntil: { $exists: false } },
                 { checkoutClaimUntil: null },
                 { checkoutClaimUntil: { $lte: claimNow } },
@@ -121,7 +142,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
         },
         {
             $set: {
-                checkoutClaimToken,
+                checkoutClaimToken: requestLeaseId,
                 checkoutClaimUntil: new Date(Date.now() + 30000), // 30-second lease
             },
         },
@@ -134,15 +155,15 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
     // 2. Authoritative Cart Details & Pricing Calculation
     const cartDetails = await getCartDetails(userId);
     if (!cartDetails.items || cartDetails.items.length === 0) {
-        await Cart.updateOne({ userId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
+        await Cart.updateOne({ userId, checkoutClaimToken: requestLeaseId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
         return { success: false, message: "Your shopping bag is empty." };
     }
     if (cartDetails.hasUnavailableItems) {
-        await Cart.updateOne({ userId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
+        await Cart.updateOne({ userId, checkoutClaimToken: requestLeaseId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
         return { success: false, message: "Some items in your cart are no longer available or exceed stock." };
     }
     if (cartDetails.couponError) {
-        await Cart.updateOne({ userId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
+        await Cart.updateOne({ userId, checkoutClaimToken: requestLeaseId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
         return { success: false, message: `Coupon issue: ${cartDetails.couponError}. Please review your bag before placing the order.` };
     }
 
@@ -150,7 +171,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
     if (normalizedMethod === "WALLET") {
         const wallet = await getOrCreateWallet(userId);
         if (wallet.balance < cartDetails.totalAmount) {
-            await Cart.updateOne({ userId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
+            await Cart.updateOne({ userId, checkoutClaimToken: requestLeaseId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
             return {
                 success: false,
                 message: `Insufficient wallet balance (₹${wallet.balance.toFixed(2)}). Total payable is ₹${cartDetails.totalAmount.toFixed(2)}.`,
@@ -186,7 +207,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             appliedCouponId = cartDetails.appliedCoupon.couponId;
             const couponResult = await recordCouponUsage(appliedCouponId, userId, orderNumber);
             if (!couponResult.success) {
-                await Cart.updateOne({ userId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
+                await Cart.updateOne({ userId, checkoutClaimToken: requestLeaseId }, { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }).catch(() => {});
                 return {
                     success: false,
                     message: couponResult.message || "Failed to apply coupon limits.",
@@ -233,6 +254,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 totalOfferDiscount: (item.offerDiscount || 0) * item.quantity,
                 allocatedCouponDiscount: item.allocatedCouponDiscount || 0,
                 allocatedDiscount: item.allocatedCouponDiscount || 0,
+                allocatedTax: item.allocatedTax || 0,
                 finalPayable: item.finalPayable != null ? item.finalPayable : Math.max(0, lineTotal - (item.allocatedCouponDiscount || 0)),
                 lineTotal,
                 status: "PENDING",
@@ -269,7 +291,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
         }
 
         // 8. Create Order Document
-        const initialPaymentStatus = normalizedMethod === "WALLET" ? "COMPLETED" : "PENDING";
+        const initialPaymentStatus = "PENDING";
         const initialOrderStatus = normalizedMethod === "ONLINE" ? "PENDING" : "PLACED";
 
         const orderDoc = {
@@ -297,6 +319,10 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 couponDiscount: cartDetails.couponDiscount || 0,
                 couponCode: cartDetails.appliedCoupon ? cartDetails.appliedCoupon.code : null,
                 couponId: appliedCouponId,
+                taxRate: cartDetails.taxRate || 0.05,
+                taxableAmount: cartDetails.taxableAmount != null ? cartDetails.taxableAmount : Math.max(0, cartDetails.subtotal - (cartDetails.couponDiscount || 0)),
+                taxAmount: cartDetails.taxAmount || 0,
+                originalTaxAmount: cartDetails.taxAmount || 0,
                 totalAmount: cartDetails.totalAmount,
                 originalSubtotal: cartDetails.rawSubtotal || cartDetails.subtotal,
                 originalShippingFee: cartDetails.shippingFee,
@@ -305,13 +331,17 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 cancellationDeduction: 0,
                 returnCredit: 0,
                 walletRefundIssued: 0,
+                purchaseRefundTotal: 0,
+                duplicateRefundTotal: 0,
+                refundAmount: 0,
+                isCouponReleased: false,
                 currentPayable: cartDetails.totalAmount,
             },
             paymentMethod: normalizedMethod,
             paymentStatus: initialPaymentStatus,
             orderStatus: initialOrderStatus,
             placedAt: new Date(),
-            paidAt: normalizedMethod === "WALLET" ? new Date() : null,
+            paidAt: null,
             isWalletDebited: false,
         };
 
@@ -335,6 +365,9 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
 
             walletDebitedSuccessfully = true;
             createdOrder.isWalletDebited = true;
+            createdOrder.paymentStatus = "COMPLETED";
+            createdOrder.orderStatus = "PLACED";
+            createdOrder.paidAt = new Date();
             await createdOrder.save();
 
             await Payment.create({
@@ -406,7 +439,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             }
         }
         await Cart.updateOne(
-            { userId },
+            { userId, checkoutClaimToken: requestLeaseId },
             {
                 $set: { appliedCoupon: null, checkoutToken: null },
                 $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" },
@@ -420,7 +453,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 order: createdOrder,
                 isOnline: true,
                 razorpay: {
-                    keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholderKeyId",
+                    keyId: process.env.RAZORPAY_KEY_ID || "",
                     orderId: createdOrder.razorpayOrderId,
                     amount: Math.round(cartDetails.totalAmount * 100),
                     currency: "INR",
@@ -438,14 +471,11 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
     } catch (err) {
         // Rollback on failure
         await Cart.updateOne(
-            { userId },
+            { userId, checkoutClaimToken: requestLeaseId },
             { $unset: { checkoutClaimToken: "", checkoutClaimUntil: "" } }
         ).catch(() => {});
 
         if (createdOrder) {
-            for (const item of createdOrder.items) {
-                await restoreCancellationStock(createdOrder._id, item).catch(() => {});
-            }
             await Order.updateOne(
                 { _id: createdOrder._id },
                 {
@@ -456,7 +486,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                         cancelledAt: new Date(),
                         cancelledBy: "SYSTEM",
                         "items.$[].status": "CANCELLED",
-                        "items.$[].isStockRestored": true,
                     },
                 }
             ).catch(() => {});
@@ -464,6 +493,19 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
                 { orderId: createdOrder._id },
                 { $set: { status: "FAILED" } }
             ).catch(() => {});
+
+            for (const item of createdOrder.items) {
+                try {
+                    await restoreCancellationStock(createdOrder._id, item);
+                    await Order.updateOne(
+                        { _id: createdOrder._id, "items._id": item._id },
+                        { $set: { "items.$.isStockRestored": true } }
+                    );
+                } catch (restockErr) {
+                    console.error(`Stock restoration failed for item ${item._id} on rollback of order ${createdOrder._id}:`, restockErr);
+                    // Do not mark isStockRestored as true. Leave failure discoverable and retryable!
+                }
+            }
 
             // Roll back wallet debit ONLY IF an actual debit took place
             const Transaction = require("../../models/user/transactionModel");
@@ -502,9 +544,18 @@ const placeCodOrder = async (userId, addressId, checkoutToken = "") => {
  * Verifies Razorpay payment signature and activates order fulfillment
  */
 const verifyRazorpayPayment = async (userId, paymentData) => {
-    const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = paymentData;
+    const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = paymentData || {};
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
+    }
+    if (!razorpayOrderId || typeof razorpayOrderId !== "string" || !razorpayOrderId.trim()) {
+        return { success: false, message: "Invalid or missing Razorpay order ID." };
+    }
+    if (!razorpayPaymentId || typeof razorpayPaymentId !== "string" || !razorpayPaymentId.trim()) {
+        return { success: false, message: "Invalid or missing Razorpay payment ID." };
+    }
+    if (!razorpaySignature || typeof razorpaySignature !== "string" || !razorpaySignature.trim()) {
+        return { success: false, message: "Invalid or missing Razorpay signature." };
     }
 
     const order = await Order.findOne({ _id: orderId, userId });
@@ -512,40 +563,217 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         return { success: false, message: "Order not found." };
     }
 
-    // Self-heal Payment document if Order is already COMPLETED
+    if (order.paymentMethod !== "ONLINE") {
+        return { success: false, message: "Order payment method is not eligible for online verification." };
+    }
+
+    const matchingAttempt = (order.paymentAttempts || []).find((a) => a.razorpayOrderId === razorpayOrderId);
+    if (!order.razorpayOrderId || (order.razorpayOrderId !== razorpayOrderId && !matchingAttempt)) {
+        return { success: false, message: "Razorpay order ID mismatch or unrecognized payment attempt." };
+    }
+
+    // 1. Verify HMAC SHA256 Signature FIRST before any financial side effect, refund, or order completion
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret || !secret.trim()) {
+        return { success: false, message: "Payment gateway credentials are not configured." };
+    }
+    const body = `${razorpayOrderId}|${razorpayPaymentId}`;
+    const expectedSignature = crypto
+        .createHmac("sha256", secret.trim())
+        .update(body)
+        .digest("hex");
+
+    if (expectedSignature !== razorpaySignature) {
+        const failedAttempt = {
+            gateway: "RAZORPAY",
+            attemptId: `att_${Date.now()}`,
+            razorpayOrderId,
+            razorpayPaymentId,
+            amount: order.pricing?.currentPayable || order.pricing?.totalAmount || 0,
+            status: "FAILED",
+            errorReason: "Signature verification failed",
+            createdAt: new Date(),
+        };
+        // Record failed attempt
+        await Order.updateOne({ _id: orderId }, { $push: { paymentAttempts: failedAttempt } });
+        // PROTECT CONFIRMED PAYMENT STATES IN DATABASE CONDITIONAL QUERY (Case 2.E):
+        // Enforce in conditional database update so invalid signature cannot downgrade completed payment
+        await Order.updateOne(
+            {
+                _id: orderId,
+                paymentStatus: { $nin: ["COMPLETED", "REFUNDED"] },
+            },
+            { $set: { paymentStatus: "FAILED" } }
+        );
+        return { success: false, message: "Payment verification failed: Invalid signature." };
+    }
+
+    // 2. Verify actual collection/capture status, currency, and amount using Razorpay gateway
+    const rzp = getRazorpayInstance();
+    if (!rzp || !rzp.payments) {
+        return { success: false, message: "Payment gateway service is currently unavailable." };
+    }
+
+    let payEntity = null;
+    try {
+        payEntity = await rzp.payments.fetch(razorpayPaymentId);
+    } catch (fetchErr) {
+        // Treat gateway lookup failure as unresolved, never as permission to refund or complete
+        return {
+            success: false,
+            message: `Gateway lookup failed: unable to verify payment status with payment gateway. ${fetchErr?.message || ""}`.trim(),
+        };
+    }
+
+    if (!payEntity) {
+        return { success: false, message: "Unable to verify payment with payment gateway: payment entity not found." };
+    }
+
+    // Verify collection/capture status: must be "captured", not "authorized" or "failed"
+    if (payEntity.status !== "captured") {
+        return {
+            success: false,
+            message: `Payment has not been captured (current status: "${payEntity.status}"). Payment cannot be accepted.`,
+        };
+    }
+
+    // Verify gateway order association: payEntity.order_id must match razorpayOrderId
+    if (payEntity.order_id && payEntity.order_id !== razorpayOrderId) {
+        return {
+            success: false,
+            message: `Gateway order mismatch: payment belongs to gateway order ${payEntity.order_id}, not ${razorpayOrderId}.`,
+        };
+    }
+
+    // Verify currency: must be INR
+    if (payEntity.currency && payEntity.currency.toUpperCase() !== "INR") {
+        return {
+            success: false,
+            message: `Currency mismatch: expected INR, received ${payEntity.currency}.`,
+        };
+    }
+
+    const verifiedCapturedAmt = payEntity.amount != null ? payEntity.amount / 100 : null;
+    if (verifiedCapturedAmt == null || verifiedCapturedAmt <= 0) {
+        return { success: false, message: "Invalid collected payment amount reported by gateway." };
+    }
+
+    const expectedPayable = order.pricing?.currentPayable != null ? order.pricing.currentPayable : order.pricing.totalAmount;
+    const expectedPaise = Math.round(expectedPayable * 100);
+
+    // 3. Self-heal Payment document if Order is already COMPLETED or handle legitimate duplicate payment
     if (order.paymentStatus === "COMPLETED") {
-        // If a different Razorpay payment ID was captured, handle duplicate payment safely
-        if (razorpayPaymentId && order.razorpayPaymentId && razorpayPaymentId !== order.razorpayPaymentId) {
-            let capturedAmt = order.pricing?.currentPayable != null ? order.pricing.currentPayable : order.pricing.totalAmount;
-            try {
-                const rzp = getRazorpayInstance();
-                if (rzp?.payments) {
-                    const pe = await rzp.payments.fetch(razorpayPaymentId).catch(() => null);
-                    if (pe?.amount != null) capturedAmt = pe.amount / 100;
+        if (order.razorpayPaymentId && razorpayPaymentId === order.razorpayPaymentId) {
+            // Replay of already-verified original payment (Case 2.B):
+            // Check if there is an unrefunded excess payment obligation that failed previously.
+            const curPayable = order.pricing?.currentPayable != null ? order.pricing.currentPayable : order.pricing.totalAmount;
+            if (verifiedCapturedAmt > curPayable) {
+                const totalDifference = verifiedCapturedAmt - curPayable;
+                const Transaction = require("../../models/user/transactionModel");
+                const excessRef = `REFUND_EXCESS_${order._id}_${razorpayPaymentId}`;
+                const excessTx = await Transaction.findOne({ referenceId: excessRef });
+
+                // Check all refunds already issued (cancellations and returns)
+                const itemRefundsIssued = (order.items || [])
+                    .filter((i) => (i.status === "CANCELLED" || i.status === "RETURNED" || i.status === "RETURN_APPROVED") && i.refundIssued)
+                    .reduce((sum, i) => sum + (i.refundAmount != null ? i.refundAmount : (i.finalPayable != null ? i.finalPayable : i.lineTotal)), 0);
+
+                const alreadyRefundedTotal = Math.max(
+                    order.pricing?.purchaseRefundTotal || 0,
+                    itemRefundsIssued
+                );
+
+                const alreadyCreditedDifference = (excessTx ? (excessTx.amount || totalDifference) : 0) + alreadyRefundedTotal;
+                const remainingExcess = Math.max(0, totalDifference - alreadyCreditedDifference);
+
+                if (remainingExcess > 0 && !excessTx) {
+                    const cred = await creditWallet({
+                        userId,
+                        amount: remainingExcess,
+                        reason: "ORDER_REFUND",
+                        description: `Self-healing excess refund for Order #${order.orderNumber}`,
+                        orderId: order._id,
+                        orderNumber: order.orderNumber,
+                        referenceId: excessRef,
+                    });
+                    if (cred.success && !cred.isDuplicate) {
+                        await Order.updateOne(
+                            { _id: order._id },
+                            {
+                                $inc: {
+                                    "pricing.walletRefundIssued": remainingExcess,
+                                    "pricing.purchaseRefundTotal": remainingExcess,
+                                    "pricing.refundAmount": remainingExcess,
+                                },
+                            }
+                        );
+                    }
                 }
-            } catch {}
+            }
+
+            await Payment.updateMany(
+                { orderId: order._id, status: { $ne: "COMPLETED" } },
+                { $set: { status: "COMPLETED", paidAt: order.paidAt || new Date() } }
+            ).catch(() => {});
+            return { success: true, message: "Payment already verified.", order, isExisting: true };
+        }
+
+        if (order.razorpayPaymentId && razorpayPaymentId !== order.razorpayPaymentId) {
+            // Verified duplicate payment attempt: signature verified, gateway captured, order_id and currency verified!
             const dupRef = `REFUND_DUP_${order._id}_${razorpayPaymentId}`;
             const dupCred = await creditWallet({
                 userId,
-                amount: capturedAmt,
+                amount: verifiedCapturedAmt,
                 reason: "ORDER_REFUND",
                 description: `Refund for duplicate payment attempt on Order #${order.orderNumber}`,
                 orderId: order._id,
                 orderNumber: order.orderNumber,
                 referenceId: dupRef,
             });
-            if (dupCred.success && !dupCred.isDuplicate) {
+
+            if (!dupCred.success) {
+                // Case 2.D: Wallet credit failed during duplicate refund!
                 await Order.updateOne(
                     { _id: order._id },
                     {
-                        $inc: { "pricing.walletRefundIssued": capturedAmt },
                         $push: {
                             paymentAttempts: {
                                 gateway: "RAZORPAY",
                                 attemptId: `att_dup_${Date.now()}`,
                                 razorpayOrderId,
                                 razorpayPaymentId,
-                                amount: capturedAmt,
+                                amount: verifiedCapturedAmt,
+                                status: "REFUND_PENDING",
+                                errorReason: dupCred.message || "Wallet credit failed",
+                                createdAt: new Date(),
+                            },
+                        },
+                    }
+                );
+                return {
+                    success: false,
+                    message: "Duplicate payment detected, but automatic wallet refund failed. Refund obligation is preserved for recovery.",
+                    order,
+                    requiresRecovery: true,
+                };
+            }
+
+            if (!dupCred.isDuplicate) {
+                // Case 2.C: Duplicate-payment refunds must NOT consume the purchase's refund allowance!
+                await Order.updateOne(
+                    { _id: order._id },
+                    {
+                        $inc: {
+                            "pricing.duplicateRefundTotal": verifiedCapturedAmt,
+                            "pricing.walletRefundIssued": verifiedCapturedAmt,
+                        },
+                        $push: {
+                            paymentAttempts: {
+                                gateway: "RAZORPAY",
+                                attemptId: `att_dup_${Date.now()}`,
+                                razorpayOrderId,
+                                razorpayPaymentId,
+                                amount: verifiedCapturedAmt,
                                 status: "REFUNDED_DUPLICATE",
                                 createdAt: new Date(),
                             },
@@ -553,6 +781,7 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
                     }
                 );
             }
+
             return {
                 success: true,
                 message: "Duplicate payment detected and automatically refunded to your wallet.",
@@ -568,78 +797,34 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         return { success: true, message: "Payment already verified.", order, isExisting: true };
     }
 
-    if (order.paymentMethod !== "ONLINE") {
-        return { success: false, message: "Order payment method is not eligible for online verification." };
+    // 4. Verify amount is not underpaid for completing the order
+    if (payEntity.amount < expectedPaise) {
+        return {
+            success: false,
+            message: `Underpaid payment: expected ₹${expectedPayable}, received ₹${verifiedCapturedAmt}.`,
+        };
     }
 
-    const matchingAttempt = (order.paymentAttempts || []).find((a) => a.razorpayOrderId === razorpayOrderId);
-    if (order.razorpayOrderId && razorpayOrderId && order.razorpayOrderId !== razorpayOrderId && !matchingAttempt) {
-        return { success: false, message: "Razorpay order ID mismatch." };
-    }
-
-    // Verify HMAC SHA256 Signature
-    const secret = process.env.RAZORPAY_KEY_SECRET || "rzp_test_placeholderSecret";
-    const body = `${razorpayOrderId}|${razorpayPaymentId}`;
-    const expectedSignature = crypto
-        .createHmac("sha256", secret)
-        .update(body)
-        .digest("hex");
-
-    if (expectedSignature !== razorpaySignature) {
-        await Order.updateOne(
-            { _id: orderId },
-            {
-                $set: { paymentStatus: "FAILED" },
-                $push: {
-                    paymentAttempts: {
-                        gateway: "RAZORPAY",
-                        attemptId: `att_${Date.now()}`,
-                        razorpayOrderId,
-                        razorpayPaymentId,
-                        amount: order.pricing.currentPayable || order.pricing.totalAmount,
-                        status: "FAILED",
-                        errorReason: "Signature verification failed",
-                        createdAt: new Date(),
-                    },
-                },
-            }
-        );
-        return { success: false, message: "Payment verification failed: Invalid signature." };
-    }
-
-    // 1. Verify payment entity with Razorpay gateway if instance is available
-    let capturedAmount = order.pricing?.currentPayable != null ? order.pricing.currentPayable : order.pricing.totalAmount;
-    let paymentCurrency = "INR";
-    try {
-        const razorpayInstance = getRazorpayInstance();
-        if (razorpayInstance && razorpayInstance.payments && razorpayPaymentId) {
-            const payEntity = await razorpayInstance.payments.fetch(razorpayPaymentId).catch(() => null);
-            if (payEntity) {
-                if (payEntity.currency && payEntity.currency.toUpperCase() !== "INR") {
-                    return { success: false, message: `Currency mismatch: expected INR, received ${payEntity.currency}` };
-                }
-                if (payEntity.amount != null) {
-                    capturedAmount = payEntity.amount / 100;
-                }
-                paymentCurrency = payEntity.currency || "INR";
-            }
-        }
-    } catch {
-        // Fall back gracefully to authoritative order amount
-    }
-
-    // 2. Handle Late Capture after Cancellation/Refund
-    if (order.orderStatus === "CANCELLED" || order.paymentStatus === "REFUNDED") {
-        // Prevent replaying a payment callback after normal cancellation from refunding the same payment again!
+    // 5. Handle Late Capture after Cancellation/Refund
+    if (order.orderStatus === "CANCELLED" || order.orderStatus === "EXPIRED" || order.paymentStatus === "REFUNDED") {
         const Transaction = require("../../models/user/transactionModel");
         const lateRefId = `REFUND_LATE_${order._id}_${razorpayPaymentId}`;
-        const isOriginalPaymentRefunded = (order.razorpayPaymentId && order.razorpayPaymentId === razorpayPaymentId) ||
-            (order.pricing?.walletRefundIssued != null && order.pricing.walletRefundIssued >= (order.pricing?.totalAmount || 0));
+
+        // Check if original payment was already refunded
+        // Real cancellation refunds use per-item references (REFUND_CAN_${order._id}_${item._id})
         const existingTx = await Transaction.findOne({
-            referenceId: { $in: [lateRefId, `REFUND_CAN_${order._id}`, `REFUND_ADM_CAN_${order._id}`, `REFUND_DUP_${order._id}_${razorpayPaymentId}`] }
+            $or: [
+                { referenceId: lateRefId },
+                { referenceId: `REFUND_DUP_${order._id}_${razorpayPaymentId}` },
+                { referenceId: { $regex: `^REFUND_(?:CAN|ADM_CAN)_${order._id}` } },
+            ],
         });
 
-        if (isOriginalPaymentRefunded && existingTx) {
+        const isOriginalPaymentRefunded = (order.razorpayPaymentId && order.razorpayPaymentId === razorpayPaymentId) ||
+            (order.pricing?.walletRefundIssued != null && order.pricing.walletRefundIssued >= (order.pricing?.totalAmount || 0)) ||
+            (order.items || []).every((i) => i.refundIssued);
+
+        if ((isOriginalPaymentRefunded && existingTx) || (existingTx && order.razorpayPaymentId === razorpayPaymentId)) {
             return {
                 success: false,
                 message: "Order was already cancelled and this payment has already been refunded.",
@@ -648,13 +833,7 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
             };
         }
 
-        const orderOriginalTotal = (order.pricing?.originalTotalAmount != null && order.pricing.originalTotalAmount > 0)
-            ? order.pricing.originalTotalAmount
-            : (order.pricing?.totalAmount || 0);
-        const refundAmount = (capturedAmount != null && capturedAmount > 0)
-            ? capturedAmount
-            : orderOriginalTotal;
-
+        const refundAmount = verifiedCapturedAmt;
         const credResult = await creditWallet({
             userId,
             amount: refundAmount,
@@ -666,9 +845,28 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         });
 
         if (!credResult.success) {
+            await Order.updateOne(
+                { _id: order._id },
+                {
+                    $push: {
+                        paymentAttempts: {
+                            gateway: "RAZORPAY",
+                            attemptId: `att_late_${Date.now()}`,
+                            razorpayOrderId,
+                            razorpayPaymentId,
+                            amount: refundAmount,
+                            status: "REFUND_PENDING",
+                            errorReason: credResult.message || "Wallet credit failed for late payment",
+                            createdAt: new Date(),
+                        },
+                    },
+                }
+            );
             return {
                 success: false,
-                message: credResult.message || "Failed to issue wallet refund for late payment on cancelled order.",
+                message: "Late payment detected for cancelled order, but automatic wallet refund failed. Refund obligation is preserved for recovery.",
+                order,
+                requiresRecovery: true,
             };
         }
 
@@ -676,6 +874,7 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
             { _id: orderId },
             {
                 $set: { paymentStatus: "REFUNDED", razorpayPaymentId, razorpaySignature },
+                $inc: { "pricing.walletRefundIssued": refundAmount },
                 $push: {
                     paymentAttempts: {
                         gateway: "RAZORPAY",
@@ -703,12 +902,12 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         };
     }
 
-    // 3. Conditional success write: atomic check prevents race with concurrent cancellation
+    // 6. Conditional success write: atomic check prevents race with concurrent cancellation/expiry
     const now = new Date();
     const updatedOrder = await Order.findOneAndUpdate(
         {
             _id: orderId,
-            orderStatus: { $ne: "CANCELLED" },
+            orderStatus: { $in: ["PENDING", "PLACED"] },
             paymentStatus: { $ne: "COMPLETED" },
         },
         {
@@ -718,6 +917,7 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
                 paidAt: now,
                 razorpayPaymentId,
                 razorpaySignature,
+                "pricing.collectedAmount": verifiedCapturedAmt,
                 "items.$[elem].status": "PROCESSING",
             },
             $push: {
@@ -726,7 +926,7 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
                     attemptId: `att_${Date.now()}`,
                     razorpayOrderId,
                     razorpayPaymentId,
-                    amount: capturedAmount,
+                    amount: verifiedCapturedAmt,
                     status: "SUCCESS",
                     createdAt: now,
                 },
@@ -739,15 +939,10 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
     );
 
     if (!updatedOrder) {
-        // Race condition: order was cancelled while customer was paying
+        // Race condition: order was cancelled or expired while customer was paying
         const freshOrder = await Order.findById(orderId);
-        if (freshOrder && freshOrder.orderStatus === "CANCELLED") {
-            const freshOrderOriginalTotal = (freshOrder.pricing?.originalTotalAmount != null && freshOrder.pricing.originalTotalAmount > 0)
-                ? freshOrder.pricing.originalTotalAmount
-                : (freshOrder.pricing?.totalAmount || 0);
-            const refundAmount = (capturedAmount != null && capturedAmount > 0)
-                ? capturedAmount
-                : freshOrderOriginalTotal;
+        if (freshOrder && (freshOrder.orderStatus === "CANCELLED" || freshOrder.orderStatus === "EXPIRED")) {
+            const refundAmount = verifiedCapturedAmt;
             const lateRefId = `REFUND_LATE_${freshOrder._id}_${razorpayPaymentId}`;
 
             const credResult = await creditWallet({
@@ -761,12 +956,37 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
             });
 
             if (!credResult.success) {
-                return { success: false, message: "Failed to issue wallet refund for cancelled order." };
+                await Order.updateOne(
+                    { _id: freshOrder._id },
+                    {
+                        $push: {
+                            paymentAttempts: {
+                                gateway: "RAZORPAY",
+                                attemptId: `att_late_${Date.now()}`,
+                                razorpayOrderId,
+                                razorpayPaymentId,
+                                amount: refundAmount,
+                                status: "REFUND_PENDING",
+                                errorReason: credResult.message || "Wallet credit failed for late payment",
+                                createdAt: new Date(),
+                            },
+                        },
+                    }
+                );
+                return {
+                    success: false,
+                    message: "Order was cancelled prior to payment completion, but automatic wallet refund failed. Refund obligation is preserved for recovery.",
+                    order: freshOrder,
+                    requiresRecovery: true,
+                };
             }
 
             await Order.updateOne(
                 { _id: orderId },
-                { $set: { paymentStatus: "REFUNDED", razorpayPaymentId, razorpaySignature } }
+                {
+                    $set: { paymentStatus: "REFUNDED", razorpayPaymentId, razorpaySignature },
+                    $inc: { "pricing.walletRefundIssued": refundAmount },
+                }
             );
 
             await Payment.updateMany(
@@ -783,30 +1003,128 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         }
 
         const currentOrder = await Order.findById(orderId);
+        if (currentOrder && currentOrder.paymentStatus === "COMPLETED" && currentOrder.razorpayPaymentId !== razorpayPaymentId) {
+            // Reconcile concurrent successful collection: another attempt was captured concurrently
+            const dupRef = `REFUND_DUP_${currentOrder._id}_${razorpayPaymentId}`;
+            const dupCred = await creditWallet({
+                userId,
+                amount: verifiedCapturedAmt,
+                reason: "ORDER_REFUND",
+                description: `Refund for concurrent duplicate payment on Order #${currentOrder.orderNumber}`,
+                orderId: currentOrder._id,
+                orderNumber: currentOrder.orderNumber,
+                referenceId: dupRef,
+            });
+
+            if (!dupCred.success) {
+                // Case 2.D: Wallet credit failed during duplicate refund
+                await Order.updateOne(
+                    { _id: currentOrder._id },
+                    {
+                        $push: {
+                            paymentAttempts: {
+                                gateway: "RAZORPAY",
+                                attemptId: `att_dup_${Date.now()}`,
+                                razorpayOrderId,
+                                razorpayPaymentId,
+                                amount: verifiedCapturedAmt,
+                                status: "REFUND_PENDING",
+                                errorReason: dupCred.message || "Wallet credit failed",
+                                createdAt: new Date(),
+                            },
+                        },
+                    }
+                );
+                return {
+                    success: false,
+                    message: "Duplicate payment detected, but wallet refund failed. Refund obligation preserved for recovery.",
+                    order: currentOrder,
+                    requiresRecovery: true,
+                };
+            }
+
+            if (!dupCred.isDuplicate) {
+                // Case 2.C: Increment duplicateRefundTotal, NOT purchaseRefundTotal
+                await Order.updateOne(
+                    { _id: currentOrder._id },
+                    {
+                        $inc: {
+                            "pricing.duplicateRefundTotal": verifiedCapturedAmt,
+                            "pricing.walletRefundIssued": verifiedCapturedAmt,
+                        },
+                        $push: {
+                            paymentAttempts: {
+                                gateway: "RAZORPAY",
+                                attemptId: `att_dup_${Date.now()}`,
+                                razorpayOrderId,
+                                razorpayPaymentId,
+                                amount: verifiedCapturedAmt,
+                                status: "REFUNDED_DUPLICATE",
+                                createdAt: new Date(),
+                            },
+                        },
+                    }
+                );
+            }
+            return {
+                success: true,
+                message: "Duplicate payment detected and automatically refunded to your wallet.",
+                order: currentOrder,
+                isDuplicateRefund: true,
+            };
+        }
         return { success: true, message: "Payment already processed.", order: currentOrder };
     }
 
-    // 4. Reconcile excess payment if partial cancellation occurred before capture
-    const currentPayable = updatedOrder.pricing?.currentPayable != null ? updatedOrder.pricing.currentPayable : updatedOrder.pricing?.totalAmount;
-    if (capturedAmount > currentPayable && currentPayable >= 0) {
-        const excess = capturedAmount - currentPayable;
-        const excessRef = `REFUND_EXCESS_${updatedOrder._id}_${razorpayPaymentId}`;
-        const excessCred = await creditWallet({
-            userId,
-            amount: excess,
-            reason: "ORDER_REFUND",
-            description: `Refund for excess payment on partially cancelled Order #${updatedOrder.orderNumber}`,
-            orderId: updatedOrder._id,
-            orderNumber: updatedOrder.orderNumber,
-            referenceId: excessRef,
-        });
+    // 7. Reconcile items cancelled before capture (Case 2.A)
+    // Only refund if captured amount exceeds the merchandise payable for active items
+    const activeItemsPayable = (updatedOrder.items || [])
+        .filter((i) => i.status !== "CANCELLED")
+        .reduce((sum, i) => sum + (i.finalPayable != null ? i.finalPayable : i.lineTotal), 0) + (updatedOrder.pricing?.shippingFee || 0);
 
-        if (excessCred.success && !excessCred.isDuplicate) {
-            await Order.updateOne(
-                { _id: updatedOrder._id },
-                { $inc: { "pricing.walletRefundIssued": excess } }
-            );
-            updatedOrder.pricing.walletRefundIssued = (updatedOrder.pricing.walletRefundIssued || 0) + excess;
+    let refundablePool = Math.max(0, verifiedCapturedAmt - activeItemsPayable);
+
+    for (const item of updatedOrder.items || []) {
+        if (item.status === "CANCELLED" && !item.refundIssued) {
+            const itemRefund = item.finalPayable != null ? item.finalPayable : item.lineTotal;
+            const refundForThisItem = Math.min(itemRefund, refundablePool);
+            if (refundForThisItem > 0) {
+                const refundRef = `REFUND_CAN_${updatedOrder._id}_${item._id}`;
+                const existingTx = await Transaction.findOne({ referenceId: refundRef });
+                if (!existingTx) {
+                    const cred = await creditWallet({
+                        userId,
+                        amount: refundForThisItem,
+                        reason: "ORDER_CANCELLATION",
+                        description: `Refund for pre-capture cancelled item "${item.productName}" in Order #${updatedOrder.orderNumber}`,
+                        orderId: updatedOrder._id,
+                        orderNumber: updatedOrder.orderNumber,
+                        referenceId: refundRef,
+                    });
+                    if (cred.success && !cred.isDuplicate) {
+                        await Order.updateOne(
+                            { _id: updatedOrder._id, "items._id": item._id },
+                            {
+                                $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundForThisItem },
+                                $inc: {
+                                    "pricing.walletRefundIssued": refundForThisItem,
+                                    "pricing.purchaseRefundTotal": refundForThisItem,
+                                    "pricing.refundAmount": refundForThisItem,
+                                },
+                            }
+                        );
+                        item.refundIssued = true;
+                        refundablePool -= refundForThisItem;
+                    }
+                } else {
+                    await Order.updateOne(
+                        { _id: updatedOrder._id, "items._id": item._id },
+                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundForThisItem } }
+                    );
+                    item.refundIssued = true;
+                    refundablePool -= refundForThisItem;
+                }
+            }
         }
     }
 
@@ -818,12 +1136,132 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
                 paidAt: now,
                 razorpayPaymentId,
                 razorpaySignature,
+                amount: verifiedCapturedAmt,
             },
         }
     );
 
     const finalOrder = await Order.findById(orderId);
     return { success: true, message: "Payment verified successfully.", order: finalOrder };
+};
+
+/**
+ * Inspects all recorded gateway orders for an Order to determine current gateway status.
+ * Reusable helper ensuring consistent payment verification and safety decisions across
+ * retryOrderPayment, releaseExpiredReservations, and getPaymentStatus.
+ */
+const inspectOrderGatewayPaymentState = async (order) => {
+    const candidateGatewayOrderIds = [
+        order.razorpayOrderId,
+        ...(order.paymentAttempts || []).map((a) => a.razorpayOrderId),
+    ];
+    try {
+        const recordedPayments = await Payment.find({ orderId: order._id }).select("razorpayOrderId").lean();
+        for (const p of recordedPayments) {
+            if (p.razorpayOrderId) candidateGatewayOrderIds.push(p.razorpayOrderId);
+        }
+    } catch (paymentErr) {
+        // non-blocking
+    }
+    const uniqueGatewayOrderIds = [...new Set(candidateGatewayOrderIds.filter(Boolean))];
+
+    if (uniqueGatewayOrderIds.length === 0) {
+        return {
+            hasGatewayAttempts: false,
+            status: "NO_ATTEMPTS",
+            uniqueGatewayOrderIds: [],
+        };
+    }
+
+    const razorpayInstance = getRazorpayInstance();
+    if (!razorpayInstance || !isRazorpayConfigured() || !razorpayInstance.orders || typeof razorpayInstance.orders.fetchPayments !== "function") {
+        return {
+            hasGatewayAttempts: true,
+            status: "UNRESOLVED",
+            reason: "GATEWAY_UNAVAILABLE",
+            message: "Payment gateway is not configured or unavailable to inspect previous attempts.",
+            uniqueGatewayOrderIds,
+        };
+    }
+
+    let lookupFailed = false;
+    let lookupErrorMessage = null;
+    let capturedPayment = null;
+    let capturedGatewayOrderId = null;
+    let inProgressPayment = null;
+    let inProgressGatewayOrderId = null;
+
+    for (const gOrderId of uniqueGatewayOrderIds) {
+        let paymentsList;
+        try {
+            paymentsList = await razorpayInstance.orders.fetchPayments(gOrderId);
+        } catch (err) {
+            console.error(`Razorpay fetchPayments error for order ${gOrderId}:`, err.message);
+            lookupFailed = true;
+            lookupErrorMessage = err.message;
+            continue;
+        }
+
+        if (!paymentsList || !Array.isArray(paymentsList.items)) {
+            console.warn(`Razorpay fetchPayments returned unusable response for ${gOrderId}`);
+            lookupFailed = true;
+            lookupErrorMessage = "Unusable response structure from gateway";
+            continue;
+        }
+
+        const items = paymentsList.items;
+
+        const cap = items.find((p) => p && p.status === "captured");
+        if (cap) {
+            capturedPayment = cap;
+            capturedGatewayOrderId = gOrderId;
+            break; // Definitive capture found
+        }
+
+        const inProg = items.find(
+            (p) => p && (p.status === "authorized" || p.status === "pending" || p.status === "in_progress")
+        );
+        if (inProg) {
+            inProgressPayment = inProg;
+            inProgressGatewayOrderId = gOrderId;
+        }
+    }
+
+    if (capturedPayment) {
+        return {
+            hasGatewayAttempts: true,
+            status: "CAPTURED",
+            capturedPayment,
+            capturedGatewayOrderId,
+            uniqueGatewayOrderIds,
+        };
+    }
+
+    if (lookupFailed) {
+        return {
+            hasGatewayAttempts: true,
+            status: "UNRESOLVED",
+            reason: "LOOKUP_FAILED",
+            message: lookupErrorMessage,
+            uniqueGatewayOrderIds,
+        };
+    }
+
+    if (inProgressPayment) {
+        return {
+            hasGatewayAttempts: true,
+            status: "IN_PROGRESS",
+            inProgressPayment,
+            inProgressGatewayOrderId,
+            uniqueGatewayOrderIds,
+        };
+    }
+
+    return {
+        hasGatewayAttempts: true,
+        status: "SAFE_UNPAID",
+        uniqueGatewayOrderIds,
+    };
 };
 
 /**
@@ -840,7 +1278,7 @@ const retryOrderPayment = async (userId, orderId) => {
     }
 
     if (order.paymentStatus === "COMPLETED") {
-        return { success: false, message: "This order has already been paid successfully." };
+        return { success: false, isAlreadyPaid: true, message: "This order has already been paid successfully." };
     }
 
     if (order.orderStatus === "CANCELLED") {
@@ -855,6 +1293,7 @@ const retryOrderPayment = async (userId, orderId) => {
     // Atomic lease acquisition on Order prevents concurrent retries from generating duplicate gateway orders
     const now = new Date();
     const leaseExpires = new Date(Date.now() + 60000);
+    const lockToken = crypto.randomBytes(16).toString("hex");
     const lockedOrder = await Order.findOneAndUpdate(
         {
             _id: orderId,
@@ -867,7 +1306,7 @@ const retryOrderPayment = async (userId, orderId) => {
             ],
         },
         {
-            $set: { retryLockUntil: leaseExpires },
+            $set: { retryLockUntil: leaseExpires, retryLockToken: lockToken },
         },
         { returnDocument: "after" }
     );
@@ -876,8 +1315,87 @@ const retryOrderPayment = async (userId, orderId) => {
         return { success: false, message: "A payment retry is already in progress. Please wait a moment." };
     }
 
-    // Generate fresh Razorpay order for this retry attempt using authoritative currentPayable
+    const releaseLock = async () => {
+        try {
+            await Order.updateOne(
+                { _id: orderId, retryLockToken: lockToken },
+                { $set: { retryLockUntil: null, retryLockToken: null } }
+            );
+        } catch (releaseErr) {
+            // non-blocking lock release
+        }
+    };
+
+    // Verify gateway configuration before creating retry order
     const razorpayInstance = getRazorpayInstance();
+    if (!razorpayInstance || !isRazorpayConfigured()) {
+        await releaseLock();
+        return { success: false, message: "Payment gateway is not properly configured. Please contact support or use another payment method." };
+    }
+
+    // 1. Inspect previous gateway attempts using consistent helper
+    const gatewayState = await inspectOrderGatewayPaymentState(order);
+
+    if (gatewayState.status === "CAPTURED") {
+        await releaseLock();
+        const secret = process.env.RAZORPAY_KEY_SECRET;
+        const signature = secret
+            ? crypto.createHmac("sha256", secret.trim()).update(`${gatewayState.capturedGatewayOrderId}|${gatewayState.capturedPayment.id}`).digest("hex")
+            : "";
+
+        let verifyResult;
+        try {
+            verifyResult = await verifyRazorpayPayment(userId, {
+                orderId: order._id,
+                razorpayOrderId: gatewayState.capturedGatewayOrderId,
+                razorpayPaymentId: gatewayState.capturedPayment.id,
+                razorpaySignature: signature,
+            });
+        } catch (verifyErr) {
+            console.error("Verification error during retry payment recovery:", verifyErr);
+            return {
+                success: false,
+                message: "We found a captured payment for this order, but encountered an error verifying it. Please wait a moment and try again.",
+                order,
+            };
+        }
+
+        if (verifyResult && verifyResult.success) {
+            return {
+                success: true,
+                isAlreadyPaid: true,
+                message: "A previous payment attempt was captured by the gateway. Order payment is now confirmed.",
+                order: verifyResult.order,
+            };
+        } else {
+            // If recovery/verification fails after finding a captured payment, do not fall through and create a new payment attempt
+            return {
+                success: false,
+                message: verifyResult?.message || "We found a captured payment for this order, but could not complete verification. Please contact support.",
+                order,
+            };
+        }
+    }
+
+    if (gatewayState.status === "UNRESOLVED") {
+        await releaseLock();
+        return {
+            success: false,
+            message: "We couldn’t confirm your previous payment. Please wait a moment and try again.",
+            retryable: true,
+        };
+    }
+
+    if (gatewayState.status === "IN_PROGRESS") {
+        await releaseLock();
+        return {
+            success: false,
+            message: "A previous payment is currently being processed by the bank. Please wait a moment and try again.",
+            retryable: true,
+        };
+    }
+
+    // 5. Create a new payment attempt only after previous attempts have been checked successfully and their states permit retry
     const attemptCount = (order.paymentAttempts || []).length + 1;
     const amountInPaise = Math.round(payableAmount * 100);
 
@@ -893,20 +1411,25 @@ const retryOrderPayment = async (userId, orderId) => {
             },
         });
     } catch (err) {
-        // Clear lock on failure
-        await Order.updateOne({ _id: orderId }, { $set: { retryLockUntil: null } }).catch(() => {});
+        await releaseLock();
         throw err;
     }
 
     const isCodConversion = order.paymentMethod === "COD";
 
-    await Order.updateOne(
-        { _id: orderId },
+    const updateRetryResult = await Order.updateOne(
+        {
+            _id: orderId,
+            paymentStatus: { $ne: "COMPLETED" },
+            orderStatus: { $nin: ["CANCELLED", "EXPIRED"] },
+            retryLockToken: lockToken,
+        },
         {
             $set: {
                 razorpayOrderId: rzpOrder.id,
                 paymentStatus: "PENDING",
                 retryLockUntil: null,
+                retryLockToken: null,
                 ...(isCodConversion ? { paymentMethod: "ONLINE" } : {}),
             },
             $push: {
@@ -922,6 +1445,15 @@ const retryOrderPayment = async (userId, orderId) => {
         }
     );
 
+    if (updateRetryResult.modifiedCount === 0) {
+        await releaseLock();
+        const fresh = await Order.findById(orderId);
+        if (fresh && fresh.paymentStatus === "COMPLETED") {
+            return { success: false, isAlreadyPaid: true, message: "Payment was already completed by another attempt.", order: fresh };
+        }
+        return { success: false, message: "Order is no longer eligible for payment retry.", order: fresh };
+    }
+
     if (isCodConversion) {
         await Payment.updateMany(
             { orderId: order._id },
@@ -933,7 +1465,7 @@ const retryOrderPayment = async (userId, orderId) => {
         success: true,
         order,
         razorpay: {
-            keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholderKeyId",
+            keyId: process.env.RAZORPAY_KEY_ID || "",
             orderId: rzpOrder.id,
             amount: amountInPaise,
             currency: "INR",
@@ -948,17 +1480,95 @@ const retryOrderPayment = async (userId, orderId) => {
 };
 
 /**
+ * Authenticated payment status and reconciliation endpoint without webhooks.
+ * Checks local status and reconciles with gateway if an attempt is unresolved.
+ */
+const getPaymentStatus = async (userId, orderId) => {
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+        return { success: false, message: "Invalid order ID." };
+    }
+
+    const order = await Order.findOne({ _id: orderId, userId });
+    if (!order) {
+        return { success: false, message: "Order not found." };
+    }
+
+    if (order.paymentStatus === "COMPLETED") {
+        return {
+            success: true,
+            paymentStatus: "COMPLETED",
+            orderStatus: order.orderStatus,
+            order,
+        };
+    }
+
+    if (order.paymentMethod !== "ONLINE") {
+        return {
+            success: true,
+            paymentStatus: order.paymentStatus,
+            orderStatus: order.orderStatus,
+            order,
+        };
+    }
+
+    const rzp = getRazorpayInstance();
+    if (rzp && rzp.orders && typeof rzp.orders.fetchPayments === "function" && isRazorpayConfigured()) {
+        const candidateGatewayOrderIds = [
+            order.razorpayOrderId,
+            ...(order.paymentAttempts || []).map((a) => a.razorpayOrderId),
+        ].filter(Boolean);
+        const uniqueGatewayOrderIds = [...new Set(candidateGatewayOrderIds)];
+
+        for (const gOrderId of uniqueGatewayOrderIds) {
+            try {
+                const paymentsList = await rzp.orders.fetchPayments(gOrderId);
+                const items = paymentsList?.items || [];
+                const capturedPayment = items.find((p) => p.status === "captured");
+                if (capturedPayment) {
+                    const secret = process.env.RAZORPAY_KEY_SECRET;
+                    const signature = secret ? crypto.createHmac("sha256", secret.trim()).update(`${gOrderId}|${capturedPayment.id}`).digest("hex") : "";
+                    const verifyResult = await verifyRazorpayPayment(userId, {
+                        orderId: order._id,
+                        razorpayOrderId: gOrderId,
+                        razorpayPaymentId: capturedPayment.id,
+                        razorpaySignature: signature,
+                    });
+                    if (verifyResult.success) {
+                        return {
+                            success: true,
+                            paymentStatus: "COMPLETED",
+                            orderStatus: verifyResult.order.orderStatus,
+                            order: verifyResult.order,
+                            reconciled: true,
+                        };
+                    }
+                }
+            } catch (err) {
+                // If lookup fails, preserve retryable state
+            }
+        }
+    }
+
+    return {
+        success: true,
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        order,
+    };
+};
+
+/**
  * Handles incoming Razorpay webhook events idempotently
  */
 const handleRazorpayWebhook = async (rawBody, signature) => {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || "rzp_test_placeholderSecret";
-    if (!webhookSecret) {
-        return { success: false, message: "Webhook secret not configured." };
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret || typeof webhookSecret !== "string" || !webhookSecret.trim()) {
+        return { success: false, message: "Webhook endpoint is disabled: RAZORPAY_WEBHOOK_SECRET is not configured." };
     }
 
     const rawBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(typeof rawBody === "string" ? rawBody : JSON.stringify(rawBody));
     const expectedSignature = crypto
-        .createHmac("sha256", webhookSecret)
+        .createHmac("sha256", webhookSecret.trim())
         .update(rawBuffer)
         .digest("hex");
 
@@ -985,6 +1595,16 @@ const handleRazorpayWebhook = async (rawBody, signature) => {
         const razorpayOrderId = paymentEntity?.order_id || event.payload?.order?.entity?.id;
         const razorpayPaymentId = paymentEntity?.id;
         const capturedAmount = paymentEntity?.amount != null ? paymentEntity.amount / 100 : null;
+
+        if (paymentEntity && paymentEntity.status && paymentEntity.status !== "captured") {
+            return { success: false, message: `Payment is not captured (status: "${paymentEntity.status}").` };
+        }
+        if (paymentEntity && paymentEntity.currency && paymentEntity.currency.toUpperCase() !== "INR") {
+            return { success: false, message: `Currency mismatch: expected INR, received ${paymentEntity.currency}.` };
+        }
+        if (capturedAmount != null && capturedAmount <= 0) {
+            return { success: false, message: "Invalid captured amount." };
+        }
 
         if (razorpayOrderId) {
             const order = await Order.findOne({
@@ -1144,41 +1764,68 @@ const handleRazorpayWebhook = async (rawBody, signature) => {
                                 orderNumber: fresh.orderNumber,
                                 referenceId: lateRefId,
                             });
+                            await Order.updateOne(
+                                { _id: fresh._id },
+                                {
+                                    $set: { paymentStatus: "REFUNDED", razorpayPaymentId },
+                                    $inc: { "pricing.walletRefundIssued": finalAmount },
+                                }
+                            );
+                            await Payment.updateMany(
+                                { orderId: fresh._id },
+                                { $set: { status: "REFUNDED", refundAmount: finalAmount, razorpayPaymentId } }
+                            );
                         }
                     } else {
-                        // Reconcile excess if partial cancellation happened before capture
-                        const currentPayable = updatedOrder.pricing?.currentPayable != null ? updatedOrder.pricing.currentPayable : updatedOrder.pricing?.totalAmount;
-                        if (finalAmount > currentPayable && currentPayable >= 0) {
-                            const excessPaise = finalAmount - currentPayable;
-                            const excessRef = `REFUND_EXCESS_${updatedOrder._id}_${razorpayPaymentId}`;
-                            const excessCred = await creditWallet({
-                                userId: updatedOrder.userId,
-                                amount: excessPaise,
-                                reason: "ORDER_REFUND",
-                                description: `Refund for excess payment on partially cancelled Order #${updatedOrder.orderNumber}`,
-                                orderId: updatedOrder._id,
-                                orderNumber: updatedOrder.orderNumber,
-                                referenceId: excessRef,
-                            });
-                            if (excessCred.success && !excessCred.isDuplicate) {
-                                await Order.updateOne(
-                                    { _id: updatedOrder._id },
-                                    { $inc: { "pricing.walletRefundIssued": excessPaise } }
-                                );
+                        // Reconcile items cancelled before capture
+                        for (const item of updatedOrder.items || []) {
+                            if (item.status === "CANCELLED" && !item.refundIssued) {
+                                const itemRefund = item.finalPayable != null ? item.finalPayable : item.lineTotal;
+                                const refundRef = `REFUND_CAN_${updatedOrder._id}_${item._id}`;
+                                const existingTx = await Transaction.findOne({ referenceId: refundRef });
+                                if (itemRefund > 0 && !existingTx) {
+                                    const cred = await creditWallet({
+                                        userId: updatedOrder.userId,
+                                        amount: itemRefund,
+                                        reason: "ORDER_CANCELLATION",
+                                        description: `Refund for pre-capture cancelled item "${item.productName}" in Order #${updatedOrder.orderNumber}`,
+                                        orderId: updatedOrder._id,
+                                        orderNumber: updatedOrder.orderNumber,
+                                        referenceId: refundRef,
+                                    });
+                                    if (cred.success && !cred.isDuplicate) {
+                                        await Order.updateOne(
+                                            { _id: updatedOrder._id, "items._id": item._id },
+                                            {
+                                                $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund },
+                                                $inc: { "pricing.walletRefundIssued": itemRefund },
+                                            }
+                                        );
+                                        item.refundIssued = true;
+                                        updatedOrder.pricing.walletRefundIssued = (updatedOrder.pricing.walletRefundIssued || 0) + itemRefund;
+                                    }
+                                } else if (existingTx) {
+                                    await Order.updateOne(
+                                        { _id: updatedOrder._id, "items._id": item._id },
+                                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund } }
+                                    );
+                                    item.refundIssued = true;
+                                }
                             }
                         }
-                    }
 
-                    await Payment.updateMany(
-                        { orderId: order._id },
-                        {
-                            $set: {
-                                status: "COMPLETED",
-                                paidAt: now,
-                                razorpayPaymentId: razorpayPaymentId || order.razorpayPaymentId,
-                            },
-                        }
-                    );
+                        // Order successfully marked COMPLETED: mark Payment COMPLETED
+                        await Payment.updateMany(
+                            { orderId: order._id },
+                            {
+                                $set: {
+                                    status: "COMPLETED",
+                                    paidAt: now,
+                                    razorpayPaymentId: razorpayPaymentId || order.razorpayPaymentId,
+                                },
+                            }
+                        );
+                    }
                 }
             }
         }
@@ -1278,6 +1925,7 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
     }
 
     const now = new Date();
+    const isPaidOrder = await isCancellationRefundEligible(order);
     const cleanReason = (reason || "").trim() || "Cancelled by customer";
     const cancelledSuccessfully = [];
 
@@ -1300,6 +1948,7 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
                     "items.$.cancellationReason": cleanReason,
                     "items.$.cancelledAt": now,
                     "items.$.cancelledBy": actor,
+                    "items.$.cancelledBeforePayment": !isPaidOrder,
                 },
             },
             { returnDocument: "after" }
@@ -1343,11 +1992,14 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
 
     // Process wallet refund if order was paid (ONLINE or WALLET)
     let totalRefundCredited = 0;
-    if (latestOrder.paymentStatus === "COMPLETED" || latestOrder.paymentStatus === "REFUNDED") {
+    let hadRefundFailure = false;
+    if (isPaidOrder && (latestOrder.paymentStatus === "COMPLETED" || latestOrder.paymentStatus === "REFUNDED" || Boolean(latestOrder.paidAt))) {
         for (const item of cancelledSuccessfully) {
             const refundAmount = item.finalPayable != null ? item.finalPayable : item.lineTotal;
             const refundRef = `REFUND_CAN_${latestOrder._id}_${item._id}`;
-            const existingTx = await Transaction.findOne({ referenceId: refundRef });
+            const existingTx = await Transaction.findOne({
+                referenceId: { $in: [refundRef, `REFUND_ADM_CAN_${latestOrder._id}_${item._id}`] },
+            });
             if (refundAmount > 0 && !item.refundIssued && !existingTx) {
                 const credRes = await walletService.creditWallet({
                     userId,
@@ -1358,20 +2010,30 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
                     orderNumber: latestOrder.orderNumber,
                     referenceId: refundRef,
                 });
-                if (credRes.success && !credRes.isDuplicate) {
-                    totalRefundCredited += refundAmount;
+                if (credRes.success) {
+                    if (!credRes.isDuplicate) {
+                        totalRefundCredited += refundAmount;
+                    }
+                    await Order.updateOne(
+                        { _id: orderId, "items._id": item._id },
+                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundAmount, "items.$.refundStatus": "COMPLETED" } }
+                    ).catch(() => {});
+                } else {
+                    hadRefundFailure = true;
+                    await Order.updateOne(
+                        { _id: orderId, "items._id": item._id },
+                        { $set: { "items.$.refundStatus": "REFUND_PENDING", "items.$.refundAmount": refundAmount } }
+                    ).catch(() => {});
                 }
-                await Order.updateOne(
-                    { _id: orderId, "items._id": item._id },
-                    { $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundAmount } }
-                ).catch(() => {});
             }
         }
 
         // If all items in order are cancelled, refund shipping fee
         if (isAllCancelled && latestOrder.pricing.shippingFee > 0) {
             const shipRef = `REFUND_CAN_${latestOrder._id}_SHIPPING`;
-            const existingShipTx = await Transaction.findOne({ referenceId: shipRef });
+            const existingShipTx = await Transaction.findOne({
+                referenceId: { $in: [shipRef, `REFUND_ADM_CAN_${latestOrder._id}_SHIPPING`] },
+            });
             if (!existingShipTx) {
                 const shipRes = await walletService.creditWallet({
                     userId,
@@ -1384,20 +2046,26 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
                 });
                 if (shipRes.success && !shipRes.isDuplicate) {
                     totalRefundCredited += latestOrder.pricing.shippingFee;
+                    await Order.updateOne(
+                        { _id: latestOrder._id },
+                        { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                    ).catch(() => {});
+                } else if (!shipRes.success) {
+                    hadRefundFailure = true;
+                    await Order.updateOne(
+                        { _id: latestOrder._id },
+                        { $set: { "pricing.shippingRefundStatus": "REFUND_PENDING" } }
+                    ).catch(() => {});
                 }
             }
         }
-
-        if (totalRefundCredited > 0) {
-            await Payment.updateMany(
-                { orderId: latestOrder._id },
-                {
-                    $set: { ...(isAllCancelled ? { status: "REFUNDED" } : {}) },
-                    $inc: { refundAmount: totalRefundCredited },
-                }
-            );
-        }
     }
+
+    const finalPaymentStatus = isAllCancelled
+        ? (totalRefundCredited > 0 && !hadRefundFailure
+            ? "REFUNDED"
+            : (latestOrder.paymentStatus === "PENDING" || latestOrder.paymentMethod === "COD" ? "CANCELLED" : latestOrder.paymentStatus))
+        : latestOrder.paymentStatus;
 
     const setFields = {
         orderStatus: newOrderStatus,
@@ -1409,18 +2077,23 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
                 cancellationReason: cleanReason,
                 cancelledAt: now,
                 cancelledBy: actor,
-                ...(latestOrder.paymentMethod === "COD" ? { paymentStatus: "CANCELLED" } : { paymentStatus: "REFUNDED" }),
+                paymentStatus: finalPaymentStatus,
             }
             : {}),
     };
 
     const updateOps = { $set: setFields };
     if (totalRefundCredited > 0) {
-        updateOps.$inc = { "pricing.walletRefundIssued": totalRefundCredited };
+        updateOps.$inc = {
+            "pricing.walletRefundIssued": totalRefundCredited,
+            "pricing.purchaseRefundTotal": totalRefundCredited,
+            "pricing.refundAmount": totalRefundCredited,
+            refundAmount: totalRefundCredited,
+        };
     }
 
     if (isAllCancelled) {
-        if (latestOrder.paymentMethod === "COD") {
+        if (latestOrder.paymentMethod === "COD" || finalPaymentStatus === "CANCELLED") {
             await Payment.updateMany({ orderId: latestOrder._id }, { $set: { status: "CANCELLED" } });
         }
     } else if (latestOrder.paymentMethod === "COD") {
@@ -1428,13 +2101,22 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
     }
 
     await Order.updateOne({ _id: orderId }, updateOps);
+    await syncOrderRefundAccounting(orderId);
     const finalOrder = await Order.findOne({ _id: orderId, userId });
 
-    const partialMsg = remainingActive.length > 0
-        ? `Eligible items (${cancelledSuccessfully.length}) have been cancelled. Shipped/delivered items remain active.${totalRefundCredited > 0 ? ` ₹${totalRefundCredited.toFixed(2)} refunded to your wallet.` : ""}`
-        : `Order has been cancelled successfully.${totalRefundCredited > 0 ? ` ₹${totalRefundCredited.toFixed(2)} refunded to your wallet.` : ""}`;
+    let refundMsg = "";
+    if (totalRefundCredited > 0) {
+        refundMsg = ` ₹${totalRefundCredited.toFixed(2)} refunded to your wallet.`;
+    }
+    if (hadRefundFailure) {
+        refundMsg += " Note: One or more wallet refunds could not be processed and remain pending for retry.";
+    }
 
-    return { success: true, message: partialMsg, order: finalOrder };
+    const partialMsg = remainingActive.length > 0
+        ? `Eligible items (${cancelledSuccessfully.length}) have been cancelled. Shipped/delivered items remain active.${refundMsg}`
+        : `Order has been cancelled successfully.${refundMsg}`;
+
+    return { success: true, message: partialMsg, order: finalOrder, hadRefundFailure };
 };
 
 /**
@@ -1447,6 +2129,10 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
 
     const now = new Date();
     const cleanReason = (reason || "").trim() || "Cancelled by customer";
+
+    const existingOrder = await Order.findOne({ _id: orderId, userId });
+    if (!existingOrder) return { success: false, message: "Order not found." };
+    const isPaidOrder = await isCancellationRefundEligible(existingOrder);
 
     // Atomically claim the cancellation transition
     const updatedOrder = await Order.findOneAndUpdate(
@@ -1466,6 +2152,7 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
                 "items.$.cancellationReason": cleanReason,
                 "items.$.cancelledAt": now,
                 "items.$.cancelledBy": actor,
+                "items.$.cancelledBeforePayment": !isPaidOrder,
             },
         },
         { returnDocument: "after" }
@@ -1517,7 +2204,8 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
 
     // Process wallet refund if order was paid
     let refundCredited = 0;
-    if (freshOrder.paymentStatus === "COMPLETED" || freshOrder.paymentStatus === "REFUNDED") {
+    let hadRefundFailure = false;
+    if (isPaidOrder && (freshOrder.paymentStatus === "COMPLETED" || freshOrder.paymentStatus === "REFUNDED" || Boolean(freshOrder.paidAt))) {
         const itemRefund = cancelledItem.finalPayable != null ? cancelledItem.finalPayable : cancelledItem.lineTotal;
         const refundRef = `REFUND_CAN_${freshOrder._id}_${cancelledItem._id}`;
         const existingTx = await Transaction.findOne({
@@ -1533,13 +2221,21 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
                 orderNumber: freshOrder.orderNumber,
                 referenceId: refundRef,
             });
-            if (credRes.success && !credRes.isDuplicate) {
-                refundCredited += itemRefund;
+            if (credRes.success) {
+                if (!credRes.isDuplicate) {
+                    refundCredited += itemRefund;
+                }
+                await Order.updateOne(
+                    { _id: orderId, "items._id": itemId },
+                    { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund, "items.$.refundStatus": "COMPLETED" } }
+                ).catch(() => {});
+            } else {
+                hadRefundFailure = true;
+                await Order.updateOne(
+                    { _id: orderId, "items._id": itemId },
+                    { $set: { "items.$.refundStatus": "REFUND_PENDING", "items.$.refundAmount": itemRefund } }
+                ).catch(() => {});
             }
-            await Order.updateOne(
-                { _id: orderId, "items._id": itemId },
-                { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund } }
-            ).catch(() => {});
         }
 
         // If all items in the order are cancelled, refund shipping fee
@@ -1560,20 +2256,26 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
                 });
                 if (shipRes.success && !shipRes.isDuplicate) {
                     refundCredited += freshOrder.pricing.shippingFee;
+                    await Order.updateOne(
+                        { _id: freshOrder._id },
+                        { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                    ).catch(() => {});
+                } else if (!shipRes.success) {
+                    hadRefundFailure = true;
+                    await Order.updateOne(
+                        { _id: freshOrder._id },
+                        { $set: { "pricing.shippingRefundStatus": "REFUND_PENDING" } }
+                    ).catch(() => {});
                 }
             }
         }
-
-        if (refundCredited > 0) {
-            await Payment.updateMany(
-                { orderId: freshOrder._id },
-                {
-                    $set: { ...(isAllCancelledItem ? { status: "REFUNDED" } : {}) },
-                    $inc: { refundAmount: refundCredited },
-                }
-            );
-        }
     }
+
+    const finalPaymentStatusItem = isAllCancelledItem
+        ? (refundCredited > 0 && !hadRefundFailure
+            ? "REFUNDED"
+            : (freshOrder.paymentStatus === "PENDING" || freshOrder.paymentMethod === "COD" ? "CANCELLED" : freshOrder.paymentStatus))
+        : freshOrder.paymentStatus;
 
     const setFieldsItem = {
         orderStatus: newOrderStatusItem,
@@ -1585,31 +2287,46 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "US
                 cancellationReason: cleanReason,
                 cancelledAt: now,
                 cancelledBy: actor,
-                ...(updatedOrder.paymentMethod === "COD" ? { paymentStatus: "CANCELLED" } : { paymentStatus: "REFUNDED" }),
+                paymentStatus: finalPaymentStatusItem,
             }
             : {}),
     };
 
     const updateOpsItem = { $set: setFieldsItem };
     if (refundCredited > 0) {
-        updateOpsItem.$inc = { "pricing.walletRefundIssued": refundCredited };
+        updateOpsItem.$inc = {
+            "pricing.walletRefundIssued": refundCredited,
+            "pricing.purchaseRefundTotal": refundCredited,
+            "pricing.refundAmount": refundCredited,
+            refundAmount: refundCredited,
+        };
     }
 
     if (isAllCancelledItem) {
-        if (updatedOrder.paymentMethod === "COD") {
-            await Payment.updateMany({ orderId: updatedOrder._id }, { $set: { status: "CANCELLED" } });
+        if (freshOrder.paymentMethod === "COD" || finalPaymentStatusItem === "CANCELLED") {
+            await Payment.updateMany({ orderId: freshOrder._id }, { $set: { status: "CANCELLED" } });
         }
-    } else if (updatedOrder.paymentMethod === "COD") {
-        await Payment.updateMany({ orderId: updatedOrder._id, status: "PENDING" }, { $set: { amount: currentPayableItem } });
+    } else if (freshOrder.paymentMethod === "COD") {
+        await Payment.updateMany({ orderId: freshOrder._id, status: "PENDING" }, { $set: { amount: currentPayableItem } });
     }
 
     await Order.updateOne({ _id: orderId }, updateOpsItem);
+    await syncOrderRefundAccounting(orderId);
     const finalOrder = await Order.findOne({ _id: orderId, userId });
+
+    let itemRefundMsg = "";
+    if (refundCredited > 0) {
+        itemRefundMsg = ` ₹${refundCredited.toFixed(2)} refunded to your wallet.`;
+    }
+    if (hadRefundFailure) {
+        itemRefundMsg += " Note: Wallet refund could not be processed and remains pending for retry.";
+    }
 
     return {
         success: true,
-        message: `"${cancelledItem.productName}" has been cancelled successfully.${refundCredited > 0 ? ` ₹${refundCredited.toFixed(2)} refunded to your wallet.` : ""}`,
+        message: `"${cancelledItem.productName}" has been cancelled successfully.${itemRefundMsg}`,
         order: finalOrder,
+        hadRefundFailure,
     };
 };
 
@@ -1709,75 +2426,171 @@ const releaseExpiredReservations = async (expirationWindowMinutes = 30) => {
         $or: [
             {
                 paymentMethod: "ONLINE",
-                paymentStatus: "PENDING",
+                paymentStatus: { $in: ["PENDING", "FAILED"] },
                 orderStatus: { $in: ["PENDING", "PLACED"] },
-                placedAt: { $lte: cutoffTime },
+                paidAt: null,
+                $and: [
+                    {
+                        $or: [
+                            { placedAt: { $lte: cutoffTime } },
+                            { placedAt: null, createdAt: { $lte: cutoffTime } },
+                        ],
+                    },
+                    {
+                        $or: [
+                            { items: { $elemMatch: { isStockRestored: { $ne: true } } } },
+                            { "pricing.couponId": { $exists: true, $ne: null }, "pricing.isCouponReleased": { $ne: true } },
+                        ],
+                    },
+                ],
             },
             {
                 paymentMethod: "ONLINE",
+                paymentStatus: { $nin: ["COMPLETED", "REFUNDED"] },
+                paidAt: null,
                 cancellationReason: /Payment reservation expired/,
-                orderStatus: { $ne: "PROCESSING" },
-                "items.isStockRestored": { $ne: true },
+                orderStatus: { $nin: ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"] },
+                $or: [
+                    { items: { $elemMatch: { isStockRestored: { $ne: true } } } },
+                    { "pricing.couponId": { $exists: true, $ne: null }, "pricing.isCouponReleased": { $ne: true } },
+                ],
             },
         ],
     });
 
     let releasedCount = 0;
     for (const order of expiredOrders) {
+        if (
+            order.paymentStatus === "COMPLETED" ||
+            order.paidAt != null ||
+            ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.orderStatus)
+        ) {
+            continue; // Protect paid orders and active fulfillment from unpaid-reservation cleanup
+        }
+
+        if (order.paymentMethod === "ONLINE" || (order.paymentAttempts && order.paymentAttempts.length > 0) || order.razorpayOrderId) {
+            const gatewayState = await inspectOrderGatewayPaymentState(order);
+
+            if (gatewayState.status === "CAPTURED") {
+                const secret = process.env.RAZORPAY_KEY_SECRET;
+                const signature = secret
+                    ? crypto.createHmac("sha256", secret.trim()).update(`${gatewayState.capturedGatewayOrderId}|${gatewayState.capturedPayment.id}`).digest("hex")
+                    : "";
+                try {
+                    const verifyResult = await verifyRazorpayPayment(order.userId, {
+                        orderId: order._id,
+                        razorpayOrderId: gatewayState.capturedGatewayOrderId,
+                        razorpayPaymentId: gatewayState.capturedPayment.id,
+                        razorpaySignature: signature,
+                    });
+                    if (verifyResult && verifyResult.success) {
+                        console.log(`[Expiry Recovery] Recovered captured payment for order ${order.orderNumber}`);
+                    } else {
+                        console.warn(`[Expiry Recovery] Recovery verification returned non-success for order ${order.orderNumber}: ${verifyResult?.message || "Verification failed"}`);
+                    }
+                } catch (recErr) {
+                    console.error(`[Expiry Recovery] Exception during verification recovery on order ${order.orderNumber}:`, recErr.message);
+                }
+                // Under all circumstances when a captured payment exists, skip cancellation and stock release!
+                continue;
+            }
+
+            if (gatewayState.status === "UNRESOLVED") {
+                // Do not assume unpaid when lookup fails or gateway config is missing!
+                console.warn(`[Reservation Expiry] Skipping expiry for order ${order.orderNumber}: gateway lookup unresolved (${gatewayState.reason || "lookup error"}).`);
+                continue; // Skip expiry for this order during this run; continue processing other orders
+            }
+
+            if (gatewayState.status === "IN_PROGRESS") {
+                // Do not cancel or restock while payment is being processed/authorized by the bank!
+                console.log(`[Reservation Expiry] Skipping expiry for order ${order.orderNumber}: previous payment is in progress (${gatewayState.inProgressPayment?.status}).`);
+                continue; // Skip expiry
+            }
+        }
+
         const now = new Date();
+        // Atomically claim and mark cancelled/expired BEFORE releasing stock to prevent race with payment capture
         const claimed = await Order.findOneAndUpdate(
             {
                 _id: order._id,
-                paymentStatus: "PENDING",
+                paymentStatus: { $in: ["PENDING", "FAILED"] },
                 orderStatus: { $in: ["PENDING", "PLACED"] },
-                $or: [
-                    { expirationClaimAt: null },
-                    { expirationClaimAt: { $lte: new Date(Date.now() - 60000) } },
+                paidAt: null,
+                $and: [
+                    {
+                        $or: [
+                            { expirationClaimAt: null },
+                            { expirationClaimAt: { $lte: new Date(Date.now() - 60000) } },
+                        ],
+                    },
+                    {
+                        $or: [
+                            { retryLockUntil: null },
+                            { retryLockUntil: { $lte: now } },
+                        ],
+                    },
                 ],
             },
             {
                 $set: {
+                    orderStatus: "CANCELLED",
+                    paymentStatus: "FAILED",
+                    cancelledAt: now,
+                    cancelledBy: "SYSTEM",
                     expirationClaimAt: now,
                     cancellationReason: `Payment reservation expired after ${expirationWindowMinutes} minutes without completion.`,
+                    "items.$[elem].status": "CANCELLED",
+                    "items.$[elem].cancellationReason": "Payment reservation expired.",
                 },
             },
-            { returnDocument: "after" }
+            {
+                arrayFilters: [{ "elem.status": { $in: ["PENDING", "PLACED"] } }],
+                returnDocument: "after",
+            }
         );
 
-        const targetOrder = claimed || (order.cancellationReason && /Payment reservation expired/.test(order.cancellationReason) ? order : null);
+        const targetOrder = claimed || (
+            order.cancellationReason &&
+            /Payment reservation expired/.test(order.cancellationReason) &&
+            !["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.orderStatus) &&
+            order.paymentStatus !== "COMPLETED" &&
+            order.paidAt == null
+                ? order
+                : null
+        );
         if (targetOrder) {
+            let stockFailed = false;
             for (const item of targetOrder.items) {
                 if (!item.isStockRestored) {
-                    await restoreCancellationStock(targetOrder._id, item).catch(() => {});
-                    await Order.updateOne(
-                        { _id: targetOrder._id, "items._id": item._id },
-                        { $set: { "items.$.isStockRestored": true, "items.$.restockedQuantity": item.quantity } }
-                    ).catch(() => {});
-                    item.isStockRestored = true;
+                    try {
+                        await restoreCancellationStock(targetOrder._id, item);
+                        await Order.updateOne(
+                            { _id: targetOrder._id, "items._id": item._id },
+                            { $set: { "items.$.isStockRestored": true, "items.$.restockedQuantity": item.quantity } }
+                        );
+                        item.isStockRestored = true;
+                    } catch (stockErr) {
+                        console.error(`Stock restoration failed for expired order item ${item._id}:`, stockErr);
+                        stockFailed = true;
+                    }
                 }
             }
-            if (targetOrder.pricing?.couponId) {
-                await releaseCouponUsage(targetOrder.pricing.couponId, targetOrder.userId, targetOrder.orderNumber).catch(() => {});
+            if (targetOrder.pricing?.couponId && !targetOrder.pricing?.isCouponReleased) {
+                try {
+                    await releaseCouponUsage(targetOrder.pricing.couponId, targetOrder.userId, targetOrder.orderNumber);
+                    await Order.updateOne({ _id: targetOrder._id }, { $set: { "pricing.isCouponReleased": true } });
+                } catch (couponErr) {
+                    console.error(`Failed to release coupon on expired order ${targetOrder.orderNumber}:`, couponErr);
+                }
             }
-            await Order.updateOne(
-                { _id: targetOrder._id, orderStatus: { $ne: "PROCESSING" } },
-                {
-                    $set: {
-                        orderStatus: "CANCELLED",
-                        paymentStatus: "FAILED",
-                        cancelledAt: new Date(),
-                        cancelledBy: "SYSTEM",
-                        "items.$[elem].status": "CANCELLED",
-                        "items.$[elem].cancellationReason": "Payment reservation expired.",
-                    },
-                },
-                { arrayFilters: [{ "elem.status": { $in: ["PENDING", "PLACED"] } }] }
-            ).catch(() => {});
             await Payment.updateMany(
                 { orderId: targetOrder._id, status: "PENDING" },
                 { $set: { status: "FAILED" } }
             ).catch(() => {});
-            releasedCount++;
+
+            if (!stockFailed) {
+                releasedCount++;
+            }
         }
     }
     return { success: true, releasedCount };
@@ -1791,6 +2604,12 @@ const startReservationExpiryCron = (intervalMs = 60000, expirationWindowMinutes 
                 await releaseExpiredReservations(expirationWindowMinutes);
             } catch (err) {
                 console.error("Reservation expiry background task error:", err);
+            }
+            try {
+                const { recoverPendingRefunds } = require("../admin/orderService");
+                await recoverPendingRefunds();
+            } catch (refundErr) {
+                console.error("Pending refund recovery background task error:", refundErr);
             }
         }, intervalMs);
         if (expiryIntervalId.unref) expiryIntervalId.unref();
@@ -1811,10 +2630,15 @@ module.exports = {
     placeCodOrder,
     verifyRazorpayPayment,
     retryOrderPayment,
+    getPaymentStatus,
     handleRazorpayWebhook,
     releaseExpiredReservations,
     startReservationExpiryCron,
     stopReservationExpiryCron,
+    recoverPendingRefunds: (...args) => {
+        const { recoverPendingRefunds } = require("../admin/orderService");
+        return recoverPendingRefunds(...args);
+    },
     getUserOrders,
     getOrderDetails,
     cancelEntireOrder,
@@ -1826,5 +2650,8 @@ module.exports = {
     SHIPPING_THRESHOLD,
     SHIPPING_FLAT_FEE,
     PREDEFINED_CANCELLATION_REASONS,
+    inspectOrderGatewayPaymentState,
+    isCancellationRefundEligible,
+    syncOrderRefundAccounting,
 };
 

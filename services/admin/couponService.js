@@ -278,29 +278,30 @@ const recordCouponUsage = async (couponId, userId, reservationKey = null) => {
 };
 
 const releaseCouponUsage = async (couponId, userId, reservationKey = null) => {
-    if (!couponId || !userId) return;
+    if (!couponId || !userId) {
+        return { success: false, message: "Coupon ID and User ID are required." };
+    }
     const keyStr = reservationKey ? String(reservationKey).trim() : null;
-    try {
-        const query = {
-            _id: couponId,
-            "usersUsed.userId": userId,
-            usedCount: { $gt: 0 },
-            "usersUsed.usageCount": { $gt: 0 },
-            ...(keyStr ? { reservedOrders: keyStr } : {}),
-        };
-        const updateOps = {
-            $inc: { usedCount: -1, "usersUsed.$.usageCount": -1 },
-            ...(keyStr ? { $pull: { reservedOrders: keyStr } } : {}),
-        };
+    const query = {
+        _id: couponId,
+        "usersUsed.userId": userId,
+        usedCount: { $gt: 0 },
+        "usersUsed.usageCount": { $gt: 0 },
+        ...(keyStr ? { reservedOrders: keyStr } : {}),
+    };
+    const updateOps = {
+        $inc: { usedCount: -1, "usersUsed.$.usageCount": -1 },
+        ...(keyStr ? { $pull: { reservedOrders: keyStr } } : {}),
+    };
 
-        const res = await Coupon.updateOne(query, updateOps);
-        if (res.modifiedCount > 0) {
-            await Coupon.updateOne(
-                { _id: couponId, usedCount: { $lt: 0 } },
-                { $set: { usedCount: 0 } }
-            );
-        }
-    } catch (_) {}
+    const res = await Coupon.updateOne(query, updateOps);
+    if (res.modifiedCount > 0) {
+        await Coupon.updateOne(
+            { _id: couponId, usedCount: { $lt: 0 } },
+            { $set: { usedCount: 0 } }
+        );
+    }
+    return { success: true, released: res.modifiedCount > 0 };
 };
 
 module.exports = {

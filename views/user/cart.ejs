@@ -115,13 +115,17 @@
                             <span id="cartSubtotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
                         </div>
                         <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-500">Estimated Tax (5%)</span>
+                            <span id="cartTax">&#8377;<%= (typeof taxAmount !== 'undefined' ? taxAmount : Math.round(subtotal * 0.05)).toLocaleString('en-IN') %></span>
+                        </div>
+                        <div class="flex justify-between text-sm mb-2">
                             <span class="text-gray-500">Estimated Shipping</span>
                             <span class="text-gray-400">Calculated at checkout</span>
                         </div>
 
                         <div class="border-t border-gray-200 mt-4 pt-4 flex justify-between font-medium">
-                            <span>Total</span>
-                            <span id="cartTotal">&#8377;<%= subtotal.toLocaleString('en-IN') %></span>
+                            <span>Estimated Total</span>
+                            <span id="cartTotal">&#8377;<%= ((typeof totalAmount !== 'undefined' && totalAmount) ? totalAmount : (subtotal + (typeof taxAmount !== 'undefined' ? taxAmount : Math.round(subtotal * 0.05)))).toLocaleString('en-IN') %></span>
                         </div>
 
                         <a

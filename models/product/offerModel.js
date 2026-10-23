@@ -18,6 +18,16 @@ const offerSchema = new mongoose.Schema(
             default: null,
             index: true,
         },
+        productIds: {
+            type: [
+                {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "Product",
+                },
+            ],
+            default: [],
+            index: true,
+        },
         categoryId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",

@@ -102,11 +102,14 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8 } = {}) => {
                 currentPrice = authoritative.effectiveUnitPrice;
             }
 
+            const variantCount = product ? await Variant.countDocuments({ productId: product._id, isActive: true }) : 0;
+
             return {
                 variantId: item.variantId,
                 addedAt: item.addedAt,
                 product,
                 variant,
+                variantCount,
                 isListed,
                 isInStock,
                 isAvailable,

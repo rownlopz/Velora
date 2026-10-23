@@ -22,7 +22,7 @@ app.use(express.json({
         req.rawBody = buf;
     }
 }));
-app.use(express.urlencoded({ extended: true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 
 app.use((req, res, next) => {
@@ -34,12 +34,12 @@ app.use((req, res, next) => {
 //ViewEngine
 app.set("view engine", "ejs");
 //Static Folder
-app.use(express.static(path.join(__dirname,"public")));
+app.use(express.static(path.join(__dirname, "public")));
 //Routes
 app.use("/admin", adminRoute);
 app.use("/", userRoute);
 
-app.listen(process.env.PORT || 3000, () =>{
-    console.log(`Server running on http://localhost:${ process.env.PORT || 3000}`);
+app.listen(process.env.PORT || 3000, () => {
+    console.log(`Server running on http://localhost:${process.env.PORT || 3000}`);
     startReservationExpiryCron();
 })

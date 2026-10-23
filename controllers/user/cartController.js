@@ -7,6 +7,10 @@ const loadCart = async (req, res) => {
             title: "Shopping Bag",
             items: result.items,
             subtotal: result.subtotal,
+            taxRate: result.taxRate || 0.05,
+            taxableAmount: result.taxableAmount,
+            taxAmount: result.taxAmount,
+            totalAmount: result.totalAmount,
             hasUnavailableItems: result.hasUnavailableItems,
             notice: req.query.notice || null,
             removedUnlistedCount: result.removedUnlistedCount || 0,
@@ -19,7 +23,7 @@ const loadCart = async (req, res) => {
 
 const addToCartController = async (req, res) => {
     try {
-        const { variantId, quantity } = req.body;
+        const { variantId, quantity, sourceVariantId } = req.body;
         const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
 
         if (!variantId) {
@@ -27,7 +31,7 @@ const addToCartController = async (req, res) => {
             return res.redirect("/products?notice=" + encodeURIComponent("Please select a product option."));
         }
 
-        const result = await addToCart(req.session.userId, variantId, quantity || 1);
+        const result = await addToCart(req.session.userId, variantId, quantity || 1, sourceVariantId);
 
         if (isAjax) {
             // Return updated cart and wishlist count for navbar badges

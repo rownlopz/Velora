@@ -93,12 +93,19 @@ const deleteAddress = async (userId, addressId) => {
         return { success: false, message: "Address not found" };
     }
 
-    // if the deleted address was default, promote another one if any remain
-    if (address.isDefault) {
+    const User = require("../../models/user/userModel");
+    const user = await User.findById(userId);
+    const isDefaultDeleted = address.isDefault || (user && user.defaultAddressId && user.defaultAddressId.toString() === addressId.toString());
+
+    if (isDefaultDeleted) {
         const remaining = await Address.findOne({ userId }).sort({ createdAt: -1 });
         if (remaining) {
             remaining.isDefault = true;
             await remaining.save();
+            await Address.updateMany({ userId, _id: { $ne: remaining._id } }, { $set: { isDefault: false } });
+            await User.findByIdAndUpdate(userId, { $set: { defaultAddressId: remaining._id } });
+        } else {
+            await User.findByIdAndUpdate(userId, { $unset: { defaultAddressId: "" } });
         }
     }
 

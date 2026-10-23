@@ -6,6 +6,7 @@ const {
     placeCodOrder,
     verifyRazorpayPayment,
     retryOrderPayment,
+    getPaymentStatus,
     handleRazorpayWebhook,
     getUserOrders,
     getOrderDetails,
@@ -58,6 +59,9 @@ const loadCheckout = async (req, res) => {
             appliedCoupon: result.appliedCoupon,
             couponError: result.couponError,
             shippingFee: result.shippingFee,
+            taxRate: result.taxRate || 0.05,
+            taxableAmount: result.taxableAmount,
+            taxAmount: result.taxAmount,
             totalAmount: result.totalAmount,
             addresses: result.addresses,
             selectedAddress: result.selectedAddress,
@@ -65,7 +69,7 @@ const loadCheckout = async (req, res) => {
             shippingThreshold: SHIPPING_THRESHOLD,
             shippingFlatFee: SHIPPING_FLAT_FEE,
             checkoutToken,
-            razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholderKeyId",
+            razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
             notice: req.query.notice || null,
         });
     } catch (error) {
@@ -94,7 +98,7 @@ const placeOrderController = async (req, res) => {
                         isOnline: true,
                         orderId: existingOrder._id,
                         razorpay: {
-                            keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholderKeyId",
+                            keyId: process.env.RAZORPAY_KEY_ID || "",
                             orderId: existingOrder.razorpayOrderId,
                             amount: Math.round(existingOrder.pricing.totalAmount * 100),
                             currency: "INR",
@@ -235,7 +239,7 @@ const loadPaymentFailed = async (req, res) => {
             title: "Payment Failed",
             order: result.order,
             errorMessage: req.query.error || "The payment could not be completed.",
-            razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholderKeyId",
+            razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
         });
     } catch (error) {
         console.error("Load Payment Failed Error:", error);
@@ -247,12 +251,14 @@ const retryPaymentController = async (req, res) => {
     try {
         const result = await retryOrderPayment(req.session.userId, req.params.orderId);
         if (!result.success) {
-            return res.status(400).json({ success: false, message: result.message });
+            return res.status(400).json({ success: false, message: result.message, isAlreadyPaid: result.isAlreadyPaid, retryable: result.retryable });
         }
         return res.json({
             success: true,
             order: result.order,
             razorpay: result.razorpay,
+            isAlreadyPaid: result.isAlreadyPaid,
+            message: result.message,
         });
     } catch (error) {
         console.error("Retry Payment Error:", error);
@@ -261,17 +267,29 @@ const retryPaymentController = async (req, res) => {
 };
 
 const razorpayWebhookController = async (req, res) => {
+    // Disable/unmount unused webhook endpoint so it cannot perform financial mutations (Constraint)
+    return res.status(403).json({
+        success: false,
+        message: "Razorpay webhooks are disabled for this stage. No mutations will be performed.",
+    });
+};
+
+const getPaymentStatusController = async (req, res) => {
     try {
-        const signature = req.headers["x-razorpay-signature"];
-        const rawBody = req.rawBody || (typeof req.body === "string" ? req.body : JSON.stringify(req.body));
-        const result = await handleRazorpayWebhook(rawBody, signature);
-        if (!result || !result.success) {
-            return res.status(400).json({ error: result?.message || "Webhook signature or processing failed" });
+        const result = await getPaymentStatus(req.session.userId, req.params.orderId);
+        if (!result.success) {
+            return res.status(404).json({ success: false, message: result.message });
         }
-        return res.json({ status: "ok" });
+        return res.json({
+            success: true,
+            paymentStatus: result.paymentStatus,
+            orderStatus: result.orderStatus,
+            reconciled: !!result.reconciled,
+            order: result.order,
+        });
     } catch (error) {
-        console.error("Razorpay Webhook Error:", error);
-        return res.status(500).json({ error: "Webhook error" });
+        console.error("Get Payment Status Error:", error);
+        return res.status(500).json({ success: false, message: "Failed to check payment status." });
     }
 };
 
@@ -440,6 +458,7 @@ module.exports = {
     loadPaymentSuccess,
     loadPaymentFailed,
     retryPaymentController,
+    getPaymentStatusController,
     razorpayWebhookController,
     loadWallet,
     loadOrderSuccess,

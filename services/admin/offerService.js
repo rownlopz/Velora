@@ -49,6 +49,7 @@ const getOffers = async (options = {}) => {
 
     const offers = await Offer.find(filter)
         .populate("productId", "name thumbnail brand")
+        .populate("productIds", "name thumbnail brand")
         .populate("categoryId", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -89,11 +90,23 @@ const createOffer = async (data) => {
     }
 
     if (offerType === "PRODUCT") {
-        if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
-            return { success: false, message: "Please select a valid product." };
+        let validProductIds = [];
+        if (Array.isArray(data.productIds) && data.productIds.length > 0) {
+            validProductIds = data.productIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+        } else if (typeof data.productIds === "string" && data.productIds.trim()) {
+            validProductIds = data.productIds.split(",").map((s) => s.trim()).filter((id) => mongoose.Types.ObjectId.isValid(id));
+        } else if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+            validProductIds = [productId];
         }
-        const exists = await Product.exists({ _id: productId, isDeleted: false });
-        if (!exists) return { success: false, message: "Selected product does not exist." };
+
+        if (validProductIds.length === 0) {
+            return { success: false, message: "Please select at least one valid product." };
+        }
+        const existingCount = await Product.countDocuments({ _id: { $in: validProductIds }, isDeleted: false });
+        if (existingCount !== validProductIds.length) {
+            return { success: false, message: "One or more selected products do not exist or are deleted." };
+        }
+        data.parsedProductIds = validProductIds;
     }
 
     if (offerType === "CATEGORY") {
@@ -143,7 +156,8 @@ const createOffer = async (data) => {
     const offer = await Offer.create({
         name: name.trim(),
         offerType,
-        productId: offerType === "PRODUCT" ? productId : null,
+        productId: offerType === "PRODUCT" ? (data.parsedProductIds ? data.parsedProductIds[0] : productId) : null,
+        productIds: offerType === "PRODUCT" ? (data.parsedProductIds || [productId]) : [],
         categoryId: offerType === "CATEGORY" ? categoryId : null,
         discountType,
         discountValue: numValue,
@@ -193,13 +207,28 @@ const updateOffer = async (offerId, data) => {
     offer.offerType = newOfferType;
 
     if (newOfferType === "PRODUCT") {
-        const pId = productId || offer.productId;
-        if (!pId || !mongoose.Types.ObjectId.isValid(pId)) {
-            return { success: false, message: "Please select a valid product." };
+        let validProductIds = [];
+        if (Array.isArray(data.productIds) && data.productIds.length > 0) {
+            validProductIds = data.productIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+        } else if (typeof data.productIds === "string" && data.productIds.trim()) {
+            validProductIds = data.productIds.split(",").map((s) => s.trim()).filter((id) => mongoose.Types.ObjectId.isValid(id));
+        } else if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+            validProductIds = [productId];
+        } else if (offer.productIds && offer.productIds.length > 0) {
+            validProductIds = offer.productIds.map(String).filter((id) => mongoose.Types.ObjectId.isValid(id));
+        } else if (offer.productId) {
+            validProductIds = [offer.productId];
         }
-        const exists = await Product.exists({ _id: pId, isDeleted: false });
-        if (!exists) return { success: false, message: "Selected product does not exist." };
-        offer.productId = pId;
+
+        if (validProductIds.length === 0) {
+            return { success: false, message: "Please select at least one valid product." };
+        }
+        const existingCount = await Product.countDocuments({ _id: { $in: validProductIds }, isDeleted: false });
+        if (existingCount !== validProductIds.length) {
+            return { success: false, message: "One or more selected products do not exist or are deleted." };
+        }
+        offer.productId = validProductIds[0];
+        offer.productIds = validProductIds;
         offer.categoryId = null;
     } else if (newOfferType === "CATEGORY") {
         const cId = categoryId || offer.categoryId;

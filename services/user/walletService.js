@@ -9,9 +9,8 @@ const getOrCreateWallet = async (userId) => {
     let wallet = await Wallet.findOne({ userId });
     if (!wallet) {
         try {
-            wallet = await Wallet.create({ userId, balance: 0, appliedOperations: [] });
+            wallet = await Wallet.create({ userId, balance: 0, appliedOperations: [], operationsLog: [] });
         } catch (err) {
-            // In case of concurrent creation race
             if (err.code === 11000) {
                 wallet = await Wallet.findOne({ userId });
             } else {
@@ -24,7 +23,6 @@ const getOrCreateWallet = async (userId) => {
 
 /**
  * Loads wallet details and paginated transaction history.
- * Ensures currentPage is clamped before calculating skip offset (Finding 40).
  */
 const getWalletDetails = async (userId, options = {}) => {
     const { page = 1, limit = 10 } = options;
@@ -58,7 +56,8 @@ const getWalletDetails = async (userId, options = {}) => {
 
 /**
  * Atomically credits amount to user wallet with unique idempotency reference.
- * Guards duplicate operations atomically directly on the wallet document (Findings 29 & 30).
+ * Financial effect, duplicate guard, and recovery details are written atomically in one update.
+ * Validates duplicate operations against original persisted facts and rejects conflicting reuse.
  */
 const creditWallet = async ({
     userId,
@@ -80,6 +79,13 @@ const creditWallet = async ({
     if (opKey) {
         const existingTx = await Transaction.findOne({ referenceId: opKey });
         if (existingTx) {
+            // Validate against conflicting reuse of operation ID
+            if (existingTx.type !== "CREDIT" || Math.abs(existingTx.amount - numAmount) > 0.001 || existingTx.userId.toString() !== userId.toString()) {
+                return {
+                    success: false,
+                    message: `Conflicting reuse of operation ID "${opKey}". Original transaction: ${existingTx.type} ₹${existingTx.amount} for user ${existingTx.userId}.`,
+                };
+            }
             const currentWallet = await getOrCreateWallet(userId);
             return {
                 success: true,
@@ -94,32 +100,121 @@ const creditWallet = async ({
 
     const wallet = await getOrCreateWallet(userId);
 
+    // If opKey was already recorded on the wallet document
+    if (opKey && wallet.appliedOperations && wallet.appliedOperations.includes(opKey)) {
+        const loggedOp = (wallet.operationsLog || []).find((o) => o.opKey === opKey);
+        if (loggedOp) {
+            // Validate conflicting reuse against original facts
+            if (loggedOp.type !== "CREDIT" || Math.abs(loggedOp.amount - numAmount) > 0.001) {
+                return {
+                    success: false,
+                    message: `Conflicting reuse of operation ID "${opKey}". Original log: ${loggedOp.type} ₹${loggedOp.amount}.`,
+                };
+            }
+        }
+
+        // Reconstruct missing ledger entry from original immutable facts, never retry input
+        let existingTx = await Transaction.findOne({ referenceId: opKey });
+        if (!existingTx) {
+            const reconstructedBalanceAfter = loggedOp?.balanceAfter != null ? loggedOp.balanceAfter : wallet.balance;
+            const reconstructedAmount = loggedOp?.amount != null ? loggedOp.amount : numAmount;
+            try {
+                existingTx = await Transaction.create({
+                    walletId: wallet._id,
+                    userId,
+                    type: loggedOp?.type || "CREDIT",
+                    amount: reconstructedAmount,
+                    balanceAfter: reconstructedBalanceAfter,
+                    reason: loggedOp?.reason || reason,
+                    description: loggedOp?.description || description,
+                    orderId: loggedOp?.orderId || orderId,
+                    orderNumber: loggedOp?.orderNumber || orderNumber,
+                    referenceId: opKey,
+                });
+            } catch (e) {
+                if (e.code === 11000) {
+                    existingTx = await Transaction.findOne({ referenceId: opKey });
+                }
+            }
+        }
+
+        return {
+            success: true,
+            message: "Transaction already processed.",
+            isExisting: true,
+            isDuplicate: true,
+            balance: wallet.balance,
+            transaction: existingTx,
+        };
+    }
+
+    const finalRefId = opKey || `CR_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date();
+
+    // Atomic pipeline update: records financial effect, duplicate guard, and recovery details in one single write
+    const updatePipeline = [
+        {
+            $set: {
+                balance: { $round: [{ $add: ["$balance", numAmount] }, 2] },
+                appliedOperations: opKey
+                    ? { $concatArrays: [{ $ifNull: ["$appliedOperations", []] }, [opKey]] }
+                    : { $ifNull: ["$appliedOperations", []] },
+                operationsLog: {
+                    $concatArrays: [
+                        { $ifNull: ["$operationsLog", []] },
+                        [
+                            {
+                                opKey: finalRefId,
+                                type: "CREDIT",
+                                amount: numAmount,
+                                balanceAfter: { $round: [{ $add: ["$balance", numAmount] }, 2] },
+                                reason: reason || "CREDIT",
+                                description: description || "",
+                                orderId: orderId || null,
+                                orderNumber: orderNumber || null,
+                                createdAt: now,
+                            },
+                        ],
+                    ],
+                },
+            },
+        },
+    ];
+
     const updateQuery = {
         _id: wallet._id,
         ...(opKey ? { appliedOperations: { $ne: opKey } } : {}),
     };
-    const updateOps = {
-        $inc: { balance: numAmount },
-        ...(opKey ? { $push: { appliedOperations: opKey } } : {}),
-    };
 
-    const updatedWallet = await Wallet.findOneAndUpdate(updateQuery, updateOps, { returnDocument: "after" });
+    const updatedWallet = await Wallet.findOneAndUpdate(updateQuery, updatePipeline, {
+        returnDocument: "after",
+        updatePipeline: true,
+    });
 
     if (!updatedWallet) {
-        // Document matched 0 because opKey was already applied concurrently or previously
+        // Matched 0 because opKey was applied concurrently
         if (opKey) {
             const currentWallet = await Wallet.findById(wallet._id);
+            const loggedOp = (currentWallet?.operationsLog || []).find((o) => o.opKey === opKey);
+            if (loggedOp) {
+                if (loggedOp.type !== "CREDIT" || Math.abs(loggedOp.amount - numAmount) > 0.001) {
+                    return {
+                        success: false,
+                        message: `Conflicting reuse of operation ID "${opKey}". Original: ${loggedOp.type} ₹${loggedOp.amount}.`,
+                    };
+                }
+            }
             let existingTx = await Transaction.findOne({ referenceId: opKey });
             if (!existingTx && currentWallet) {
-                // Reconstruct missing ledger entry from operationsLog
-                const loggedOp = (currentWallet.operationsLog || []).find((o) => o.opKey === opKey);
+                const reconstructedBalanceAfter = loggedOp?.balanceAfter != null ? loggedOp.balanceAfter : currentWallet.balance;
+                const reconstructedAmount = loggedOp?.amount != null ? loggedOp.amount : numAmount;
                 try {
                     existingTx = await Transaction.create({
                         walletId: currentWallet._id,
                         userId,
                         type: loggedOp?.type || "CREDIT",
-                        amount: loggedOp?.amount || numAmount,
-                        balanceAfter: loggedOp?.balanceAfter || currentWallet.balance,
+                        amount: reconstructedAmount,
+                        balanceAfter: reconstructedBalanceAfter,
                         reason: loggedOp?.reason || reason,
                         description: loggedOp?.description || description,
                         orderId: loggedOp?.orderId || orderId,
@@ -143,24 +238,6 @@ const creditWallet = async ({
         }
         return { success: false, message: "Failed to update wallet balance." };
     }
-
-    const finalRefId = opKey || `CR_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const opDetail = {
-        opKey: finalRefId,
-        type: "CREDIT",
-        amount: numAmount,
-        balanceAfter: updatedWallet.balance,
-        reason,
-        description,
-        orderId,
-        orderNumber,
-        createdAt: new Date(),
-    };
-
-    await Wallet.updateOne(
-        { _id: updatedWallet._id },
-        { $push: { operationsLog: opDetail } }
-    ).catch(() => {});
 
     let transaction = null;
     try {
@@ -197,8 +274,6 @@ const creditWallet = async ({
             } catch (recoverErr) {
                 if (recoverErr.code === 11000 && opKey) {
                     transaction = await Transaction.findOne({ referenceId: opKey });
-                } else {
-                    console.error("Secondary ledger creation error:", recoverErr);
                 }
             }
         }
@@ -214,7 +289,8 @@ const creditWallet = async ({
 
 /**
  * Atomically debits amount from user wallet with balance verification ($gte: amount).
- * Guards duplicate operations atomically directly on the wallet document (Findings 29 & 30).
+ * Financial effect, duplicate guard, and recovery details are written atomically in one update.
+ * Validates duplicate operations against original persisted facts and rejects conflicting reuse.
  */
 const debitWallet = async ({
     userId,
@@ -235,6 +311,12 @@ const debitWallet = async ({
     if (opKey) {
         const existingTx = await Transaction.findOne({ referenceId: opKey });
         if (existingTx) {
+            if (existingTx.type !== "DEBIT" || Math.abs(existingTx.amount - numAmount) > 0.001 || existingTx.userId.toString() !== userId.toString()) {
+                return {
+                    success: false,
+                    message: `Conflicting reuse of operation ID "${opKey}". Original transaction: ${existingTx.type} ₹${existingTx.amount} for user ${existingTx.userId}.`,
+                };
+            }
             const currentWallet = await getOrCreateWallet(userId);
             return {
                 success: true,
@@ -249,34 +331,127 @@ const debitWallet = async ({
 
     const wallet = await getOrCreateWallet(userId);
 
-    // Conditional atomic deduction: only update if balance >= numAmount AND opKey not previously applied
+    if (opKey && wallet.appliedOperations && wallet.appliedOperations.includes(opKey)) {
+        const loggedOp = (wallet.operationsLog || []).find((o) => o.opKey === opKey);
+        if (loggedOp) {
+            if (loggedOp.type !== "DEBIT" || Math.abs(loggedOp.amount - numAmount) > 0.001) {
+                return {
+                    success: false,
+                    message: `Conflicting reuse of operation ID "${opKey}". Original log: ${loggedOp.type} ₹${loggedOp.amount}.`,
+                };
+            }
+        }
+
+        let existingTx = await Transaction.findOne({ referenceId: opKey });
+        if (!existingTx) {
+            const reconstructedBalanceAfter = loggedOp?.balanceAfter != null ? loggedOp.balanceAfter : wallet.balance;
+            const reconstructedAmount = loggedOp?.amount != null ? loggedOp.amount : numAmount;
+            try {
+                existingTx = await Transaction.create({
+                    walletId: wallet._id,
+                    userId,
+                    type: loggedOp?.type || "DEBIT",
+                    amount: reconstructedAmount,
+                    balanceAfter: reconstructedBalanceAfter,
+                    reason: loggedOp?.reason || reason,
+                    description: loggedOp?.description || description,
+                    orderId: loggedOp?.orderId || orderId,
+                    orderNumber: loggedOp?.orderNumber || orderNumber,
+                    referenceId: opKey,
+                });
+            } catch (e) {
+                if (e.code === 11000) {
+                    existingTx = await Transaction.findOne({ referenceId: opKey });
+                }
+            }
+        }
+
+        return {
+            success: true,
+            message: "Transaction already processed.",
+            isExisting: true,
+            isDuplicate: true,
+            balance: wallet.balance,
+            transaction: existingTx,
+        };
+    }
+
+    // Check balance before attempting update
+    if (wallet.balance < numAmount) {
+        return {
+            success: false,
+            message: `Insufficient wallet balance. Current balance is ₹${wallet.balance.toLocaleString("en-IN")}, but ₹${numAmount.toLocaleString("en-IN")} is required.`,
+            currentBalance: wallet.balance,
+            requiredAmount: numAmount,
+        };
+    }
+
+    const finalRefId = opKey || `DB_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date();
+
+    const updatePipeline = [
+        {
+            $set: {
+                balance: { $round: [{ $subtract: ["$balance", numAmount] }, 2] },
+                appliedOperations: opKey
+                    ? { $concatArrays: [{ $ifNull: ["$appliedOperations", []] }, [opKey]] }
+                    : { $ifNull: ["$appliedOperations", []] },
+                operationsLog: {
+                    $concatArrays: [
+                        { $ifNull: ["$operationsLog", []] },
+                        [
+                            {
+                                opKey: finalRefId,
+                                type: "DEBIT",
+                                amount: numAmount,
+                                balanceAfter: { $round: [{ $subtract: ["$balance", numAmount] }, 2] },
+                                reason: reason || "DEBIT",
+                                description: description || "",
+                                orderId: orderId || null,
+                                orderNumber: orderNumber || null,
+                                createdAt: now,
+                            },
+                        ],
+                    ],
+                },
+            },
+        },
+    ];
+
     const updateQuery = {
         _id: wallet._id,
         balance: { $gte: numAmount },
         ...(opKey ? { appliedOperations: { $ne: opKey } } : {}),
     };
-    const updateOps = {
-        $inc: { balance: -numAmount },
-        ...(opKey ? { $push: { appliedOperations: opKey } } : {}),
-    };
 
-    const updatedWallet = await Wallet.findOneAndUpdate(updateQuery, updateOps, { returnDocument: "after" });
+    const updatedWallet = await Wallet.findOneAndUpdate(updateQuery, updatePipeline, {
+        returnDocument: "after",
+        updatePipeline: true,
+    });
 
     if (!updatedWallet) {
-        // Check why update failed: was it duplicate opKey or insufficient balance?
         const currentWallet = await Wallet.findById(wallet._id);
         if (opKey && currentWallet && currentWallet.appliedOperations && currentWallet.appliedOperations.includes(opKey)) {
+            const loggedOp = (currentWallet.operationsLog || []).find((o) => o.opKey === opKey);
+            if (loggedOp) {
+                if (loggedOp.type !== "DEBIT" || Math.abs(loggedOp.amount - numAmount) > 0.001) {
+                    return {
+                        success: false,
+                        message: `Conflicting reuse of operation ID "${opKey}". Original: ${loggedOp.type} ₹${loggedOp.amount}.`,
+                    };
+                }
+            }
             let existingTx = await Transaction.findOne({ referenceId: opKey });
             if (!existingTx) {
-                // Reconstruct missing ledger entry from operationsLog
-                const loggedOp = (currentWallet.operationsLog || []).find((o) => o.opKey === opKey);
+                const reconstructedBalanceAfter = loggedOp?.balanceAfter != null ? loggedOp.balanceAfter : currentWallet.balance;
+                const reconstructedAmount = loggedOp?.amount != null ? loggedOp.amount : numAmount;
                 try {
                     existingTx = await Transaction.create({
                         walletId: currentWallet._id,
                         userId,
                         type: loggedOp?.type || "DEBIT",
-                        amount: loggedOp?.amount || numAmount,
-                        balanceAfter: loggedOp?.balanceAfter || currentWallet.balance,
+                        amount: reconstructedAmount,
+                        balanceAfter: reconstructedBalanceAfter,
                         reason: loggedOp?.reason || reason,
                         description: loggedOp?.description || description,
                         orderId: loggedOp?.orderId || orderId,
@@ -307,24 +482,6 @@ const debitWallet = async ({
             requiredAmount: numAmount,
         };
     }
-
-    const finalRefId = opKey || `DB_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const opDetail = {
-        opKey: finalRefId,
-        type: "DEBIT",
-        amount: numAmount,
-        balanceAfter: updatedWallet.balance,
-        reason,
-        description,
-        orderId,
-        orderNumber,
-        createdAt: new Date(),
-    };
-
-    await Wallet.updateOne(
-        { _id: updatedWallet._id },
-        { $push: { operationsLog: opDetail } }
-    ).catch(() => {});
 
     let transaction = null;
     try {
@@ -361,8 +518,6 @@ const debitWallet = async ({
             } catch (recoverErr) {
                 if (recoverErr.code === 11000 && opKey) {
                     transaction = await Transaction.findOne({ referenceId: opKey });
-                } else {
-                    console.error("Secondary debit ledger creation error:", recoverErr);
                 }
             }
         }

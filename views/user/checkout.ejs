@@ -266,6 +266,10 @@
                                 <span>-&#8377;<%= couponDiscount.toLocaleString('en-IN') %></span>
                             </div>
                         <% } %>
+                        <div class="flex justify-between text-gray-600">
+                            <span>Estimated Tax (5%)</span>
+                            <span id="summaryTax">&#8377;<%= (typeof taxAmount !== 'undefined' ? taxAmount : Math.round((subtotal - (couponDiscount || 0)) * 0.05)).toLocaleString('en-IN') %></span>
+                        </div>
                         <div class="flex justify-between text-gray-600 items-center">
                             <span>Shipping</span>
                             <% if (shippingFee === 0) { %>

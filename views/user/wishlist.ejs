@@ -79,7 +79,9 @@
                                 <% if (item.isAvailable && item.variant && item.variant.stock > 0) { %>
                                     <button type="button"
                                         class="move-to-cart-btn w-full h-10 bg-black text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-gray-900 transition"
-                                        data-variant-id="<%= item.variantId %>">
+                                        data-variant-id="<%= item.variantId %>"
+                                        data-product-slug="<%= item.product ? item.product.slug : '' %>"
+                                        data-variant-count="<%= typeof item.variantCount !== 'undefined' ? item.variantCount : 1 %>">
                                         Move to Cart
                                     </button>
                                 <% } else { %>
@@ -128,7 +130,7 @@
 
     </div>
 </main>
-
+<%- include("../partials/variantModal") %>
 <%- include("../partials/storeFooter") %>
 
 <script>
@@ -206,7 +208,26 @@
         const btn = e.target.closest('.move-to-cart-btn');
         if (!btn) return;
         const variantId = btn.dataset.variantId;
+        const slug = btn.dataset.productSlug;
+        const variantCount = parseInt(btn.dataset.variantCount, 10) || 1;
+
+        if (variantCount > 1 && slug && typeof window.openVariantSelectionModal === 'function') {
+            window.openVariantSelectionModal({
+                slug,
+                sourceVariantId: variantId,
+                preselectedVariantId: variantId,
+                onSuccess: (data) => {
+                    const remainingCount = typeof data.wishlistCount === 'number'
+                        ? data.wishlistCount
+                        : Math.max(0, (parseInt(document.getElementById('wishlistCountText')?.textContent, 10) || 1) - 1);
+                    handleWishlistCountTransition(remainingCount, 'Moved to cart', 'success');
+                }
+            });
+            return;
+        }
+
         const originalText = btn.textContent.trim();
+        if (btn.disabled) return;
         btn.disabled = true;
         btn.textContent = 'Adding...';
 
@@ -218,7 +239,7 @@
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: JSON.stringify({ variantId, quantity: 1 }),
+                body: JSON.stringify({ variantId, quantity: 1, sourceVariantId: variantId }),
             });
 
             if (res.status === 401) {
@@ -236,13 +257,8 @@
                 if (typeof updateNavCartCount === 'function' && typeof data.cartCount === 'number') {
                     updateNavCartCount(data.cartCount);
                 }
-                // Fetch updated wishlist count
-                const countRes = await fetch('/wishlist', {
-                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-                });
-                const countData = await countRes.json().catch(() => ({}));
-                const remainingCount = typeof countData.totalItems === 'number'
-                    ? countData.totalItems
+                const remainingCount = typeof data.wishlistCount === 'number'
+                    ? data.wishlistCount
                     : Math.max(0, (parseInt(document.getElementById('wishlistCountText')?.textContent, 10) || 1) - 1);
 
                 handleWishlistCountTransition(remainingCount, 'Moved to cart', 'success');

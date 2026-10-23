@@ -88,8 +88,44 @@ const loadProductDetail = async (req, res) => {
     }
 };
 
+const getProductVariantsController = async (req, res) => {
+    try {
+        const result = await getProductDetail(req.params.slug);
+        if (!result.success) {
+            return res.status(404).json({ success: false, message: result.message });
+        }
+        return res.json({
+            success: true,
+            product: {
+                _id: result.product._id,
+                name: result.product.name,
+                slug: result.product.slug,
+                thumbnail: result.product.thumbnail,
+                brand: result.product.brand || "",
+            },
+            variants: (result.variants || []).map((v) => ({
+                _id: v._id,
+                sku: v.sku,
+                size: v.size,
+                color: v.color,
+                stock: v.stock,
+                regularPrice: v.regularPrice,
+                displayPrice: v.displayPrice,
+                effectivePrice: v.effectivePrice,
+                images: v.images || [],
+            })),
+            totalStock: result.totalStock,
+            isUnavailable: result.isUnavailable,
+        });
+    } catch (error) {
+        console.error("Get Product Variants Error:", error);
+        return res.status(500).json({ success: false, message: "Failed to load product variants." });
+    }
+};
+
 module.exports = {
     loadProducts,
     loadCategories,
     loadProductDetail,
+    getProductVariantsController,
 };

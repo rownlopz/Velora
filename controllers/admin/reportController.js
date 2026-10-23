@@ -3,12 +3,14 @@ const reportService = require("../../services/admin/reportService");
 const loadDashboard = async (req, res) => {
     try {
         const filterType = req.query.filterType || "monthly";
-        const analytics = await reportService.getDashboardAnalytics(filterType);
+        const targetYear = req.query.year ? parseInt(req.query.year, 10) : null;
+        const analytics = await reportService.getDashboardAnalytics(filterType, targetYear);
 
         res.render("admin/dashboard", {
             title: "Dashboard & Analytics | VELORA Admin",
             active: "dashboard",
             filterType,
+            targetYear,
             monthlyStats: analytics.monthlyStats,
             topProducts: analytics.topProducts,
             topCategories: analytics.topCategories,

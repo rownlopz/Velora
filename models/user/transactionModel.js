@@ -40,6 +40,7 @@ const transactionSchema = new mongoose.Schema(
                 "RETURN_REFUND",
                 "ORDER_RETURN",
                 "ORDER_REFUND",
+                "DUPLICATE_PAYMENT",
                 "REFERRAL_REWARD",
                 "ADMIN_ADJUSTMENT",
                 "REFERRAL_CLAWBACK",

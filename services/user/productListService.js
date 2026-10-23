@@ -140,7 +140,17 @@ const listProducts = async (filters, limit = 12) => {
                                 { $gte: ["$endDate", now] },
                                 {
                                     $or: [
-                                        { $and: [{ $eq: ["$offerType", "PRODUCT"] }, { $eq: ["$productId", "$$pId"] }] },
+                                        {
+                                            $and: [
+                                                { $eq: ["$offerType", "PRODUCT"] },
+                                                {
+                                                    $or: [
+                                                        { $eq: ["$productId", "$$pId"] },
+                                                        { $in: ["$$pId", { $ifNull: ["$productIds", []] }] },
+                                                    ],
+                                                },
+                                            ],
+                                        },
                                         { $and: [{ $eq: ["$offerType", "CATEGORY"] }, { $eq: ["$categoryId", "$$cId"] }] },
                                     ],
                                 },
@@ -148,7 +158,6 @@ const listProducts = async (filters, limit = 12) => {
                         },
                     },
                 },
-                { $sort: { discountValue: -1 } },
             ],
             as: "matchedOffers",
         },
@@ -166,48 +175,74 @@ const listProducts = async (filters, limit = 12) => {
                                 vars: {
                                     basePrice: { $ifNull: ["$$v.salePrice", "$$v.regularPrice"] },
                                     regPrice: "$$v.regularPrice",
-                                    bestOffer: { $arrayElemAt: ["$matchedOffers", 0] },
                                 },
                                 in: {
                                     $cond: [
                                         { $gt: [{ $size: "$matchedOffers" }, 0] },
                                         {
-                                            $cond: [
-                                                { $eq: ["$$bestOffer.discountType", "PERCENTAGE"] },
-                                                {
+                                            $let: {
+                                                vars: {
+                                                    maxSavings: {
+                                                        $max: {
+                                                            $map: {
+                                                                input: "$matchedOffers",
+                                                                as: "off",
+                                                                in: {
+                                                                    $cond: [
+                                                                        { $eq: ["$$off.discountType", "PERCENTAGE"] },
+                                                                        {
+                                                                            $let: {
+                                                                                vars: {
+                                                                                    pctDiscount: {
+                                                                                        $round: [
+                                                                                            {
+                                                                                                $divide: [
+                                                                                                    { $multiply: ["$$regPrice", "$$off.discountValue"] },
+                                                                                                    100,
+                                                                                                ],
+                                                                                            },
+                                                                                            2,
+                                                                                        ],
+                                                                                    },
+                                                                                },
+                                                                                in: {
+                                                                                    $cond: [
+                                                                                        {
+                                                                                            $and: [
+                                                                                                { $ne: ["$$off.maxDiscount", null] },
+                                                                                                { $gt: ["$$off.maxDiscount", 0] },
+                                                                                            ],
+                                                                                        },
+                                                                                        { $min: ["$$pctDiscount", "$$off.maxDiscount"] },
+                                                                                        "$$pctDiscount",
+                                                                                    ],
+                                                                                },
+                                                                            },
+                                                                        },
+                                                                        { $min: ["$$regPrice", "$$off.discountValue"] },
+                                                                    ],
+                                                                },
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                                in: {
                                                     $min: [
                                                         "$$basePrice",
                                                         {
-                                                            $subtract: [
-                                                                "$$regPrice",
-                                                                {
-                                                                    $cond: [
-                                                                        { $ne: ["$$bestOffer.maxDiscount", null] },
-                                                                        {
-                                                                            $min: [
-                                                                                { $divide: [{ $multiply: ["$$regPrice", "$$bestOffer.discountValue"] }, 100] },
-                                                                                "$$bestOffer.maxDiscount"
-                                                                            ]
-                                                                        },
-                                                                        { $divide: [{ $multiply: ["$$regPrice", "$$bestOffer.discountValue"] }, 100] }
-                                                                    ]
-                                                                }
-                                                            ]
-                                                        }
-                                                    ]
+                                                            $round: [
+                                                                { $max: [0, { $subtract: ["$$regPrice", "$$maxSavings"] }] },
+                                                                2,
+                                                            ],
+                                                        },
+                                                    ],
                                                 },
-                                                {
-                                                    $min: [
-                                                        "$$basePrice",
-                                                        { $max: [0, { $subtract: ["$$regPrice", "$$bestOffer.discountValue"] }] }
-                                                    ]
-                                                }
-                                            ]
+                                            },
                                         },
-                                        "$$basePrice"
-                                    ]
-                                }
-                            }
+                                        "$$basePrice",
+                                    ],
+                                },
+                            },
                         },
                     },
                 },
@@ -234,7 +269,7 @@ const listProducts = async (filters, limit = 12) => {
                 { $limit: limit },
                 {
                     $project: {
-                        name: 1, slug: 1, thumbnail: 1,
+                        name: 1, slug: 1, thumbnail: 1, categoryId: 1,
                         displayPrice: 1, totalStock: 1, averageRating: 1,
                         totalReviews: 1, isUnavailable: 1, status: 1,
                         defaultVariantId: { $arrayElemAt: ["$activeVariants._id", 0] },
@@ -255,13 +290,17 @@ const listProducts = async (filters, limit = 12) => {
 
     const products = await Promise.all(
         rawProducts.map(async (p) => {
-            if (p.defaultVariantId) {
-                const v = await Variant.findById(p.defaultVariantId);
-                if (v) {
+            if (p.variantIds && p.variantIds.length > 0) {
+                const variants = await Variant.find({ _id: { $in: p.variantIds }, isActive: true });
+                let cheapestPrice = Infinity;
+                for (const v of variants) {
                     const priceInfo = await getAuthoritativeItemPrice(v, p);
-                    if (priceInfo.displayPrice > 0) {
-                        return { ...p, displayPrice: priceInfo.displayPrice };
+                    if (priceInfo.displayPrice > 0 && priceInfo.displayPrice < cheapestPrice) {
+                        cheapestPrice = priceInfo.displayPrice;
                     }
+                }
+                if (Number.isFinite(cheapestPrice) && cheapestPrice > 0) {
+                    return { ...p, displayPrice: cheapestPrice };
                 }
             }
             return p;

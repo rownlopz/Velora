@@ -269,6 +269,26 @@
                                         <p class="text-xs text-gray-400 mt-0.5">&#9733; <%= p.averageRating.toFixed(1) %> (<%= p.totalReviews %>)</p>
                                     <% } %>
                                 </a>
+
+                                <div class="mt-3">
+                                    <% if (p.isUnavailable) { %>
+                                        <button type="button" disabled class="w-full h-9 rounded-lg bg-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-wider cursor-not-allowed">
+                                            Unavailable
+                                        </button>
+                                    <% } else if (p.totalStock === 0) { %>
+                                        <button type="button" disabled class="w-full h-9 rounded-lg bg-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-wider cursor-not-allowed">
+                                            Out of Stock
+                                        </button>
+                                    <% } else { %>
+                                        <button type="button"
+                                            class="add-to-cart-listing-btn w-full h-9 rounded-lg bg-black text-white text-xs font-semibold uppercase tracking-wider hover:bg-neutral-800 active:scale-[0.98] transition shadow-xs flex items-center justify-center gap-1.5"
+                                            data-slug="<%= p.slug %>"
+                                            data-variant-count="<%= (p.variantIds || []).length %>"
+                                            data-default-variant-id="<%= p.defaultVariantId ? p.defaultVariantId.toString() : '' %>">
+                                            <span>Add to Cart</span>
+                                        </button>
+                                    <% } %>
+                                </div>
                             </div>
                         <% }) %>
                     </div>
@@ -289,6 +309,7 @@
     </div>
 </main>
 
+<%- include("../partials/variantModal") %>
 <%- include("../partials/storeFooter") %>
 
 <script>
@@ -399,6 +420,81 @@ document.addEventListener('DOMContentLoaded', function () {
                 this.disabled = false;
             }
         });
+    });
+
+    // Add to Cart from product listing
+    document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.add-to-cart-listing-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const slug = btn.dataset.slug;
+        const variantCount = parseInt(btn.dataset.variantCount, 10) || 0;
+        const defaultVariantId = btn.dataset.defaultVariantId;
+
+        if (variantCount > 1) {
+            if (typeof window.openVariantSelectionModal === 'function') {
+                window.openVariantSelectionModal({ slug });
+            }
+            return;
+        }
+
+        if (variantCount === 1 && defaultVariantId) {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span>Adding...</span>';
+
+            try {
+                const res = await fetch('/cart/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ variantId: defaultVariantId, quantity: 1 })
+                });
+
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await res.json();
+                if (data.requireLogin) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (data.success) {
+                    if (typeof updateNavCartCount === 'function' && typeof data.cartCount === 'number') {
+                        updateNavCartCount(data.cartCount);
+                    }
+                    if (typeof showToast === 'function') {
+                        showToast('Added to bag', 'success');
+                    }
+                } else {
+                    if (typeof showToast === 'function') {
+                        showToast(data.message || 'Unable to add to cart', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Cart add error:', err);
+                if (typeof showToast === 'function') {
+                    showToast('Something went wrong. Please try again.', 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+            return;
+        }
+
+        if (typeof showToast === 'function') {
+            showToast('Product options unavailable', 'warning');
+        }
     });
 });
 </script>

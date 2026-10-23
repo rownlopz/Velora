@@ -99,6 +99,11 @@
             });
 
             const data = await res.json();
+            if (data.isAlreadyPaid) {
+                alert(data.message || 'Payment has already been confirmed.');
+                window.location.href = '/orders/<%= order._id %>/payment-success';
+                return;
+            }
             if (!data.success || !data.razorpay) {
                 alert(data.message || 'Unable to retry payment at this time.');
                 retryBtn.disabled = false;

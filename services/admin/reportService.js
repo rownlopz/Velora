@@ -92,18 +92,24 @@ const getSalesReportData = async (options = {}) => {
 
     let totalOrdersCount = orders.length;
     let totalGrossAmount = 0;
+    let totalMerchandiseSales = 0;
+    let totalTax = 0;
+    let totalShipping = 0;
     let totalOfferDiscount = 0;
     let totalCouponDiscount = 0;
     let totalRefundsOrCancellations = 0;
+    let totalPurchaseRefunds = 0;
+    let totalDuplicateRefunds = 0;
     let netSalesRecognized = 0;
     let totalUnitsSold = 0;
     let totalCollectedRevenue = 0;
     let totalPendingCodRevenue = 0;
 
     const reportRows = orders.map((ord) => {
-        // True pre-discount gross order amount
-        const grossAmount = (ord.pricing?.originalSubtotal != null ? ord.pricing.originalSubtotal : (ord.pricing?.subtotal || 0))
-            + (ord.pricing?.originalShippingFee != null ? ord.pricing.originalShippingFee : (ord.pricing?.shippingFee || 0));
+        const merchandiseSales = ord.pricing?.originalSubtotal != null ? ord.pricing.originalSubtotal : (ord.pricing?.subtotal || 0);
+        const tax = ord.pricing?.taxAmount || 0;
+        const shipping = ord.pricing?.originalShippingFee != null ? ord.pricing.originalShippingFee : (ord.pricing?.shippingFee || 0);
+        const grossAmount = merchandiseSales + shipping;
 
         const offerDisc = ord.pricing?.offerDiscount || 0;
         const couponDisc = ord.pricing?.couponDiscount || 0;
@@ -111,8 +117,11 @@ const getSalesReportData = async (options = {}) => {
         const returnCredit = ord.pricing?.returnCredit || 0;
         const deduction = cancellationDeduction + returnCredit;
 
-        // Active delivered/processing units
-        const activeItems = (ord.items || []).filter((i) => !["CANCELLED", "RETURNED"].includes(i.status));
+        const purchaseRefund = ord.pricing?.purchaseRefundTotal || ord.pricing?.walletRefundIssued || 0;
+        const duplicateRefund = ord.pricing?.duplicateRefundTotal || 0;
+
+        // Active delivered/processing units (excluding cancelled and returned/return-approved units)
+        const activeItems = (ord.items || []).filter((i) => !["CANCELLED", "RETURNED", "RETURN_APPROVED"].includes(i.status));
         const orderUnits = activeItems.reduce((sum, i) => sum + i.quantity, 0);
         const orderNet = ord.pricing?.currentPayable != null
             ? ord.pricing.currentPayable
@@ -121,13 +130,19 @@ const getSalesReportData = async (options = {}) => {
         const isPaid = ord.paymentStatus === "COMPLETED" || (ord.paymentMethod === "COD" && ord.orderStatus === "DELIVERED");
         const isPendingCod = ord.paymentMethod === "COD" && ord.paymentStatus === "PENDING" && ord.orderStatus !== "DELIVERED" && ord.orderStatus !== "CANCELLED";
 
+        totalMerchandiseSales += merchandiseSales;
+        totalTax += tax;
+        totalShipping += shipping;
         totalGrossAmount += grossAmount;
         totalOfferDiscount += offerDisc;
         totalCouponDiscount += couponDisc;
         totalRefundsOrCancellations += deduction;
-        totalUnitsSold += orderUnits;
+        totalPurchaseRefunds += purchaseRefund;
+        totalDuplicateRefunds += duplicateRefund;
 
+        // Units sold include only verified paid or delivered purchases
         if (isPaid) {
+            totalUnitsSold += orderUnits;
             netSalesRecognized += orderNet;
             totalCollectedRevenue += orderNet;
         } else if (isPendingCod) {
@@ -143,10 +158,15 @@ const getSalesReportData = async (options = {}) => {
             paymentMethod: ord.paymentMethod,
             paymentStatus: ord.paymentStatus,
             orderStatus: ord.orderStatus,
+            merchandiseSales,
+            tax,
+            shipping,
             grossAmount,
             offerDiscount: offerDisc,
             couponDiscount: couponDisc,
             refundsOrDeductions: deduction,
+            purchaseRefund,
+            duplicateRefund,
             netPayable: orderNet,
             unitsCount: orderUnits,
             isCollected: isPaid,
@@ -164,14 +184,30 @@ const getSalesReportData = async (options = {}) => {
         startDate,
         endDate,
         summary: {
+            ordersPlaced: totalOrdersCount,
             totalOrdersCount,
-            totalGrossAmount,
-            totalOfferDiscount,
-            totalCouponDiscount,
-            totalRefundsOrCancellations,
-            netSalesRecognized,
+            collectedPayments: totalCollectedRevenue,
             totalCollectedRevenue,
+            pendingCod: totalPendingCodRevenue,
             totalPendingCodRevenue,
+            merchandiseSales: totalMerchandiseSales,
+            totalMerchandiseSales,
+            offerDiscounts: totalOfferDiscount,
+            totalOfferDiscount,
+            couponDiscounts: totalCouponDiscount,
+            totalCouponDiscount,
+            tax: totalTax,
+            totalTax,
+            shipping: totalShipping,
+            totalShipping,
+            cancellationsAndReturns: totalRefundsOrCancellations,
+            totalRefundsOrCancellations,
+            purchaseRefunds: totalPurchaseRefunds,
+            totalPurchaseRefunds,
+            duplicateRefunds: totalDuplicateRefunds,
+            totalDuplicateRefunds,
+            netSalesRecognized,
+            totalGrossAmount,
             totalUnitsSold,
         },
         orders: paginatedRows,
@@ -216,14 +252,20 @@ const generateSalesExcel = async (reportData) => {
 
     // Summary Section
     sheet.addRow([]);
-    sheet.addRow(["SUMMARY METRICS"]);
-    sheet.addRow(["Total Orders Placed", reportData.summary.totalOrdersCount]);
+    sheet.addRow(["EXECUTIVE SUMMARY & FINANCIAL RECONCILIATION"]);
+    sheet.addRow(["Orders Placed", reportData.summary.ordersPlaced || reportData.summary.totalOrdersCount]);
+    sheet.addRow(["Collected Payments (₹)", reportData.summary.collectedPayments || 0]);
+    sheet.addRow(["Pending COD (₹)", reportData.summary.pendingCod || 0]);
+    sheet.addRow(["Merchandise Sales (₹)", reportData.summary.merchandiseSales || reportData.summary.totalGrossAmount]);
+    sheet.addRow(["Offer Discounts (₹)", reportData.summary.offerDiscounts || reportData.summary.totalOfferDiscount]);
+    sheet.addRow(["Coupon Discounts (₹)", reportData.summary.couponDiscounts || reportData.summary.totalCouponDiscount]);
+    sheet.addRow(["Tax (5%) (₹)", reportData.summary.tax || 0]);
+    sheet.addRow(["Shipping (₹)", reportData.summary.shipping || 0]);
+    sheet.addRow(["Cancellations & Returns (₹)", reportData.summary.cancellationsAndReturns || reportData.summary.totalRefundsOrCancellations]);
+    sheet.addRow(["Purchase Refunds (₹)", reportData.summary.purchaseRefunds || 0]);
+    sheet.addRow(["Duplicate Payment Refunds (₹)", reportData.summary.duplicateRefunds || 0]);
+    sheet.addRow(["Net Recognized Sales (₹)", reportData.summary.netSalesRecognized]);
     sheet.addRow(["Net Units Sold", reportData.summary.totalUnitsSold]);
-    sheet.addRow(["Gross Order Amount (₹)", reportData.summary.totalGrossAmount]);
-    sheet.addRow(["Offer Discounts (₹)", reportData.summary.totalOfferDiscount]);
-    sheet.addRow(["Coupon Discounts (₹)", reportData.summary.totalCouponDiscount]);
-    sheet.addRow(["Refunds / Cancellations (₹)", reportData.summary.totalRefundsOrCancellations]);
-    sheet.addRow(["Net Sales Recognized (₹)", reportData.summary.netSalesRecognized]);
     sheet.addRow([]);
 
     // Table Header
@@ -234,11 +276,13 @@ const generateSalesExcel = async (reportData) => {
         "Payment Method",
         "Payment Status",
         "Order Status",
-        "Gross (₹)",
+        "Merchandise (₹)",
+        "Tax (₹)",
+        "Shipping (₹)",
         "Offer Disc (₹)",
         "Coupon Disc (₹)",
         "Deductions (₹)",
-        "Net Sales (₹)",
+        "Net Payable (₹)",
     ]);
     headerRow.font = { bold: true };
     headerRow.fill = {
@@ -256,10 +300,12 @@ const generateSalesExcel = async (reportData) => {
             sanitizeForSpreadsheet(row.paymentMethod),
             sanitizeForSpreadsheet(row.paymentStatus),
             sanitizeForSpreadsheet(row.orderStatus),
-            row.grossAmount,
-            row.offerDiscount,
-            row.couponDiscount,
-            row.refundsOrDeductions,
+            row.merchandiseSales !== undefined ? row.merchandiseSales : row.grossAmount,
+            row.tax || 0,
+            row.shipping || 0,
+            row.offerDiscount || 0,
+            row.couponDiscount || 0,
+            row.refundsOrDeductions || 0,
             row.netPayable,
         ]);
     });
@@ -301,19 +347,25 @@ const generateSalesPdf = async (reportData) => {
             doc.moveTo(35, 90).lineTo(560, 90).strokeColor("#E5E7EB").stroke();
 
             // Summary Grid
-            doc.fontSize(10).font("Helvetica-Bold").text("EXECUTIVE SUMMARY", 35, 102);
-            doc.font("Helvetica").fontSize(8.5);
+            doc.fontSize(10).font("Helvetica-Bold").text("EXECUTIVE SUMMARY & FINANCIAL RECONCILIATION", 35, 100);
+            doc.font("Helvetica").fontSize(8);
 
             const s = reportData.summary;
-            doc.text(`Total Orders: ${s.totalOrdersCount}`, 35, 120);
-            doc.text(`Units Sold: ${s.totalUnitsSold}`, 160, 120);
-            doc.text(`Gross Revenue: ₹${s.totalGrossAmount.toLocaleString("en-IN")}`, 320, 120);
+            doc.text(`Orders Placed: ${s.ordersPlaced || s.totalOrdersCount}`, 35, 115);
+            doc.text(`Units Sold: ${s.totalUnitsSold}`, 160, 115);
+            doc.text(`Merchandise: ₹${(s.merchandiseSales || s.totalGrossAmount).toLocaleString("en-IN")}`, 300, 115);
+            doc.text(`Tax (5%): ₹${(s.tax || 0).toLocaleString("en-IN")}`, 440, 115);
 
-            doc.text(`Offer Discounts: ₹${s.totalOfferDiscount.toLocaleString("en-IN")}`, 35, 138);
-            doc.text(`Coupon Discounts: ₹${s.totalCouponDiscount.toLocaleString("en-IN")}`, 160, 138);
-            doc.text(`Cancellations/Returns: ₹${s.totalRefundsOrCancellations.toLocaleString("en-IN")}`, 320, 138);
+            doc.text(`Collected: ₹${(s.collectedPayments || 0).toLocaleString("en-IN")}`, 35, 130);
+            doc.text(`Pending COD: ₹${(s.pendingCod || 0).toLocaleString("en-IN")}`, 160, 130);
+            doc.text(`Shipping: ₹${(s.shipping || 0).toLocaleString("en-IN")}`, 300, 130);
+            doc.text(`Discounts: ₹${((s.offerDiscounts || 0) + (s.couponDiscounts || 0)).toLocaleString("en-IN")}`, 440, 130);
 
-            doc.font("Helvetica-Bold").text(`Net Recognized Sales: ₹${s.netSalesRecognized.toLocaleString("en-IN")}`, 35, 156);
+            doc.text(`Cancellations/Returns: ₹${(s.cancellationsAndReturns || 0).toLocaleString("en-IN")}`, 35, 145);
+            doc.text(`Purchase Refunds: ₹${(s.purchaseRefunds || 0).toLocaleString("en-IN")}`, 200, 145);
+            doc.text(`Duplicate Refunds: ₹${(s.duplicateRefunds || 0).toLocaleString("en-IN")}`, 360, 145);
+
+            doc.font("Helvetica-Bold").text(`Net Recognized Sales: ₹${s.netSalesRecognized.toLocaleString("en-IN")}`, 35, 160);
 
             doc.moveTo(35, 172).lineTo(560, 172).strokeColor("#E5E7EB").stroke();
 
@@ -375,19 +427,29 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
     let timeMatch = {};
     let groupId = {};
 
-    if (filterType === "yearly") {
+    const yearNum = targetYear ? parseInt(targetYear, 10) : null;
+    if (yearNum && Number.isInteger(yearNum) && yearNum >= 2000 && yearNum <= 2100) {
+        // Specific target year in Asia/Kolkata (+05:30)
+        const startOfYear = new Date(`${yearNum}-01-01T00:00:00+05:30`);
+        const endOfYear = new Date(`${yearNum}-12-31T23:59:59.999+05:30`);
+        timeMatch = { placedAt: { $gte: startOfYear, $lte: endOfYear } };
+        groupId = {
+            year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+            month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+        };
+    } else if (filterType === "yearly") {
         const fiveYearsAgo = new Date();
         fiveYearsAgo.setFullYear(now.getFullYear() - 5);
         timeMatch = { placedAt: { $gte: fiveYearsAgo } };
-        groupId = { year: { $year: "$placedAt" } };
+        groupId = { year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } } };
     } else {
         // Monthly
         const oneYearAgo = new Date();
         oneYearAgo.setFullYear(now.getFullYear() - 1);
         timeMatch = { placedAt: { $gte: oneYearAgo } };
         groupId = {
-            year: { $year: "$placedAt" },
-            month: { $month: "$placedAt" },
+            year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+            month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
         };
     }
 
@@ -409,15 +471,18 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
         { $sort: { "_id.year": 1, ...("_id.month" ? { "_id.month": 1 } : {}) } },
     ]);
 
-    // Top 10 Best Selling Products (by quantity sold in qualifying sales)
+    // Top 10 Best Selling Products (by quantity sold in qualifying sales within selected period)
     const topProducts = await Order.aggregate([
         {
-            $match: qualifyingSalesMatch,
+            $match: {
+                ...timeMatch,
+                ...qualifyingSalesMatch,
+            },
         },
         { $unwind: "$items" },
         {
             $match: {
-                "items.status": { $nin: ["CANCELLED", "RETURNED"] },
+                "items.status": { $nin: ["CANCELLED", "RETURNED", "RETURN_APPROVED"] },
             },
         },
         {
@@ -437,12 +502,15 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
     // Top 10 Best Selling Categories (using item purchase snapshot when available)
     const topCategories = await Order.aggregate([
         {
-            $match: qualifyingSalesMatch,
+            $match: {
+                ...timeMatch,
+                ...qualifyingSalesMatch,
+            },
         },
         { $unwind: "$items" },
         {
             $match: {
-                "items.status": { $nin: ["CANCELLED", "RETURNED"] },
+                "items.status": { $nin: ["CANCELLED", "RETURNED", "RETURN_APPROVED"] },
             },
         },
         {
@@ -501,12 +569,15 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
     // Top 10 Best Selling Brands (using item brand snapshot when available, excluding blank/null)
     const topBrands = await Order.aggregate([
         {
-            $match: qualifyingSalesMatch,
+            $match: {
+                ...timeMatch,
+                ...qualifyingSalesMatch,
+            },
         },
         { $unwind: "$items" },
         {
             $match: {
-                "items.status": { $nin: ["CANCELLED", "RETURNED"] },
+                "items.status": { $nin: ["CANCELLED", "RETURNED", "RETURN_APPROVED"] },
             },
         },
         {

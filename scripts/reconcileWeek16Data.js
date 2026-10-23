@@ -14,8 +14,7 @@ const Order = require("../models/order/orderModel");
 const Payment = require("../models/order/paymentModel");
 const Address = require("../models/user/addressModel");
 const Category = require("../models/product/categoryModel");
-const Variant = require("../models/product/variantModel");
-const { getOrCreateWallet, creditWallet } = require("../services/user/walletService");
+const { reconcileOrderState, recoverPendingRefunds } = require("../services/admin/orderService");
 const restoreCancellationStock = require("../helpers/restoreCancellationStock");
 
 async function reconcileWeek16Data() {
@@ -32,7 +31,7 @@ async function reconcileWeek16Data() {
         ordersReconciled: 0,
         paymentsRepaired: 0,
         stockRepaired: 0,
-        refundsRepaired: 0,
+        unresolvedOperations: 0,
     };
 
     try {
@@ -73,34 +72,36 @@ async function reconcileWeek16Data() {
         }
         console.log(`  ✓ Repaired ${stats.paymentsRepaired} out-of-sync Payment records.`);
 
-        // 3. Reconcile partially cancelled orders left by earlier Mongoose update failures
-        console.log("\nStep 3: Auditing orders with unreconciled cancellations or missing stock restoration...");
-        const cancelledOrders = await Order.find({
+        // 3. Reconcile orders with pending repairs using authoritative reconcileOrderState
+        console.log("\nStep 3: Auditing and reconciling interrupted order states...");
+        const ordersNeedingReconcile = await Order.find({
             $or: [
-                { orderStatus: "CANCELLED", "items.isStockRestored": { $ne: true } },
-                { "items.status": "CANCELLED", "items.isStockRestored": { $ne: true } },
+                { items: { $elemMatch: { status: "CANCELLED", isStockRestored: { $ne: true } } } },
+                { items: { $elemMatch: { status: "RETURNED", isRestocked: { $ne: true } } } },
+                { items: { $elemMatch: { status: { $in: ["CANCELLED", "RETURN_APPROVED", "RETURNED"] }, refundIssued: { $ne: true } } } },
+                { items: { $elemMatch: { refundStatus: "REFUND_PENDING" } } },
+                { "pricing.shippingRefundStatus": "REFUND_PENDING" },
+                { paymentAttempts: { $elemMatch: { status: "REFUND_PENDING" } } },
+                { orderStatus: "CANCELLED", items: { $elemMatch: { isStockRestored: { $ne: true } } } },
             ],
         });
 
-        for (const ord of cancelledOrders) {
-            let orderChanged = false;
-            for (const item of ord.items) {
-                if (item.status === "CANCELLED" && !item.isStockRestored) {
-                    await restoreCancellationStock(ord._id, item).catch((err) => console.error(`Stock restore error on ${ord.orderNumber}:`, err));
-                    item.isStockRestored = true;
-                    item.restockedQuantity = item.quantity;
-                    stats.stockRepaired++;
-                    orderChanged = true;
+        for (const ord of ordersNeedingReconcile) {
+            try {
+                const reconRes = await reconcileOrderState(ord._id);
+                if (reconRes && reconRes.success) {
+                    stats.ordersReconciled++;
+                } else {
+                    stats.unresolvedOperations++;
                 }
-            }
-            if (orderChanged) {
-                await ord.save();
-                stats.ordersReconciled++;
+            } catch (reconErr) {
+                console.error(`Error reconciling order ${ord.orderNumber}:`, reconErr);
+                stats.unresolvedOperations++;
             }
         }
-        console.log(`  ✓ Reconciled ${stats.ordersReconciled} orders and restored stock for ${stats.stockRepaired} items.`);
+        console.log(`  ✓ Processed ${ordersNeedingReconcile.length} orders; successfully reconciled ${stats.ordersReconciled}.`);
 
-        // 4. Backfill missing categoryName snapshots on legacy order items
+        // 4. Backfill missing categoryName snapshots on legacy order items (marked as reconstructed)
         console.log("\nStep 4: Backfilling missing categoryName snapshots on order items...");
         const ordersWithBlankCategory = await Order.find({
             "items.categoryName": { $in: ["", null] },
@@ -115,6 +116,7 @@ async function reconcileWeek16Data() {
                     const catDoc = await Category.findById(item.categoryId).lean();
                     if (catDoc && catDoc.name) {
                         item.categoryName = catDoc.name;
+                        item.isCategoryReconstructed = true;
                         categoriesBackfilled++;
                         changed = true;
                     }
@@ -126,13 +128,60 @@ async function reconcileWeek16Data() {
         }
         console.log(`  ✓ Backfilled ${categoriesBackfilled} category name snapshots.`);
 
+        // 5. Backfill productIds array on single-product offers
+        console.log("\nStep 5: Backfilling productIds array on legacy single-product offers...");
+        const Offer = require("../models/product/offerModel");
+        const singleProductOffers = await Offer.find({
+            offerType: "PRODUCT",
+            productId: { $ne: null },
+            $or: [{ productIds: { $exists: false } }, { productIds: { $size: 0 } }],
+        });
+        let offersUpdated = 0;
+        for (const offer of singleProductOffers) {
+            if (offer.productId) {
+                offer.productIds = [offer.productId];
+                await offer.save();
+                offersUpdated++;
+            }
+        }
+        console.log(`  ✓ Backfilled productIds on ${offersUpdated} single-product offers.`);
+
+        // 6. Backfill missing Payment refund totals where Order refund total is present
+        console.log("\nStep 6: Reconciling Payment refund totals with Order refunds...");
+        const ordersWithRefunds = await Order.find({
+            $or: [
+                { "pricing.walletRefundIssued": { $gt: 0 } },
+                { "pricing.purchaseRefundTotal": { $gt: 0 } },
+            ],
+        });
+        let paymentsRefundRepaired = 0;
+        for (const ord of ordersWithRefunds) {
+            const expectedRefund = Math.max(ord.pricing?.walletRefundIssued || 0, ord.pricing?.purchaseRefundTotal || 0);
+            if (expectedRefund > 0) {
+                const res = await Payment.updateMany(
+                    {
+                        orderId: ord._id,
+                        $or: [
+                            { refundAmount: { $lt: expectedRefund } },
+                            { refundAmount: { $exists: false } },
+                            { refundAmount: null },
+                        ],
+                    },
+                    { $set: { refundAmount: expectedRefund } }
+                );
+                if (res.modifiedCount > 0) paymentsRefundRepaired += res.modifiedCount;
+            }
+        }
+        console.log(`  ✓ Repaired ${paymentsRefundRepaired} Payment refund totals.`);
+
         console.log("\n=================================================");
         console.log("RECONCILIATION SUMMARY:");
         console.log(`  Users backfilled: ${stats.usersUpdated}`);
-        console.log(`  Payments repaired: ${stats.paymentsRepaired}`);
+        console.log(`  Payments repaired: ${stats.paymentsRepaired + paymentsRefundRepaired}`);
         console.log(`  Orders reconciled: ${stats.ordersReconciled}`);
-        console.log(`  Stock restorations repaired: ${stats.stockRepaired}`);
         console.log(`  Category snapshots backfilled: ${categoriesBackfilled}`);
+        console.log(`  Offers backfilled with productIds: ${offersUpdated}`);
+        console.log(`  Unresolved operations: ${stats.unresolvedOperations}`);
         console.log("ALL DATA AUDITS AND REPAIRS COMPLETED SAFELY.");
         console.log("=================================================");
     } catch (err) {

@@ -220,6 +220,7 @@ const generateInvoicePdf = (order, res) => {
 
     // Summary Section with dynamic height calculation
     let summaryHeight = 65; // base lines + dividers + total
+    if (order.pricing?.taxAmount > 0) summaryHeight += 15;
     if (order.pricing?.discount > 0) summaryHeight += 15;
     if (order.pricing?.cancellationDeduction > 0) summaryHeight += 15;
     if (order.pricing?.returnCredit > 0) summaryHeight += 15;
@@ -247,6 +248,13 @@ const generateInvoicePdf = (order, res) => {
         .fillColor("#555555")
         .text("Original Subtotal:", summaryLabelX, currentY)
         .text(`INR ${originalSubtotal.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
+
+    if (order.pricing?.taxAmount > 0) {
+        currentY += 15;
+        doc
+            .text("Estimated Tax (5%):", summaryLabelX, currentY)
+            .text(`INR ${order.pricing.taxAmount.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
+    }
 
     currentY += 15;
     doc

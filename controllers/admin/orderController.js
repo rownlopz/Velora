@@ -24,12 +24,12 @@ const handleAdminAction = (req, res, result, orderId) => {
     return res.redirect(`/admin/orders/${orderId}?success=${encodeURIComponent(result.message)}`);
 };
 
-/**
- * Lists all orders with descending order by date, filtering, sorting, and pagination
- */
+
+ // Lists all orders with descending order by date, filtering, sorting, and pagination
+
 const loadOrders = async (req, res) => {
     try {
-        const {
+        let {
             search = "",
             status = "all",
             paymentMethod = "all",
@@ -38,13 +38,52 @@ const loadOrders = async (req, res) => {
             page = 1,
         } = req.query;
 
+        // Normalise strings
+        search = typeof search === "string" ? search.trim() : "";
+        status = typeof status === "string" ? status.trim() : "all";
+        paymentMethod = typeof paymentMethod === "string" ? paymentMethod.trim() : "all";
+        paymentStatus = typeof paymentStatus === "string" ? paymentStatus.trim() : "all";
+        sort = typeof sort === "string" ? sort.trim() : "date_desc";
+
+        // Map allowed sorts (accept both date_desc and placedAt_desc, etc.)
+        const sortMap = {
+            date_desc: "date_desc",
+            placedAt_desc: "date_desc",
+            date_asc: "date_asc",
+            placedAt_asc: "date_asc",
+            amount_desc: "amount_desc",
+            totalAmount_desc: "amount_desc",
+            amount_asc: "amount_asc",
+            totalAmount_asc: "amount_asc",
+        };
+        const normalizedSort = sortMap[sort] || "date_desc";
+
+        // Allowed status values
+        const allowedStatuses = [
+            "all", "ALL", "ACTIVE",
+            "PENDING", "PLACED", "PROCESSING", "SHIPPED",
+            "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED",
+            "RETURN_REQUESTED", "RETURN_APPROVED", "RETURN_REJECTED", "RETURNED"
+        ];
+        const normalizedStatus = allowedStatuses.includes(status) ? status : "all";
+
+        // Allowed payment methods
+        const allowedPaymentMethods = ["all", "ALL", "COD", "ONLINE", "WALLET"];
+        const normalizedPaymentMethod = allowedPaymentMethods.includes(paymentMethod) ? paymentMethod : "all";
+
+        // Allowed payment statuses
+        const allowedPaymentStatuses = ["all", "ALL", "PENDING", "COMPLETED", "FAILED", "REFUNDED", "CANCELLED"];
+        const normalizedPaymentStatus = allowedPaymentStatuses.includes(paymentStatus) ? paymentStatus : "all";
+
+        const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+
         const result = await getAdminOrders({
             search,
-            status,
-            paymentMethod,
-            paymentStatus,
-            sort,
-            page: parseInt(page, 10) || 1,
+            status: normalizedStatus,
+            paymentMethod: normalizedPaymentMethod,
+            paymentStatus: normalizedPaymentStatus,
+            sort: normalizedSort,
+            page: parsedPage,
             limit: 10,
         });
 
@@ -53,12 +92,12 @@ const loadOrders = async (req, res) => {
             totalOrders: result.totalOrders || 0,
             totalPages: result.totalPages || 1,
             currentPage: result.currentPage || 1,
-            countsMap: result.countsMap || result.statusCounts || { all: 0, PENDING: 0, SHIPPED: 0, DELIVERED: 0, CANCELLED: 0 },
-            search: result.search || "",
-            status: result.status || "all",
-            paymentMethod: result.paymentMethod || "all",
-            paymentStatus: result.paymentStatus || "all",
-            sort: result.sort || "date_desc",
+            countsMap: result.countsMap || result.statusCounts || { all: 0, ALL: 0, PENDING: 0, SHIPPED: 0, DELIVERED: 0, CANCELLED: 0 },
+            search,
+            status: normalizedStatus,
+            paymentMethod: normalizedPaymentMethod,
+            paymentStatus: normalizedPaymentStatus,
+            sort: normalizedSort,
             validStatuses: VALID_ORDER_STATUSES,
         });
     } catch (error) {

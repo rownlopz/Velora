@@ -116,6 +116,9 @@ const getCartDetails = async (userId, customCouponCode = null) => {
         couponDiscount: pricing.couponDiscount,
         appliedCoupon: pricing.appliedCoupon,
         couponError: pricing.couponError,
+        taxRate: pricing.taxRate || 0.05,
+        taxableAmount: pricing.taxableAmount,
+        taxAmount: pricing.taxAmount,
         shippingFee: pricing.shippingFee,
         shippingThreshold: pricing.shippingThreshold,
         totalAmount: pricing.totalAmount,
@@ -155,7 +158,7 @@ const removeCoupon = async (userId) => {
     };
 };
 
-const addToCart = async (userId, variantId, requestedQuantity = 1) => {
+const addToCart = async (userId, variantId, requestedQuantity = 1, sourceVariantId = null) => {
     const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
 
     const availability = await checkVariantAvailability(variantId);
@@ -188,7 +191,8 @@ const addToCart = async (userId, variantId, requestedQuantity = 1) => {
 
     await cart.save();
 
-    await removeFromWishlist(userId, variantId);
+    const wishlistVariantToRemove = sourceVariantId || variantId;
+    await removeFromWishlist(userId, wishlistVariantToRemove);
 
     return { success: true };
 };
