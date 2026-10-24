@@ -6,9 +6,7 @@ const Transaction = require("../../models/user/transactionModel");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 
-/**
- * Returns Start and End dates aligned with Asia/Kolkata timezone (UTC+5:30)
- */
+
 const getDateRange = (rangeType = "daily", customStart = null, customEnd = null) => {
     const now = new Date();
     // Offset for IST (+5:30)
@@ -70,15 +68,6 @@ const formatIstDate = (date) => {
 };
 
 /**
- * Authoritatively determines purchase and duplicate collection amounts for an order.
- * Follows strict financial reporting requirements:
- * 1. Derives collections from verified gateway captures, confirmed ledger debits, or delivered cash.
- * 2. Never derives historical collections from currentPayable or assumes original order total was collected.
- * 3. Counts each payment/debit exactly once.
- * 4. Preserves collections for partially or fully refunded purchases, regardless of current paymentStatus.
- * 5. Separates purchase collections from duplicate/extra payments.
- * 6. Reports limitations for historical orders with insufficient payment evidence without inventing numbers.
- *
  * @param {Object} order - Order document (lean)
  * @param {Array} paymentDocs - Array of Payment documents for this order
  * @param {Array} walletDebits - Array of Transaction debit documents for this order
@@ -94,9 +83,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
     let paymentEvidenceNote = "";
 
     if (method === "COD") {
-        // COD collects cash strictly on delivery.
-        // Cancellations occur prior to delivery/collection, so no cash was ever collected for cancelled items.
-        // For completed delivery, only non-cancelled items (delivered or returned) were paid for.
+        
         const isDeliveredOrCompleted =
             order.paymentStatus === "COMPLETED" || order.orderStatus === "DELIVERED";
 
@@ -310,11 +297,6 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
     };
 };
 
-/**
- * Fetches sales report metrics and order breakdown within date boundaries.
- * Accurately derives collections from authoritative capture and debit records,
- * preserving collection history across partial and full refunds.
- */
 const getSalesReportData = async (options = {}) => {
     const { rangeType = "daily", startDate: customStart, endDate: customEnd, page = 1, limit = 15 } = options;
     const { startDate, endDate } = getDateRange(rangeType, customStart, customEnd);
@@ -652,9 +634,7 @@ const generateSalesExcel = async (reportData) => {
     return workbook;
 };
 
-/**
- * Generates a clean PDF document for the sales report with deduction breakdown.
- */
+
 const generateSalesPdf = async (reportData) => {
     return new Promise((resolve, reject) => {
         try {
@@ -740,10 +720,7 @@ const generateSalesPdf = async (reportData) => {
     });
 };
 
-/**
- * Fetches dashboard analytics: monthly or yearly revenue, order volume, and top 10 products, categories, brands.
- * Filters out unpaid orders and deducts cancellations/returns.
- */
+
 const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) => {
     const now = new Date();
     const qualifyingSalesMatch = {

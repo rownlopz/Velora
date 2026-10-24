@@ -15,7 +15,7 @@
 
         <h1 class="text-3xl font-medium">Shopping Bag</h1>
         <% const totalUnits = items.reduce((sum, it) => sum + (it.quantity || 1), 0); %>
-        <p id="cartItemCountText" class="text-gray-400 text-sm mt-1"><span id="cartUnitsCount"><%= totalUnits %></span> unit<%= totalUnits === 1 ? '' : 's' %> (<%= items.length %> item<%= items.length === 1 ? '' : 's' %>) in your bag</p>
+        <p id="cartItemCountText" class="text-gray-400 text-sm mt-1"><span id="cartUnitsCount"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> in your bag</p>
 
         <% if (typeof notice !== 'undefined' && notice) { %>
             <div class="mt-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm"><%= notice %></div>

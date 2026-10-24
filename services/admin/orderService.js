@@ -97,10 +97,7 @@ const getAdminOrders = async (options = {}) => {
         ];
     }
 
-    // Status counts:
-    // Intended count behavior: status counts reflect breakdown under the active search,
-    // paymentMethod, and paymentStatus filters, regardless of which orderStatus filter is active.
-    const countBaseFilter = { ...filter };
+
     delete countBaseFilter.orderStatus;
 
     const countsPipeline = [
@@ -167,9 +164,6 @@ const getAdminOrders = async (options = {}) => {
     };
 };
 
-/**
- * Fetch a single order's complete details for Admin
- */
 const getAdminOrderDetails = async (orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -192,15 +186,6 @@ const getAdminOrderDetails = async (orderId) => {
     };
 };
 
-/**
- * Update order status across eligible items with forward-only delivery progression
- * Enforces:
- * - Refunds paid orders to wallet on cancellation (Finding 2)
- * - Block unpaid online fulfillment (Finding 25)
- * - Accurate cancellation deduction using allocated purchase amount (Finding 4)
- * - Current payable 0 when all items cancelled (Finding 5)
- * - Non-destructive status sync (Findings 6, 8, 10)
- */
 const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", adminNote = "" } = {}) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -308,8 +293,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         latestOrder.pricing.returnCredit = totalReturnCredit;
 
         const isAllCancelled = remainingActive.length === 0 && latestOrder.items.every((i) => i.status === "CANCELLED");
-
-        // Finding 5: Fully cancelled orders have currentPayable = 0
         const currentPayable = isAllCancelled
             ? 0
             : Math.max(
@@ -320,7 +303,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
               );
         latestOrder.pricing.currentPayable = currentPayable;
 
-        // Cancellation refunds paid ONLINE/WALLET orders to customer's wallet
         let totalRefundCredited = 0;
         let hadRefundFailure = false;
         if (isPaidOrder && (latestOrder.paymentStatus === "COMPLETED" || latestOrder.paymentStatus === "REFUNDED")) {
@@ -467,8 +449,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
             hadRefundFailure,
         };
     } else {
-        // Forward progression delivery workflow: PROCESSING, SHIPPED, OUT_FOR_DELIVERY, DELIVERED
-        // Finding 10: Atomic item transitions to avoid clobbering concurrent updates
         let modifiedAny = false;
 
         for (const item of order.items) {
@@ -541,15 +521,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
     }
 };
 
-/**
- * Update individual order item status with forward-only validation and parent sync
- * Fixes:
- * - currentPayable undefined reference (Finding 1)
- * - Admin cancellation wallet refund (Finding 2)
- * - Use allocated purchase amount instead of lineTotal (Finding 4)
- * - Bound elemMatch item ID & status to same element (Finding 9)
- * - Block unpaid online progression (Finding 25)
- */
 const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNote = "" } = {}) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId) || !itemId || !mongoose.Types.ObjectId.isValid(itemId)) {
         return { success: false, message: "Invalid order or item ID." };
@@ -790,8 +761,6 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
             order: finalOrder,
         };
     } else {
-        // Forward progression delivery workflow:
-        // Finding 9: Bind item ID and status to the SAME array element using $elemMatch
         const updatedOrder = await Order.findOneAndUpdate(
             {
                 _id: orderId,
@@ -846,12 +815,6 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
     }
 };
 
-/**
- * Approve a return request for an item (Return Initiated / Accepted)
- * Requires mandatory nonblank customer message.
- * Credits refund to user's wallet if order was paid (ONLINE/WALLET or delivered COD item).
- * Uses atomic conditional update to prevent concurrent approval vs rejection races (Finding 32).
- */
 const approveReturnItem = async (orderId, itemId, adminMessage = "") => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId) || !itemId || !mongoose.Types.ObjectId.isValid(itemId)) {
         return { success: false, message: "Invalid order or item ID." };
@@ -1023,10 +986,6 @@ const approveReturnItem = async (orderId, itemId, adminMessage = "") => {
     };
 };
 
-/**
- * Reject a return request for an item
- * Uses atomic conditional update to prevent conflicting race with approval (Finding 32).
- */
 const rejectReturnItem = async (orderId, itemId, adminMessage = "") => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId) || !itemId || !mongoose.Types.ObjectId.isValid(itemId)) {
         return { success: false, message: "Invalid order or item ID." };
@@ -1082,11 +1041,6 @@ const rejectReturnItem = async (orderId, itemId, adminMessage = "") => {
     };
 };
 
-/**
- * Restock an approved return item back into inventory after receipt confirmation.
- * Never sets isRestocked: true before inventory restoration succeeds (Finding 36).
- * Recalculates credits using discounted purchase amounts (Findings 33 & 34).
- */
 const restockReturnItem = async (orderId, itemId, adminMessage = "") => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId) || !itemId || !mongoose.Types.ObjectId.isValid(itemId)) {
         return { success: false, message: "Invalid order or item ID." };
@@ -1195,10 +1149,6 @@ const restockReturnItem = async (orderId, itemId, adminMessage = "") => {
     };
 };
 
-/**
- * Update payment status of an order
- * Protects against fake transitions (Findings 38 & 39).
- */
 const updatePaymentStatus = async (orderId, newPaymentStatus) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -1312,10 +1262,6 @@ const updatePaymentStatus = async (orderId, newPaymentStatus) => {
     }
 };
 
-/**
- * Helper: Determine the verified amount actually collected for an order.
- * Strictly adheres to audit logs, ledger transactions, and payment documents.
- */
 const getVerifiedCollectedAmount = async (order) => {
     const method = (order.paymentMethod || "").toUpperCase();
 
@@ -1419,9 +1365,6 @@ const getVerifiedCollectedAmount = async (order) => {
     return { collectedAmount: 0, isAmbiguous: false, ambiguousReason: "" };
 };
 
-/**
- * Helper: Determine if an item was cancelled before payment was collected.
- */
 const isItemCancelledBeforePayment = (order, item) => {
     if (item.cancelledBeforePayment === true) return true;
     if (order.paymentMethod === "COD") {
@@ -1442,14 +1385,6 @@ const isItemCancelledBeforePayment = (order, item) => {
     return false;
 };
 
-/**
- * Helper to classify an order refund transaction into 'PURCHASE', 'DUPLICATE', 'UNRELATED', or 'AMBIGUOUS'
- * Adheres strictly to:
- * - Inspect transaction reasons, reference IDs, and payment IDs.
- * - Do not assume ORDER_REFUND always means a purchase refund; existing duplicate refunds may use that reason.
- * - Exclude referral rewards or unrelated wallet credits.
- * - Report ambiguous records rather than guessing.
- */
 const classifyRefundTransaction = (tx, { primaryPaymentId, duplicatePaymentIds, itemIds }) => {
     const reason = (tx.reason || "").toUpperCase();
     const refId = tx.referenceId || "";
@@ -1502,11 +1437,6 @@ const classifyRefundTransaction = (tx, { primaryPaymentId, duplicatePaymentIds, 
     return { type: "AMBIGUOUS" };
 };
 
-/**
- * Helper to determine if an order is eligible for cancellation refund and verify paid funds.
- * Guarantees that unpaid online cancellations and undelivered COD orders never receive refunds,
- * and confirms wallet purchases using confirmed debit transactions in the ledger.
- */
 const isCancellationRefundEligible = async (order) => {
     if (!order) return false;
     const method = (order.paymentMethod || "COD").toUpperCase();
@@ -1538,12 +1468,6 @@ const isCancellationRefundEligible = async (order) => {
     return false;
 };
 
-/**
- * Shared Accounting Helper:
- * Synchronize order pricing refund totals and payment refund records directly from the durable ledger.
- * Guarantees that purchaseRefundTotal, duplicateRefundTotal, walletRefundIssued, and payment refund amounts
- * are 100% consistent and idempotent across user, admin, and recovery flows.
- */
 const syncOrderRefundAccounting = async (orderIdOrDoc) => {
     const order = typeof orderIdOrDoc === "object" && orderIdOrDoc._id
         ? orderIdOrDoc
@@ -1687,11 +1611,6 @@ const syncOrderRefundAccounting = async (orderIdOrDoc) => {
     return { order, totalPurchaseRefunds, totalDuplicateRefunds, ambiguousErrors };
 };
 
-/**
- * Reconcile and recover order state on standalone MongoDB.
- * Safely resumes interrupted cancellations, returns, refunds, inventory restorations, and clawbacks.
- * Accurately prevents refunding uncollected money, isolates duplicate payment refunds, and preserves idempotency.
- */
 const reconcileOrderState = async (orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID for reconciliation." };
@@ -1711,10 +1630,6 @@ const reconcileOrderState = async (orderId) => {
         unresolvedOps.push(ambiguousReason);
     }
 
-    // Determine primary payment ID:
-    // 1. Explicit order.razorpayPaymentId
-    // 2. Or from completed Payment document
-    // 3. Or from the first successful payment attempt in order.paymentAttempts
     let primaryPaymentId = order.razorpayPaymentId || null;
     if (!primaryPaymentId) {
         const completedPayment = await Payment.findOne({
@@ -1793,8 +1708,6 @@ const reconcileOrderState = async (orderId) => {
         }
     }
 
-    // Step B: Calculate available purchase refund pool
-    // Recorded purchase refunds already issued (excluding duplicate payments)
     const existingRefundTxs = await Transaction.find({
         type: "CREDIT",
         $or: [{ orderId: order._id }, { orderNumber: order.orderNumber }],
@@ -2209,9 +2122,6 @@ const reconcileOrderState = async (orderId) => {
 };
 
 /**
- * Discover and recover pending wallet refunds across orders (or for a specific order).
- * Idempotently retries failed wallet credits using stable operation IDs and durable facts.
- * 
  * @param {string|mongoose.Types.ObjectId|null} targetOrderId - Optional order ID for targeted recovery
  * @returns {Promise<{success: boolean, totalOrdersScanned: number, recoveredOrdersCount: number, unresolvedOrdersCount: number, details: Array}>}
  */

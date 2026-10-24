@@ -86,11 +86,6 @@ const getCheckoutDetails = async (userId) => {
     };
 };
 
-/**
- * Places an order supporting COD, WALLET, and ONLINE (Razorpay) payment methods.
- * Features: idempotency token, authoritative pricing & snapshots, atomic stock deduction,
- * wallet debit, coupon usage recording, and rollback recovery for standalone MongoDB.
- */
 const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToken = "") => {
     const validMethods = ["COD", "ONLINE", "WALLET"];
     const normalizedMethod = (paymentMethod || "COD").trim().toUpperCase();
@@ -538,16 +533,10 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
     }
 };
 
-/**
- * Places a Cash on Delivery order (convenience wrapper around placeOrder)
- */
 const placeCodOrder = async (userId, addressId, checkoutToken = "") => {
     return placeOrder(userId, addressId, "COD", checkoutToken);
 };
 
-/**
- * Verifies Razorpay payment signature and activates order fulfillment
- */
 const verifyRazorpayPayment = async (userId, paymentData) => {
     const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = paymentData || {};
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
@@ -1081,8 +1070,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         return { success: true, message: "Payment already processed.", order: currentOrder };
     }
 
-    // 7. Reconcile items cancelled before capture (Case 2.A)
-    // Only refund if captured amount exceeds the merchandise payable for active items
     const activeItemsPayable = (updatedOrder.items || [])
         .filter((i) => i.status !== "CANCELLED")
         .reduce((sum, i) => sum + (i.finalPayable != null ? i.finalPayable : i.lineTotal), 0) + (updatedOrder.pricing?.shippingFee || 0);
@@ -1150,11 +1137,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
     return { success: true, message: "Payment verified successfully.", order: finalOrder };
 };
 
-/**
- * Inspects all recorded gateway orders for an Order to determine current gateway status.
- * Reusable helper ensuring consistent payment verification and safety decisions across
- * retryOrderPayment, releaseExpiredReservations, and getPaymentStatus.
- */
 const inspectOrderGatewayPaymentState = async (order) => {
     const candidateGatewayOrderIds = [
         order.razorpayOrderId,
@@ -1269,9 +1251,6 @@ const inspectOrderGatewayPaymentState = async (order) => {
     };
 };
 
-/**
- * Retries payment for a pending or failed order without duplicate stock deductions
- */
 const retryOrderPayment = async (userId, orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -1521,10 +1500,6 @@ const retryOrderPayment = async (userId, orderId) => {
     };
 };
 
-/**
- * Authenticated payment status and reconciliation endpoint without webhooks.
- * Checks local status and reconciles with gateway if an attempt is unresolved.
- */
 const getPaymentStatus = async (userId, orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -1599,9 +1574,6 @@ const getPaymentStatus = async (userId, orderId) => {
     };
 };
 
-/**
- * Handles incoming Razorpay webhook events idempotently
- */
 const handleRazorpayWebhook = async (rawBody, signature) => {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!webhookSecret || typeof webhookSecret !== "string" || !webhookSecret.trim()) {
@@ -1876,9 +1848,6 @@ const handleRazorpayWebhook = async (rawBody, signature) => {
     return { success: true };
 };
 
-/**
- * Lists user orders with search, status filtering, and pagination
- */
 const getUserOrders = async (userId, options = {}) => {
     const { search = "", status = "", page = 1, limit = 10 } = options;
     const filter = { userId };
@@ -1927,9 +1896,6 @@ const getUserOrders = async (userId, options = {}) => {
     };
 };
 
-/**
- * Loads order details ensuring strict user ownership
- */
 const getOrderDetails = async (userId, orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -1943,10 +1909,6 @@ const getOrderDetails = async (userId, orderId) => {
     return { success: true, order };
 };
 
-/**
- * Cancels all currently eligible items in an order with atomic stock restoration.
- * Correctly preserves fulfilled/shipped items and original purchase snapshots in mixed orders.
- */
 const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -2174,9 +2136,6 @@ const cancelEntireOrder = async (userId, orderId, reason = "", actor = "USER") =
     return { success: true, message: partialMsg, order: finalOrder, hadRefundFailure };
 };
 
-/**
- * Cancels an individual item within an order with atomic stock restoration.
- */
 const cancelOrderItem = async (userId, orderId, itemId, reason = "", actor = "USER") => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId) || !itemId || !mongoose.Types.ObjectId.isValid(itemId)) {
         return { success: false, message: "Invalid order or item ID." };

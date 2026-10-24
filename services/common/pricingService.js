@@ -1,9 +1,6 @@
 const Offer = require("../../models/product/offerModel");
 const Coupon = require("../../models/order/couponModel");
 
-/**
- * Standard shipping rule: Free delivery above ₹1,000, else ₹100 flat fee.
- */
 const SHIPPING_THRESHOLD = 1000;
 const SHIPPING_FLAT_FEE = 100;
 
@@ -12,11 +9,6 @@ const calculateShippingFee = (subtotal) => {
     return subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT_FEE;
 };
 
-/**
- * Finds the best active offer for a product and its category.
- * Rule: Apply the eligible product or category offer that produces the greatest real savings for the variant.
- * Respects maxDiscount caps when comparing actual savings (Findings 47 & 48).
- */
 const getBestActiveOffer = async (productId, categoryId, now = new Date(), regularPrice = null) => {
     if (!productId) return null;
 
@@ -66,12 +58,6 @@ const getBestActiveOffer = async (productId, categoryId, now = new Date(), regul
     return bestOffer;
 };
 
-/**
- * Calculates effective unit price for a variant given its product, category, and active offers.
- * Respects existing salePrice without double-discounting.
- * Uses exact paise precision for percentage calculations (Finding 49).
- * If variant salePrice is lower than the offer price, salePrice wins and appliedOffer is null (Finding 50).
- */
 const calculateItemPrice = (variant, product, offer = null) => {
     const regularPrice = Number(variant?.regularPrice) || 0;
     const baseSalePrice = variant?.salePrice != null && Number.isFinite(Number(variant.salePrice))
@@ -108,8 +94,6 @@ const calculateItemPrice = (variant, product, offer = null) => {
     const priceAfterOffer = Math.max(0, Math.round((regularPrice - offerDiscount) * 100) / 100);
     let effectiveUnitPrice = priceAfterOffer;
 
-    // Finding 50: If baseSalePrice is strictly lower than priceAfterOffer, variant salePrice was the winner,
-    // so the offer was NOT applied.
     if (baseSalePrice != null && baseSalePrice < effectiveUnitPrice) {
         effectiveUnitPrice = baseSalePrice;
         appliedOffer = null;
@@ -128,10 +112,7 @@ const calculateItemPrice = (variant, product, offer = null) => {
     };
 };
 
-/**
- * Reusable helper for listing, detail, and wishlist to compute authoritative price
- * using the exact same offer and sale price rules (Findings 51 & 52).
- */
+
 const getAuthoritativeItemPrice = async (variant, product, now = new Date()) => {
     if (!variant) return { displayPrice: 0, regularPrice: 0, effectiveUnitPrice: 0, appliedOffer: null };
     const regPrice = Number(variant.regularPrice) || 0;
@@ -152,10 +133,6 @@ const getAuthoritativeItemPrice = async (variant, product, now = new Date()) => 
 
 const TAX_RATE = 0.05; // 5% fixed tax rate
 
-/**
- * Helper to determine if a cart item is eligible for financial calculations.
- * Checks item.isAvailable, productUnlisted, and variant stock/active status.
- */
 const isItemAvailable = (item) => {
     if (!item) return false;
     if (item.isAvailable === false) return false;
@@ -167,15 +144,7 @@ const isItemAvailable = (item) => {
     return true;
 };
 
-/**
- * Allocates coupon discount and fixed 5% tax deterministically across line items in integer paise.
- * Ensures:
- * 1. sum(allocatedCouponDiscounts) === totalCouponDiscount exactly
- * 2. sum(allocatedTaxes) === totalTaxAmount exactly
- * 3. item.finalPayable === itemTaxable + itemAllocatedTax
- * 4. sum(item.finalPayable) + shippingFee === totalAmount exactly
- * 5. Unavailable items receive zero allocations and zero finalPayable.
- */
+
 const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) => {
     if (!items || items.length === 0) return items || [];
 
@@ -279,10 +248,7 @@ const allocateCouponDiscount = (items, totalCouponDiscount) => {
     return allocateCouponAndTax(items, totalCouponDiscount, 0);
 };
 
-/**
- * Authoritative Central Pricing Calculator for Cart, Checkout, and Order Creation.
- * Accepts cart items, evaluates active offers and optional coupon, and calculates exact paise totals.
- */
+
 const calculateCartPricing = async (cartItems, couponCode = "", userId = null) => {
     const now = new Date();
     const pricedItems = [];
