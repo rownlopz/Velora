@@ -132,10 +132,10 @@
     });
 
     function updateSelectedVariant() {
-        _selectedVariant = _variants.find(v => 
-            v.size === _selectedSize && 
-            (v.color || '').toLowerCase() === (_selectedColor || '').toLowerCase()
-        ) || null;
+        const sizeMatches = (v) => !_selectedSize || !v.size || v.size === _selectedSize;
+        const colorMatches = (v) => !_selectedColor || !v.color || (v.color || '').toLowerCase() === (_selectedColor || '').toLowerCase();
+        
+        _selectedVariant = _variants.find(v => sizeMatches(v) && colorMatches(v)) || null;
 
         if (_selectedVariant) {
             const displayPrice = _selectedVariant.displayPrice != null 
@@ -172,6 +172,7 @@
             stockStatusEl.textContent = 'Please choose size & color';
             stockStatusEl.className = 'text-xs text-gray-500';
             confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Select Available Option';
         }
     }
 
@@ -195,6 +196,19 @@
             }`;
             btn.onclick = () => {
                 _selectedSize = size;
+                const matchForSize = _variants.find(v => 
+                    v.size === _selectedSize && 
+                    (!_selectedColor || (v.color || '').toLowerCase() === (_selectedColor || '').toLowerCase())
+                );
+                if (!matchForSize || matchForSize.stock <= 0) {
+                    const inStockForSize = _variants.find(v => v.size === _selectedSize && v.stock > 0);
+                    if (inStockForSize) {
+                        _selectedColor = inStockForSize.color || '';
+                    } else if (!matchForSize) {
+                        const anyForSize = _variants.find(v => v.size === _selectedSize);
+                        if (anyForSize) _selectedColor = anyForSize.color || '';
+                    }
+                }
                 renderOptions();
                 updateSelectedVariant();
             };
@@ -204,7 +218,10 @@
         // Colors
         colorOptionsEl.innerHTML = '';
         uniqueColors.forEach(color => {
-            const matchForSize = _variants.find(v => v.size === _selectedSize && (v.color || '').toLowerCase() === color.toLowerCase());
+            const matchForSize = _variants.find(v => 
+                (!_selectedSize || v.size === _selectedSize) && 
+                (v.color || '').toLowerCase() === color.toLowerCase()
+            );
             const hasStock = matchForSize && matchForSize.stock > 0;
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -218,6 +235,24 @@
             }`;
             btn.onclick = () => {
                 _selectedColor = color;
+                const matchForColor = _variants.find(v => 
+                    (!color || (v.color || '').toLowerCase() === color.toLowerCase()) && 
+                    (!_selectedSize || v.size === _selectedSize)
+                );
+                if (!matchForColor || matchForColor.stock <= 0) {
+                    const inStockForColor = _variants.find(v => 
+                        (!color || (v.color || '').toLowerCase() === color.toLowerCase()) && 
+                        v.stock > 0
+                    );
+                    if (inStockForColor) {
+                        _selectedSize = inStockForColor.size || '';
+                    } else if (!matchForColor) {
+                        const anyForColor = _variants.find(v => 
+                            (!color || (v.color || '').toLowerCase() === color.toLowerCase())
+                        );
+                        if (anyForColor) _selectedSize = anyForColor.size || '';
+                    }
+                }
                 renderOptions();
                 updateSelectedVariant();
             };
@@ -339,17 +374,20 @@
             brandEl.textContent = _product.brand || '';
             imgEl.src = _product.thumbnail || (_variants[0] && _variants[0].images && _variants[0].images[0]) || '';
 
-            // Pre-select variant if provided or choose first available with stock
+            // Pre-select variant: prefer requested variant if it has stock, otherwise pick first available in-stock variant
             let initial = null;
             if (preselectedVariantId) {
-                initial = _variants.find(v => v._id.toString() === preselectedVariantId.toString());
+                const requested = _variants.find(v => v._id.toString() === preselectedVariantId.toString());
+                if (requested && requested.stock > 0) {
+                    initial = requested;
+                }
             }
             if (!initial) {
-                initial = _variants.find(v => v.stock > 0) || _variants[0];
+                initial = _variants.find(v => v.stock > 0) || (_variants.find(v => v._id.toString() === preselectedVariantId?.toString())) || _variants[0];
             }
 
-            _selectedSize = initial ? initial.size : (_variants[0] ? _variants[0].size : null);
-            _selectedColor = initial ? initial.color : (_variants[0] ? _variants[0].color : null);
+            _selectedSize = initial ? (initial.size || null) : (_variants[0] ? (_variants[0].size || null) : null);
+            _selectedColor = initial ? (initial.color || null) : (_variants[0] ? (_variants[0].color || null) : null);
 
             renderOptions();
             updateSelectedVariant();

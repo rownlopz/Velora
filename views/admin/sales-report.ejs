@@ -79,38 +79,208 @@
                 </div>
 
                 <!-- Summary KPI Cards -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200">
-                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Total Orders</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-2"><%= summary.totalOrdersCount.toLocaleString('en-IN') %></p>
-                        <p class="text-xs text-gray-500 mt-1"><%= summary.totalUnitsSold.toLocaleString('en-IN') %> net units sold</p>
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Orders Placed</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2"><%= (summary.ordersPlaced || summary.totalOrdersCount || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1"><%= (summary.totalUnitsSold || 0).toLocaleString('en-IN') %> net units active/sold</p>
                     </div>
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200">
-                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Gross Order Amount</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-2">&#8377;<%= summary.totalGrossAmount.toLocaleString('en-IN') %></p>
-                        <p class="text-xs text-gray-500 mt-1">Pre-discount catalog total</p>
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Gross Merchandise Value</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2">&#8377;<%= (summary.merchandiseSales || summary.totalGrossAmount || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Pre-discount catalog amount</p>
                     </div>
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200">
-                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Discounts Deducted</p>
-                        <p class="text-2xl font-bold text-amber-600 mt-2">&#8377;<%= (summary.totalOfferDiscount + summary.totalCouponDiscount).toLocaleString('en-IN') %></p>
-                        <p class="text-xs text-gray-500 mt-1">Offers: &#8377;<%= summary.totalOfferDiscount.toLocaleString('en-IN') %> &bull; Coupons: &#8377;<%= summary.totalCouponDiscount.toLocaleString('en-IN') %></p>
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Promotional Offer Savings</p>
+                        <p class="text-2xl font-bold text-amber-600 mt-2">-&#8377;<%= (summary.offerDiscounts || summary.totalOfferDiscount || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Product & category promotions</p>
                     </div>
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200">
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Coupon Discounts</p>
+                        <p class="text-2xl font-bold text-amber-600 mt-2">-&#8377;<%= (summary.couponDiscounts || summary.totalCouponDiscount || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Promo checkout vouchers</p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Taxes & Shipping</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2">+&#8377;<%= ((summary.tax || 0) + (summary.shipping || 0)).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Tax: &#8377;<%= (summary.tax || 0).toLocaleString('en-IN') %> &bull; Ship: &#8377;<%= (summary.shipping || 0).toLocaleString('en-IN') %></p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Payments Collected</p>
+                        <p class="text-2xl font-bold text-blue-600 mt-2">&#8377;<%= (summary.collectedPayments || summary.totalCollectedRevenue || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Gateway, wallet debits & COD</p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Purchase Refunds</p>
+                        <p class="text-2xl font-bold text-rose-600 mt-2">-&#8377;<%= (summary.purchaseRefunds || summary.totalPurchaseRefunds || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Cancellations & approved returns</p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                         <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Net Sales Recognized</p>
-                        <p class="text-2xl font-bold text-emerald-600 mt-2">&#8377;<%= summary.netSalesRecognized.toLocaleString('en-IN') %></p>
-                        <p class="text-xs text-gray-500 mt-1">After returns (&#8377;<%= summary.totalRefundsOrCancellations.toLocaleString('en-IN') %>)</p>
+                        <p class="text-2xl font-bold text-emerald-600 mt-2">&#8377;<%= (summary.netSalesRecognized || 0).toLocaleString('en-IN') %></p>
+                        <p class="text-xs text-gray-500 mt-1">Audited net recognized revenue</p>
                     </div>
 
                 </div>
 
+                <!-- Complete Financial Breakdown & Reconciliation Panel -->
+                <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-8">
+                    <div class="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-base">Complete Financial Reconciliation & Breakdown</h3>
+                            <p class="text-xs text-gray-400 mt-0.5">Audited breakdown of catalogue pricing, promotional deductions, taxes, authoritative collections, and net recognized revenue.</p>
+                        </div>
+                        <span class="text-xs px-3 py-1 bg-gray-100 rounded-full font-medium text-gray-600 self-start sm:self-auto">Order Placement Cohort</span>
+                    </div>
+
+                    <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                        <!-- Column 1: Order Invoicing & Revenue Formation -->
+                        <div class="bg-gray-50/70 p-5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center gap-2 mb-4">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                    <h4 class="text-xs font-bold uppercase tracking-wider text-gray-700">1. Revenue Formation (Gross to Net)</h4>
+                                </div>
+
+                                <div class="space-y-2.5 text-xs">
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Merchandise Value (Catalogue)</span>
+                                        <span class="font-semibold text-gray-900">&#8377;<%= (summary.merchandiseSales || summary.totalGrossAmount || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-amber-700">
+                                        <span>Less: Promotional Offer Savings</span>
+                                        <span class="font-semibold">-&#8377;<%= (summary.offerDiscounts || summary.totalOfferDiscount || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-amber-700">
+                                        <span>Less: Coupon Discounts</span>
+                                        <span class="font-semibold">-&#8377;<%= (summary.couponDiscounts || summary.totalCouponDiscount || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Plus: Shipping Charges Collected</span>
+                                        <span class="font-semibold text-gray-900">+&#8377;<%= (summary.shipping || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Plus: Estimated GST / Tax (5%)</span>
+                                        <span class="font-semibold text-gray-900">+&#8377;<%= (summary.tax || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="border-t border-gray-200 pt-2 flex justify-between font-semibold text-gray-800">
+                                        <span>Gross Invoiced Amount</span>
+                                        <span>&#8377;<%= ((summary.merchandiseSales || summary.totalGrossAmount || 0) - (summary.offerDiscounts || 0) - (summary.couponDiscounts || 0) + (summary.shipping || 0) + (summary.tax || 0)).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-rose-600">
+                                        <span>Less: Returns & Cancellations</span>
+                                        <span class="font-semibold">-&#8377;<%= (summary.cancellationsAndReturns || summary.totalRefundsOrCancellations || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-gray-200 mt-4 pt-3 flex justify-between items-center">
+                                <span class="text-xs font-bold text-gray-900 uppercase tracking-wider">Net Sales Recognized</span>
+                                <span class="text-base font-bold text-emerald-600">&#8377;<%= (summary.netSalesRecognized || 0).toLocaleString('en-IN') %></span>
+                            </div>
+                        </div>
+
+                        <!-- Column 2: Cash Flow & Authoritative Collections -->
+                        <div class="bg-gray-50/70 p-5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center gap-2 mb-4">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                                    <h4 class="text-xs font-bold uppercase tracking-wider text-gray-700">2. Authoritative Collections & Cash</h4>
+                                </div>
+
+                                <div class="space-y-2.5 text-xs">
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Verified Payments Collected</span>
+                                        <span class="font-semibold text-blue-700">&#8377;<%= (summary.collectedPayments || summary.totalCollectedRevenue || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-rose-600">
+                                        <span>Less: Purchase Refunds Issued</span>
+                                        <span class="font-semibold">-&#8377;<%= (summary.purchaseRefunds || summary.totalPurchaseRefunds || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="border-t border-gray-200 pt-2 flex justify-between font-semibold text-gray-900">
+                                        <span>Net Purchase Receipts</span>
+                                        <span class="text-blue-900 font-bold">&#8377;<%= (summary.netPurchaseReceipts != null ? summary.netPurchaseReceipts : ((summary.collectedPayments || 0) - (summary.purchaseRefunds || 0))).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-gray-500 pt-1">
+                                        <span>Duplicate Multi-Captures Refunded</span>
+                                        <span class="font-medium text-gray-700">&#8377;<%= (summary.duplicateRefunds || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-amber-700 pt-1">
+                                        <span>Pending Cash-on-Delivery (COD)</span>
+                                        <span class="font-medium">&#8377;<%= (summary.pendingCod || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="text-[11px] text-gray-400 italic pt-2">
+                                        COD revenue recognized upon delivery; pending cash represents in-transit shipments.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-gray-200 mt-4 pt-3 flex justify-between items-center">
+                                <span class="text-xs font-bold text-gray-900 uppercase tracking-wider">Gross Cash Inflows</span>
+                                <span class="text-base font-bold text-gray-900">&#8377;<%= (summary.grossCashCollections || (summary.collectedPayments || 0) + (summary.duplicateCollections || 0)).toLocaleString('en-IN') %></span>
+                            </div>
+                        </div>
+
+                        <!-- Column 3: Audit & Integrity Verification -->
+                        <div class="bg-gray-50/70 p-5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center gap-2 mb-4">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                                    <h4 class="text-xs font-bold uppercase tracking-wider text-gray-700">3. Audit & Cohort Summary</h4>
+                                </div>
+
+                                <div class="space-y-2.5 text-xs">
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Reporting Cohort Basis</span>
+                                        <span class="font-semibold text-gray-900">Order Placement</span>
+                                    </div>
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Total Orders in Period</span>
+                                        <span class="font-semibold text-gray-900"><%= (summary.ordersPlaced || summary.totalOrdersCount || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Active Net Units Sold</span>
+                                        <span class="font-semibold text-gray-900"><%= (summary.totalUnitsSold || 0).toLocaleString('en-IN') %></span>
+                                    </div>
+                                    <div class="flex justify-between text-gray-600">
+                                        <span>Payment Evidence Integrity</span>
+                                        <% if ((summary.ordersWithInsufficientEvidenceCount || 0) === 0) { %>
+                                            <span class="font-semibold text-emerald-600">100% Audited</span>
+                                        <% } else { %>
+                                            <span class="font-semibold text-amber-600"><%= summary.ordersWithInsufficientEvidenceCount %> flagged</span>
+                                        <% } %>
+                                    </div>
+                                    <div class="p-3 bg-white rounded-lg border border-gray-200 text-[11px] text-gray-500 leading-relaxed mt-2">
+                                        Figures reflect lifetime verified gateway captures, confirmed wallet ledger debits, delivered cash receipts, and actual processed refunds for orders placed within the selected period.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-gray-200 mt-4 pt-3 flex justify-between items-center text-xs text-gray-500">
+                                <span>Period: <%= startDate %> to <%= endDate %></span>
+                                <span class="font-semibold text-gray-700">IST (+5:30)</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
                 <!-- Orders Table -->
-                <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                     <div class="p-6 border-b border-gray-100 flex justify-between items-center">
-                        <h3 class="font-bold text-gray-900 text-base">Orders Included in Report</h3>
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-base">Orders Included in Report</h3>
+                            <p class="text-xs text-gray-400 mt-0.5">Individual transaction audit showing item merchandise value, discounts, taxes, and collected amounts.</p>
+                        </div>
                         <span class="text-xs text-gray-500">Showing page <%= currentPage %> of <%= totalPages %></span>
                     </div>
 
@@ -124,14 +294,16 @@
                                     <th class="px-6 py-4 font-medium">Payment</th>
                                     <th class="px-6 py-4 font-medium">Status</th>
                                     <th class="px-6 py-4 font-medium text-right">Gross</th>
-                                    <th class="px-6 py-4 font-medium text-right">Coupon</th>
+                                    <th class="px-6 py-4 font-medium text-right">Discounts</th>
+                                    <th class="px-6 py-4 font-medium text-right">Collected</th>
+                                    <th class="px-6 py-4 font-medium text-right">Refunded</th>
                                     <th class="px-6 py-4 font-medium text-right">Net Payable</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <% if (!orders || orders.length === 0) { %>
                                     <tr>
-                                        <td colspan="8" class="px-6 py-12 text-center text-gray-400 text-sm">
+                                        <td colspan="10" class="px-6 py-12 text-center text-gray-400 text-sm">
                                             No orders placed within this date range.
                                         </td>
                                     </tr>
@@ -143,26 +315,54 @@
                                                     <%= ord.orderNumber %>
                                                 </a>
                                             </td>
-                                            <td class="px-6 py-4 text-gray-600">
+                                            <td class="px-6 py-4 text-gray-600 whitespace-nowrap">
                                                 <%= new Date(ord.placedAt).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }) %>
                                             </td>
                                             <td class="px-6 py-4">
                                                 <p class="font-medium text-gray-900"><%= ord.customerName %></p>
                                                 <p class="text-xs text-gray-400"><%= ord.customerEmail %></p>
                                             </td>
-                                            <td class="px-6 py-4">
-                                                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                                                    <%= ord.paymentMethod %>
-                                                </span>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                                                        <%= ord.paymentMethod %>
+                                                    </span>
+                                                    <% if (ord.paymentStatus === 'COMPLETED') { %>
+                                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Payment Completed"></span>
+                                                    <% } else if (ord.paymentStatus === 'REFUNDED' || ord.paymentStatus === 'PARTIALLY_REFUNDED') { %>
+                                                        <span class="w-1.5 h-1.5 rounded-full bg-purple-500" title="Payment Refunded"></span>
+                                                    <% } else { %>
+                                                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500" title="<%= ord.paymentStatus %>"></span>
+                                                    <% } %>
+                                                </div>
                                             </td>
-                                            <td class="px-6 py-4">
+                                            <td class="px-6 py-4 whitespace-nowrap">
                                                 <span class="text-xs font-semibold px-2 py-0.5 rounded <%= ord.orderStatus === 'DELIVERED' ? 'bg-emerald-100 text-emerald-800' : (ord.orderStatus === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800') %>">
                                                     <%= ord.orderStatus.replace(/_/g, " ") %>
                                                 </span>
                                             </td>
-                                            <td class="px-6 py-4 text-right text-gray-700">&#8377;<%= ord.grossAmount.toLocaleString('en-IN') %></td>
-                                            <td class="px-6 py-4 text-right text-amber-600">-&#8377;<%= ord.couponDiscount.toLocaleString('en-IN') %></td>
-                                            <td class="px-6 py-4 text-right font-bold text-gray-900">&#8377;<%= ord.netPayable.toLocaleString('en-IN') %></td>
+                                            <td class="px-6 py-4 text-right text-gray-700">&#8377;<%= (ord.grossAmount || 0).toLocaleString('en-IN') %></td>
+                                            <td class="px-6 py-4 text-right text-amber-600 whitespace-nowrap">
+                                                <% const totDisc = (ord.offerDiscount || 0) + (ord.couponDiscount || 0); %>
+                                                <% if (totDisc > 0) { %>
+                                                    -&#8377;<%= totDisc.toLocaleString('en-IN') %>
+                                                    <span class="block text-[10px] text-gray-400">
+                                                        <% if (ord.offerDiscount > 0) { %>Off: &#8377;<%= ord.offerDiscount %><% } %>
+                                                        <% if (ord.couponDiscount > 0) { %> Coup: &#8377;<%= ord.couponDiscount %><% } %>
+                                                    </span>
+                                                <% } else { %>
+                                                    <span class="text-gray-400">&#8377;0</span>
+                                                <% } %>
+                                            </td>
+                                            <td class="px-6 py-4 text-right font-medium text-blue-700">&#8377;<%= (ord.purchaseCollected || 0).toLocaleString('en-IN') %></td>
+                                            <td class="px-6 py-4 text-right text-rose-600">
+                                                <% if ((ord.purchaseRefund || 0) > 0) { %>
+                                                    -&#8377;<%= ord.purchaseRefund.toLocaleString('en-IN') %>
+                                                <% } else { %>
+                                                    <span class="text-gray-400">&#8377;0</span>
+                                                <% } %>
+                                            </td>
+                                            <td class="px-6 py-4 text-right font-bold text-gray-900">&#8377;<%= (ord.netPayable || 0).toLocaleString('en-IN') %></td>
                                         </tr>
                                     <% }) %>
                                 <% } %>

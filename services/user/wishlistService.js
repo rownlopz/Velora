@@ -88,13 +88,20 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8 } = {}) => {
                 category.isActive
             );
             
-            const isListed = !!(
-                variant && variant.isActive &&
-                product && !product.isDeleted && product.status === "ACTIVE" &&
+            const isProductListed = Boolean(
+                product && 
+                !product.isDeleted && 
+                product.status === "ACTIVE" &&
                 isCategoryActive
             );
+            
+            const variantCount = product ? await Variant.countDocuments({ productId: product._id, isActive: true }) : 0;
+            const inStockVariantCount = product ? await Variant.countDocuments({ productId: product._id, isActive: true, stock: { $gt: 0 } }) : 0;
+            const hasInStockVariants = inStockVariantCount > 0;
+
+            const isListed = !!(variant && variant.isActive && isProductListed);
             const isInStock = !!(variant && variant.stock > 0);
-            const isAvailable = isListed;
+            const isAvailable = isProductListed && (isListed || hasInStockVariants);
 
             let currentPrice = null;
             if (variant) {
@@ -102,14 +109,14 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8 } = {}) => {
                 currentPrice = authoritative.effectiveUnitPrice;
             }
 
-            const variantCount = product ? await Variant.countDocuments({ productId: product._id, isActive: true }) : 0;
-
             return {
                 variantId: item.variantId,
                 addedAt: item.addedAt,
                 product,
                 variant,
                 variantCount,
+                inStockVariantCount,
+                hasInStockVariants,
                 isListed,
                 isInStock,
                 isAvailable,

@@ -306,6 +306,99 @@
         </div>
     </div>
 
+    <!-- Edit Coupon Modal -->
+    <div id="editCouponModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
+                <h3 class="text-lg font-bold text-gray-900">Edit Coupon</h3>
+                <button type="button" id="closeEditCouponModalXBtn" onclick="closeEditCouponModal()" class="text-gray-400 hover:text-black text-xl font-bold leading-none cursor-pointer">&times;</button>
+            </div>
+
+            <!-- Modal Inline Error Alert -->
+            <div id="editModalAlert" class="hidden p-3.5 rounded-xl text-xs font-medium mb-4 transition"></div>
+
+            <form id="editCouponForm" class="space-y-4">
+                <input type="hidden" id="editCouponId" name="couponId">
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Coupon Code *</label>
+                    <input type="text" id="editModalCode" name="code" required placeholder="e.g. FESTIVE20"
+                        class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none uppercase font-mono tracking-wider">
+                    <p class="text-[11px] text-gray-400 mt-1">3–20 letters, numbers, hyphens, or underscores.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Description (Optional)</label>
+                    <input type="text" id="editModalDescription" name="description" placeholder="e.g. 20% off on festive orders above ₹1,000"
+                        class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Discount Type *</label>
+                        <select id="editModalDiscountType" name="discountType" class="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm bg-white outline-none">
+                            <option value="PERCENTAGE">Percentage (%)</option>
+                            <option value="FLAT">Flat Amount (₹)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label id="editDiscountValueLabel" class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Discount Value *</label>
+                        <input type="number" id="editModalDiscountValue" name="discountValue" required min="1" step="any" placeholder="e.g. 20"
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Min Spend (₹)</label>
+                        <input type="number" id="editModalMinPurchase" name="minPurchase" min="0" value="0" step="any" placeholder="e.g. 1000"
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+
+                    <div id="editMaxCapContainer">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Max Cap (₹, Optional)</label>
+                        <input type="number" id="editModalMaxDiscount" name="maxDiscount" min="1" step="any" placeholder="e.g. 500"
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Global Limit (Optional)</label>
+                        <input type="number" id="editModalUsageLimit" name="usageLimit" min="1" step="1" placeholder="e.g. 100 (Blank = ∞)"
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Per User Limit *</label>
+                        <input type="number" id="editModalPerUserLimit" name="perUserLimit" min="1" step="1" value="1" required
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Start Date *</label>
+                        <input type="date" id="editModalStartDate" name="startDate" required
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">End Date *</label>
+                        <input type="date" id="editModalEndDate" name="endDate" required
+                            class="w-full h-11 px-4 border border-gray-300 rounded-lg text-sm focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                    <button type="button" id="cancelEditCouponModalBtn" onclick="closeEditCouponModal()" class="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition cursor-pointer">Cancel</button>
+                    <button type="submit" id="updateCouponBtn" class="px-5 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition cursor-pointer">Update Coupon</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openCouponModal() {
             clearModalAlert();
@@ -330,6 +423,177 @@
                 modal.classList.remove("flex");
             }
         }
+
+        // Edit Coupon Modal logic
+        function openEditCouponModal(data) {
+            clearEditModalAlert();
+            const modal = document.getElementById("editCouponModal");
+            if (!modal) return;
+
+            document.getElementById("editCouponId").value = data.id || "";
+            document.getElementById("editModalCode").value = data.code || "";
+            document.getElementById("editModalDescription").value = data.description || "";
+            document.getElementById("editModalDiscountType").value = data.discountType || "PERCENTAGE";
+            document.getElementById("editModalDiscountValue").value = data.discountValue != null ? data.discountValue : "";
+            document.getElementById("editModalMinPurchase").value = data.minPurchase != null ? data.minPurchase : "0";
+            document.getElementById("editModalMaxDiscount").value = data.maxDiscount != null ? data.maxDiscount : "";
+            document.getElementById("editModalUsageLimit").value = data.usageLimit != null ? data.usageLimit : "";
+            document.getElementById("editModalPerUserLimit").value = data.perUserLimit != null ? data.perUserLimit : "1";
+            document.getElementById("editModalStartDate").value = data.startDate || "";
+            document.getElementById("editModalEndDate").value = data.endDate || "";
+
+            updateEditDiscountTypeUI();
+
+            modal.classList.remove("hidden");
+            modal.classList.add("flex");
+            document.getElementById("editModalCode")?.focus();
+        }
+
+        function closeEditCouponModal() {
+            clearEditModalAlert();
+            const modal = document.getElementById("editCouponModal");
+            if (modal) {
+                modal.classList.add("hidden");
+                modal.classList.remove("flex");
+            }
+        }
+
+        const editDiscountTypeSelect = document.getElementById("editModalDiscountType");
+        const editMaxCapInput = document.getElementById("editModalMaxDiscount");
+        const editMaxCapContainer = document.getElementById("editMaxCapContainer");
+        const editDiscountValueLabel = document.getElementById("editDiscountValueLabel");
+        const editDiscountValueInput = document.getElementById("editModalDiscountValue");
+
+        function updateEditDiscountTypeUI() {
+            if (!editDiscountTypeSelect) return;
+            const isPercentage = editDiscountTypeSelect.value === "PERCENTAGE";
+            if (isPercentage) {
+                editMaxCapInput.disabled = false;
+                editMaxCapContainer.classList.remove("opacity-40");
+                editDiscountValueLabel.textContent = "Discount Value (%) *";
+                editDiscountValueInput.setAttribute("max", "100");
+                editDiscountValueInput.placeholder = "e.g. 20 (Max 100)";
+            } else {
+                editMaxCapInput.value = "";
+                editMaxCapInput.disabled = true;
+                editMaxCapContainer.classList.add("opacity-40");
+                editDiscountValueLabel.textContent = "Discount Value (₹) *";
+                editDiscountValueInput.removeAttribute("max");
+                editDiscountValueInput.placeholder = "e.g. 150";
+            }
+        }
+        editDiscountTypeSelect?.addEventListener("change", updateEditDiscountTypeUI);
+
+        const editModalAlert = document.getElementById("editModalAlert");
+        const editForm = document.getElementById("editCouponForm");
+        const updateCouponBtn = document.getElementById("updateCouponBtn");
+
+        function showEditModalError(msg) {
+            if (!editModalAlert) return;
+            editModalAlert.textContent = msg;
+            editModalAlert.className = "p-3.5 rounded-xl text-xs font-medium mb-4 bg-rose-50 border border-rose-200 text-rose-800 block";
+        }
+        function clearEditModalAlert() {
+            if (!editModalAlert) return;
+            editModalAlert.textContent = "";
+            editModalAlert.className = "hidden";
+        }
+
+        document.querySelectorAll(".edit-coupon-btn").forEach((btn) => {
+            btn.addEventListener("click", function () {
+                const data = {
+                    id: this.dataset.couponId,
+                    code: this.dataset.code,
+                    description: this.dataset.description,
+                    discountType: this.dataset.discountType,
+                    discountValue: this.dataset.discountValue,
+                    minPurchase: this.dataset.minPurchase,
+                    maxDiscount: this.dataset.maxDiscount,
+                    usageLimit: this.dataset.usageLimit,
+                    perUserLimit: this.dataset.perUserLimit,
+                    startDate: this.dataset.startDate,
+                    endDate: this.dataset.endDate,
+                };
+                openEditCouponModal(data);
+            });
+        });
+
+        editForm?.addEventListener("submit", async function (e) {
+            e.preventDefault();
+            clearEditModalAlert();
+
+            const couponId = document.getElementById("editCouponId").value;
+            const code = document.getElementById("editModalCode").value.trim().toUpperCase();
+            const description = document.getElementById("editModalDescription").value.trim();
+            const discountType = editDiscountTypeSelect.value;
+            const discountValueRaw = document.getElementById("editModalDiscountValue").value.trim();
+            const discountValue = parseFloat(discountValueRaw);
+            const minPurchase = document.getElementById("editModalMinPurchase").value.trim();
+            const maxDiscount = document.getElementById("editModalMaxDiscount").value.trim();
+            const usageLimit = document.getElementById("editModalUsageLimit").value.trim();
+            const perUserLimit = document.getElementById("editModalPerUserLimit").value.trim();
+            const startDate = document.getElementById("editModalStartDate").value;
+            const endDate = document.getElementById("editModalEndDate").value;
+
+            if (!couponId) return showEditModalError("Coupon ID is missing.");
+            if (!code) return showEditModalError("Coupon code is required.");
+            if (!/^[A-Z0-9_-]{3,20}$/.test(code)) {
+                return showEditModalError("Coupon code must be 3-20 characters long and contain only uppercase letters, numbers, hyphens, and underscores.");
+            }
+            if (!discountValueRaw || isNaN(discountValue) || discountValue <= 0) {
+                return showEditModalError("Discount value must be a positive number.");
+            }
+            if (discountType === "PERCENTAGE" && discountValue > 100) {
+                return showEditModalError("Percentage discount cannot exceed 100%.");
+            }
+            if (!startDate || !endDate) {
+                return showEditModalError("Both start and end dates are required.");
+            }
+            if (new Date(startDate) > new Date(endDate)) {
+                return showEditModalError("Start date cannot be after end date.");
+            }
+
+            updateCouponBtn.disabled = true;
+            updateCouponBtn.textContent = "Updating...";
+
+            try {
+                const res = await fetch(`/admin/coupons/${couponId}/edit`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    body: JSON.stringify({
+                        code,
+                        description,
+                        discountType,
+                        discountValue,
+                        minPurchase: minPurchase !== "" ? parseFloat(minPurchase) : 0,
+                        maxDiscount: (discountType === "PERCENTAGE" && maxDiscount !== "") ? parseFloat(maxDiscount) : null,
+                        usageLimit: usageLimit !== "" ? parseInt(usageLimit, 10) : null,
+                        perUserLimit: perUserLimit !== "" ? parseInt(perUserLimit, 10) : 1,
+                        startDate,
+                        endDate,
+                    }),
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    closeEditCouponModal();
+                    window.location.href = "/admin/coupons?success=" + encodeURIComponent(data.message || "Coupon updated successfully.");
+                } else {
+                    showEditModalError(data.message || "Failed to update coupon.");
+                    updateCouponBtn.disabled = false;
+                    updateCouponBtn.textContent = "Update Coupon";
+                }
+            } catch (err) {
+                console.error("Update coupon error:", err);
+                showEditModalError("Network error. Please try again.");
+                updateCouponBtn.disabled = false;
+                updateCouponBtn.textContent = "Update Coupon";
+            }
+        });
 
         window.addEventListener("DOMContentLoaded", function () {
             if (window.location.search.includes("create=1") || window.location.hash === "#create") {

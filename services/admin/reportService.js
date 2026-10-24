@@ -754,52 +754,218 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
         ],
     };
 
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(now.getTime() + IST_OFFSET);
+
     let timeMatch = {};
-    let groupId = {};
+    let timeline = [];
 
     const yearNum = targetYear ? parseInt(targetYear, 10) : null;
+
     if (yearNum && Number.isInteger(yearNum) && yearNum >= 2000 && yearNum <= 2100) {
         // Specific target year in Asia/Kolkata (+05:30)
         const startOfYear = new Date(`${yearNum}-01-01T00:00:00+05:30`);
         const endOfYear = new Date(`${yearNum}-12-31T23:59:59.999+05:30`);
         timeMatch = { placedAt: { $gte: startOfYear, $lte: endOfYear } };
-        groupId = {
-            year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
-            month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
-        };
+
+        for (let m = 1; m <= 12; m++) {
+            timeline.push({
+                _id: { year: yearNum, month: m },
+                year: yearNum,
+                month: m,
+                label: `${months[m - 1]} ${yearNum}`,
+                totalRevenue: 0,
+                orderCount: 0,
+            });
+        }
+
+        const stats = await Order.aggregate([
+            { $match: { ...timeMatch, ...qualifyingSalesMatch } },
+            {
+                $group: {
+                    _id: {
+                        year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                        month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                    },
+                    totalRevenue: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } },
+                    orderCount: { $sum: 1 },
+                },
+            },
+        ]);
+
+        for (const s of stats) {
+            const slot = timeline.find((t) => t.month === s._id.month);
+            if (slot) {
+                slot.totalRevenue = s.totalRevenue;
+                slot.orderCount = s.orderCount;
+            }
+        }
+    } else if (filterType === "daily") {
+        // Daily: trailing 30 days
+        for (let i = 29; i >= 0; i--) {
+            const d = new Date(nowIST.getTime() - i * 24 * 60 * 60 * 1000);
+            const y = d.getUTCFullYear();
+            const m = d.getUTCMonth() + 1;
+            const day = d.getUTCDate();
+            timeline.push({
+                _id: { year: y, month: m, day },
+                year: y,
+                month: m,
+                day,
+                label: `${day} ${months[m - 1]}`,
+                totalRevenue: 0,
+                orderCount: 0,
+            });
+        }
+
+        const startDaily = new Date(nowIST.getTime() - 29 * 24 * 60 * 60 * 1000);
+        startDaily.setUTCHours(0, 0, 0, 0);
+        const startDailyUTC = new Date(startDaily.getTime() - IST_OFFSET);
+        timeMatch = { placedAt: { $gte: startDailyUTC } };
+
+        const stats = await Order.aggregate([
+            { $match: { ...timeMatch, ...qualifyingSalesMatch } },
+            {
+                $group: {
+                    _id: {
+                        year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                        month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                        day: { $dayOfMonth: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                    },
+                    totalRevenue: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } },
+                    orderCount: { $sum: 1 },
+                },
+            },
+        ]);
+
+        for (const s of stats) {
+            const slot = timeline.find(
+                (t) => t.year === s._id.year && t.month === s._id.month && t.day === s._id.day
+            );
+            if (slot) {
+                slot.totalRevenue = s.totalRevenue;
+                slot.orderCount = s.orderCount;
+            }
+        }
+    } else if (filterType === "weekly") {
+        // Weekly: trailing 12 weeks
+        for (let i = 11; i >= 0; i--) {
+            const end = new Date(nowIST.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+            const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+            const startUTC = new Date(start.getTime() - IST_OFFSET);
+            const endUTC = new Date(end.getTime() - IST_OFFSET);
+            timeline.push({
+                weekIndex: 11 - i,
+                startUTC,
+                endUTC,
+                label: `${start.getUTCDate()} ${months[start.getUTCMonth()]} - ${end.getUTCDate()} ${months[end.getUTCMonth()]}`,
+                totalRevenue: 0,
+                orderCount: 0,
+            });
+        }
+
+        const startWeeklyUTC = timeline[0].startUTC;
+        timeMatch = { placedAt: { $gte: startWeeklyUTC } };
+
+        const qualifyingOrders = await Order.find({
+            ...timeMatch,
+            ...qualifyingSalesMatch,
+        }).lean();
+
+        for (const ord of qualifyingOrders) {
+            const placed = new Date(ord.placedAt);
+            const rev =
+                ord.pricing?.currentPayable != null
+                    ? ord.pricing.currentPayable
+                    : ord.pricing?.totalAmount || 0;
+            for (const slot of timeline) {
+                if (placed >= slot.startUTC && placed <= slot.endUTC) {
+                    slot.totalRevenue += rev;
+                    slot.orderCount += 1;
+                    break;
+                }
+            }
+        }
     } else if (filterType === "yearly") {
-        const fiveYearsAgo = new Date();
-        fiveYearsAgo.setFullYear(now.getFullYear() - 5);
-        timeMatch = { placedAt: { $gte: fiveYearsAgo } };
-        groupId = { year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } } };
+        // Yearly: trailing 5 years
+        const currentYear = nowIST.getUTCFullYear();
+        for (let i = 4; i >= 0; i--) {
+            const y = currentYear - i;
+            timeline.push({
+                _id: { year: y },
+                year: y,
+                label: String(y),
+                totalRevenue: 0,
+                orderCount: 0,
+            });
+        }
+
+        const startFiveYears = new Date(Date.UTC(currentYear - 4, 0, 1) - IST_OFFSET);
+        timeMatch = { placedAt: { $gte: startFiveYears } };
+
+        const stats = await Order.aggregate([
+            { $match: { ...timeMatch, ...qualifyingSalesMatch } },
+            {
+                $group: {
+                    _id: { year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } } },
+                    totalRevenue: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } },
+                    orderCount: { $sum: 1 },
+                },
+            },
+        ]);
+
+        for (const s of stats) {
+            const slot = timeline.find((t) => t.year === s._id.year);
+            if (slot) {
+                slot.totalRevenue = s.totalRevenue;
+                slot.orderCount = s.orderCount;
+            }
+        }
     } else {
-        // Monthly
-        const oneYearAgo = new Date();
-        oneYearAgo.setFullYear(now.getFullYear() - 1);
-        timeMatch = { placedAt: { $gte: oneYearAgo } };
-        groupId = {
-            year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
-            month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
-        };
+        // Monthly: trailing 12 months (default)
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(nowIST.getUTCFullYear(), nowIST.getUTCMonth() - i, 1);
+            const y = d.getFullYear();
+            const m = d.getMonth() + 1;
+            timeline.push({
+                _id: { year: y, month: m },
+                year: y,
+                month: m,
+                label: `${months[m - 1]} ${y}`,
+                totalRevenue: 0,
+                orderCount: 0,
+            });
+        }
+
+        const oneYearAgo = new Date(nowIST.getUTCFullYear(), nowIST.getUTCMonth() - 11, 1);
+        const startMonthlyUTC = new Date(oneYearAgo.getTime() - IST_OFFSET);
+        timeMatch = { placedAt: { $gte: startMonthlyUTC } };
+
+        const stats = await Order.aggregate([
+            { $match: { ...timeMatch, ...qualifyingSalesMatch } },
+            {
+                $group: {
+                    _id: {
+                        year: { $year: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                        month: { $month: { date: "$placedAt", timezone: "Asia/Kolkata" } },
+                    },
+                    totalRevenue: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } },
+                    orderCount: { $sum: 1 },
+                },
+            },
+        ]);
+
+        for (const s of stats) {
+            const slot = timeline.find((t) => t.year === s._id.year && t.month === s._id.month);
+            if (slot) {
+                slot.totalRevenue = s.totalRevenue;
+                slot.orderCount = s.orderCount;
+            }
+        }
     }
 
-    // Revenue aggregation using currentPayable (deducts cancellations/returns)
-    const monthlyStats = await Order.aggregate([
-        {
-            $match: {
-                ...timeMatch,
-                ...qualifyingSalesMatch,
-            },
-        },
-        {
-            $group: {
-                _id: groupId,
-                totalRevenue: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } },
-                orderCount: { $sum: 1 },
-            },
-        },
-        { $sort: { "_id.year": 1, ...("_id.month" ? { "_id.month": 1 } : {}) } },
-    ]);
+    const monthlyStats = timeline;
 
     // Top 10 Best Selling Products (by quantity sold in qualifying sales within selected period)
     const topProducts = await Order.aggregate([

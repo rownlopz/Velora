@@ -50,7 +50,7 @@
                                 </div>
                             <% } else if (item.variant && item.variant.stock === 0) { %>
                                 <div class="absolute top-2 left-2">
-                                    <span class="bg-black text-white text-[10px] px-2 py-1 uppercase tracking-widest">Out of Stock</span>
+                                    <span class="bg-black text-white text-[10px] px-2 py-1 uppercase tracking-widest"><%= (typeof item.hasInStockVariants !== 'undefined' && item.hasInStockVariants) ? 'Option Out of Stock' : 'Out of Stock' %></span>
                                 </div>
                             <% } %>
                         </a>
@@ -81,8 +81,18 @@
                                         class="move-to-cart-btn w-full h-10 bg-black text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-gray-900 transition"
                                         data-variant-id="<%= item.variantId %>"
                                         data-product-slug="<%= item.product ? item.product.slug : '' %>"
-                                        data-variant-count="<%= typeof item.variantCount !== 'undefined' ? item.variantCount : 1 %>">
+                                        data-variant-count="<%= typeof item.variantCount !== 'undefined' ? item.variantCount : 1 %>"
+                                        data-in-stock="true">
                                         Move to Cart
+                                    </button>
+                                <% } else if (item.isAvailable && item.hasInStockVariants) { %>
+                                    <button type="button"
+                                        class="move-to-cart-btn w-full h-10 bg-black text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-gray-900 transition flex items-center justify-center gap-1.5"
+                                        data-variant-id="<%= item.variantId %>"
+                                        data-product-slug="<%= item.product ? item.product.slug : '' %>"
+                                        data-variant-count="<%= typeof item.variantCount !== 'undefined' ? item.variantCount : 1 %>"
+                                        data-in-stock="false">
+                                        <span>Select Variant</span>
                                     </button>
                                 <% } else { %>
                                     <span class="block w-full h-10 leading-10 text-center bg-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-widest rounded-lg cursor-not-allowed">
@@ -210,8 +220,9 @@
         const variantId = btn.dataset.variantId;
         const slug = btn.dataset.productSlug;
         const variantCount = parseInt(btn.dataset.variantCount, 10) || 1;
+        const isInStock = btn.dataset.inStock === 'true';
 
-        if (variantCount > 1 && slug && typeof window.openVariantSelectionModal === 'function') {
+        if ((variantCount > 1 || !isInStock) && slug && typeof window.openVariantSelectionModal === 'function') {
             window.openVariantSelectionModal({
                 slug,
                 sourceVariantId: variantId,

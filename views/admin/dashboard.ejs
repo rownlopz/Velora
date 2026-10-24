@@ -27,28 +27,51 @@
                     </div>
 
                     <div class="flex items-center gap-3">
-                        <div class="flex items-center bg-white border border-gray-200 rounded-lg p-1">
+                        <div class="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+                            <a href="/admin/dashboard?filterType=daily" class="px-3 py-1.5 text-xs font-semibold rounded-md transition <%= typeof filterType !== 'undefined' && filterType === 'daily' ? 'bg-black text-white' : 'text-gray-600 hover:text-black' %>">Daily</a>
+                            <a href="/admin/dashboard?filterType=weekly" class="px-3 py-1.5 text-xs font-semibold rounded-md transition <%= typeof filterType !== 'undefined' && filterType === 'weekly' ? 'bg-black text-white' : 'text-gray-600 hover:text-black' %>">Weekly</a>
                             <a href="/admin/dashboard?filterType=monthly" class="px-3 py-1.5 text-xs font-semibold rounded-md transition <%= typeof filterType === 'undefined' || filterType === 'monthly' ? 'bg-black text-white' : 'text-gray-600 hover:text-black' %>">Monthly</a>
                             <a href="/admin/dashboard?filterType=yearly" class="px-3 py-1.5 text-xs font-semibold rounded-md transition <%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'bg-black text-white' : 'text-gray-600 hover:text-black' %>">Yearly</a>
                         </div>
-                        <a href="/admin/sales-report" class="h-10 px-4 inline-flex items-center gap-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
+                        <a href="/admin/sales-report" class="h-10 px-4 inline-flex items-center gap-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-gray-800 transition shadow-sm">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
                             View Sales Report
                         </a>
                     </div>
                 </div>
 
+                <%
+                    let periodLabel = 'Monthly';
+                    let periodDesc = 'past 12 months';
+                    let badgeText = 'Trailing 12M';
+                    if (typeof filterType !== 'undefined') {
+                        if (filterType === 'daily') {
+                            periodLabel = 'Daily';
+                            periodDesc = 'past 30 days';
+                            badgeText = 'Last 30 Days';
+                        } else if (filterType === 'weekly') {
+                            periodLabel = 'Weekly';
+                            periodDesc = 'past 12 weeks';
+                            badgeText = 'Last 12 Weeks';
+                        } else if (filterType === 'yearly') {
+                            periodLabel = 'Yearly';
+                            periodDesc = 'trailing 5 years';
+                            badgeText = 'Trailing 5Y';
+                        }
+                    }
+                %>
+
                 <!-- Charts Section -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
 
                     <!-- Revenue Trend Chart -->
-                    <div class="bg-white p-6 rounded-2xl border border-gray-200">
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                         <div class="flex justify-between items-center mb-6">
                             <div>
-                                <h3 class="font-semibold text-gray-900 text-base"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Monthly' %> Revenue Trend</h3>
-                                <p class="text-xs text-gray-400 mt-0.5">Recognized revenue over <%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'trailing 5 years' : 'past 12 months' %></p>
+                                <h3 class="font-semibold text-gray-900 text-base"><%= periodLabel %> Revenue Trend</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">Recognized revenue over <%= periodDesc %></p>
                             </div>
-                            <span class="text-xs px-2.5 py-1 bg-gray-100 rounded-md font-medium text-gray-600"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Trailing 12M' %></span>
+                            <span class="text-xs px-2.5 py-1 bg-gray-100 rounded-md font-medium text-gray-600"><%= badgeText %></span>
                         </div>
                         <div class="h-64">
                             <canvas id="revenueChart"></canvas>
@@ -56,13 +79,13 @@
                     </div>
 
                     <!-- Order Volume Chart -->
-                    <div class="bg-white p-6 rounded-2xl border border-gray-200">
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                         <div class="flex justify-between items-center mb-6">
                             <div>
-                                <h3 class="font-semibold text-gray-900 text-base"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Monthly' %> Order Volume</h3>
-                                <p class="text-xs text-gray-400 mt-0.5">Total successful orders placed</p>
+                                <h3 class="font-semibold text-gray-900 text-base"><%= periodLabel %> Order Volume</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">Successful orders placed over <%= periodDesc %></p>
                             </div>
-                            <span class="text-xs px-2.5 py-1 bg-gray-100 rounded-md font-medium text-gray-600"><%= typeof filterType !== 'undefined' && filterType === 'yearly' ? 'Yearly' : 'Trailing 12M' %></span>
+                            <span class="text-xs px-2.5 py-1 bg-gray-100 rounded-md font-medium text-gray-600"><%= badgeText %></span>
                         </div>
                         <div class="h-64">
                             <canvas id="ordersChart"></canvas>
@@ -208,67 +231,160 @@
 
     <!-- Chart.js Initialization -->
     <script>
-        const monthlyData = <%- JSON.stringify(monthlyStats || []).replace(/</g, '\\u003c') %>;
+        const chartData = <%- JSON.stringify(monthlyStats || []).replace(/</g, '\\u003c') %>;
 
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const labels = monthlyData.map(d => d._id && d._id.month ? `${months[d._id.month - 1]} ${d._id.year}` : `${d._id.year}`);
-        const revenueValues = monthlyData.map(d => d.totalRevenue);
-        const orderValues = monthlyData.map(d => d.orderCount);
+        const labels = chartData.map(d => {
+            if (d.label) return d.label;
+            if (d._id && d._id.month && d._id.year) return `${months[d._id.month - 1]} ${d._id.year}`;
+            if (d._id && d._id.year) return String(d._id.year);
+            return "N/A";
+        });
+        const revenueValues = chartData.map(d => Number(d.totalRevenue) || 0);
+        const orderValues = chartData.map(d => Number(d.orderCount) || 0);
 
-        // Revenue Chart
-        new Chart(document.getElementById('revenueChart'), {
-            type: 'line',
-            data: {
-                labels: labels.length ? labels : ["No Data"],
-                datasets: [{
-                    label: 'Revenue (₹)',
-                    data: revenueValues.length ? revenueValues : [0],
-                    borderColor: '#000000',
-                    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) { return '₹' + value.toLocaleString('en-IN'); }
+        // Revenue Line Chart
+        const revCanvas = document.getElementById('revenueChart');
+        if (revCanvas) {
+            const ctx = revCanvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+            gradient.addColorStop(0, 'rgba(17, 24, 39, 0.16)');
+            gradient.addColorStop(1, 'rgba(17, 24, 39, 0.00)');
+
+            new Chart(revCanvas, {
+                type: 'line',
+                data: {
+                    labels: labels.length ? labels : ["No Data"],
+                    datasets: [{
+                        label: 'Revenue',
+                        data: revenueValues.length ? revenueValues : [0],
+                        borderColor: '#111827',
+                        backgroundColor: gradient,
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: chartData.length > 20 ? 2 : 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#FFFFFF',
+                        pointBorderColor: '#111827',
+                        pointBorderWidth: 2,
+                    }]
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111827',
+                            titleColor: '#F9FAFB',
+                            bodyColor: '#F9FAFB',
+                            padding: 10,
+                            cornerRadius: 8,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return ' Revenue: ₹' + Number(context.parsed.y).toLocaleString('en-IN');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#6B7280',
+                                font: { size: 11 },
+                                maxRotation: 45,
+                                minRotation: 0,
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#F3F4F6' },
+                            ticks: {
+                                color: '#6B7280',
+                                font: { size: 11 },
+                                callback: function(value) {
+                                    if (value >= 100000) return '₹' + (value / 100000).toFixed(1) + 'L';
+                                    if (value >= 1000) return '₹' + (value / 1000).toFixed(0) + 'k';
+                                    return '₹' + value.toLocaleString('en-IN');
+                                }
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
-        // Orders Chart
-        new Chart(document.getElementById('ordersChart'), {
-            type: 'bar',
-            data: {
-                labels: labels.length ? labels : ["No Data"],
-                datasets: [{
-                    label: 'Orders',
-                    data: orderValues.length ? orderValues : [0],
-                    backgroundColor: '#1F2937',
-                    borderRadius: 6,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { precision: 0 }
+        // Orders Bar Chart
+        const ordCanvas = document.getElementById('ordersChart');
+        if (ordCanvas) {
+            new Chart(ordCanvas, {
+                type: 'bar',
+                data: {
+                    labels: labels.length ? labels : ["No Data"],
+                    datasets: [{
+                        label: 'Orders',
+                        data: orderValues.length ? orderValues : [0],
+                        backgroundColor: '#1F2937',
+                        hoverBackgroundColor: '#111827',
+                        borderRadius: 6,
+                        maxBarThickness: chartData.length > 20 ? 16 : 32,
+                    }]
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111827',
+                            titleColor: '#F9FAFB',
+                            bodyColor: '#F9FAFB',
+                            padding: 10,
+                            cornerRadius: 8,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return ' Orders: ' + context.parsed.y + ' placed';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#6B7280',
+                                font: { size: 11 },
+                                maxRotation: 45,
+                                minRotation: 0,
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#F3F4F6' },
+                            ticks: {
+                                precision: 0,
+                                color: '#6B7280',
+                                font: { size: 11 },
+                            }
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     </script>
 </body>
 </html>
