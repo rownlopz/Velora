@@ -1,4 +1,6 @@
 const reportService = require("../../services/admin/reportService");
+const { getSalesReportData } = require("../../services/admin/reportService");
+
 
 const loadDashboard = async (req, res) => {
     try {
@@ -15,6 +17,8 @@ const loadDashboard = async (req, res) => {
             topProducts: analytics.topProducts,
             topCategories: analytics.topCategories,
             topBrands: analytics.topBrands,
+            totalSales: getSalesReportData.totalGrossAmount,
+            
         });
     } catch (error) {
         console.error("Load Dashboard Error:", error);
@@ -32,6 +36,7 @@ const loadSalesReport = async (req, res) => {
             endDate,
             page,
             limit: 15,
+         
         });
 
         res.render("admin/sales-report", {
@@ -44,6 +49,7 @@ const loadSalesReport = async (req, res) => {
             orders: reportData.orders,
             currentPage: reportData.currentPage,
             totalPages: reportData.totalPages,
+            
         });
     } catch (error) {
         console.error("Load Sales Report Error:", error);
