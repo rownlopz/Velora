@@ -74,7 +74,10 @@ const formatIstDate = (date) => {
  * @param {Array} walletCredits - Array of Transaction credit documents for this order
  */
 const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], walletCredits = []) => {
-    const method = (order.paymentMethod || "").toUpperCase();
+    let method = (order.paymentMethod || "").toUpperCase();
+    if (!method && paymentDocs.length > 0 && paymentDocs[0].paymentMethod) {
+        method = (paymentDocs[0].paymentMethod || "").toUpperCase();
+    }
     const duplicateRefundTotal = order.pricing?.duplicateRefundTotal || 0;
 
     let purchaseCollected = 0;
@@ -115,7 +118,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
         // Authoritative source: Transaction ledger DEBIT records
         const hasRollback = walletCredits.some(
             (tx) => (tx.reason || "").toUpperCase() === "ORDER_PURCHASE_ROLLBACK"
-        ) || order.orderStatus === "FAILED";
+        ) || order.orderStatus === "FAILED" || order.paymentStatus === "FAILED";
 
         if (hasRollback) {
             return {
@@ -139,7 +142,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
 
         // If no ledger debit found, check for a completed Payment document with amount > 0
         const completedWalletPayment = paymentDocs.find(
-            (p) => p.paymentMethod === "WALLET" && (p.status === "COMPLETED" || p.status === "REFUNDED") && p.amount > 0
+            (p) => (!p.paymentMethod || p.paymentMethod === "WALLET") && (p.status === "COMPLETED" || p.status === "REFUNDED") && p.amount > 0
         );
         if (completedWalletPayment) {
             return {
@@ -172,7 +175,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
 
     if (method === "ONLINE") {
         // 1. Authoritative field: order.pricing.collectedAmount (explicitly verified captured amount)
-        if (order.pricing?.collectedAmount != null && order.pricing.collectedAmount > 0) {
+        if (order.paymentStatus !== "FAILED" && order.paymentStatus !== "PENDING" && order.pricing?.collectedAmount != null && order.pricing.collectedAmount > 0) {
             purchaseCollected = order.pricing.collectedAmount;
             if (duplicateRefundTotal > 0) {
                 duplicateCollected = duplicateRefundTotal;
@@ -225,7 +228,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
         // 3. Authoritative Payment documents
         const completedPayments = paymentDocs.filter(
             (p) =>
-                p.paymentMethod === "ONLINE" &&
+                (!p.paymentMethod || p.paymentMethod === "ONLINE" || p.razorpayPaymentId) &&
                 ["COMPLETED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(p.status) &&
                 p.amount > 0
         );
@@ -255,18 +258,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
             };
         }
 
-        // 4. Fallback check for any payment doc with amount > 0
-        const anyPayment = paymentDocs.find((p) => p.amount > 0);
-        if (anyPayment) {
-            return {
-                purchaseCollected: anyPayment.amount,
-                duplicateCollected: duplicateRefundTotal,
-                hasPaymentEvidence: true,
-                paymentEvidenceNote: "",
-            };
-        }
-
-        // 5. If marked COMPLETED or REFUNDED, or paidAt exists, but no verified records exist:
+        // 4. If marked COMPLETED or REFUNDED, or paidAt exists, but no verified records exist:
         const isPaidClaim =
             order.paymentStatus === "COMPLETED" || order.paymentStatus === "REFUNDED" || Boolean(order.paidAt);
 
@@ -280,7 +272,7 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
             };
         }
 
-        // Unpaid order
+        // Unpaid or unconfirmed order
         return {
             purchaseCollected: 0,
             duplicateCollected: 0,
@@ -299,7 +291,15 @@ const determineOrderCollections = (order, paymentDocs = [], walletDebits = [], w
 
 const getSalesReportData = async (options = {}) => {
     const { rangeType = "daily", startDate: customStart, endDate: customEnd, page = 1, limit = 15 } = options;
-    const { startDate, endDate } = getDateRange(rangeType, customStart, customEnd);
+    let startDate, endDate;
+    if (customStart instanceof Date && customEnd instanceof Date) {
+        startDate = customStart;
+        endDate = customEnd;
+    } else {
+        const range = getDateRange(rangeType, customStart, customEnd);
+        startDate = range.startDate;
+        endDate = range.endDate;
+    }
 
     // Retain all non-failed orders placed within date boundaries (Order Placement Cohort)
     const orderFilter = {
@@ -1151,6 +1151,55 @@ const sanitizeSpreadsheetData = (data) => {
     return data;
 };
 
+/**
+ * Calculates net sales for today and yesterday in Asia/Kolkata up to the current time.
+ * Reuses getSalesReportData to ensure exact accounting for cancellations/returns,
+ * inclusion of genuine paid sales, and exclusion of unpaid/duplicate-payment records.
+ *
+ * @param {Date} [asOf=new Date()] - Reference timestamp (defaults to now)
+ * @returns {Promise<{todaySales: number, yesterdaySales: number, totalSales: number, todayNetSales: number, yesterdayNetSales: number, lastTwoDaysSales: number, todayStart: Date, todayEnd: Date, yesterdayStart: Date, yesterdayEnd: Date}>}
+ */
+const getLastTwoDaysSales = async (asOf = new Date()) => {
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(asOf.getTime() + IST_OFFSET);
+
+    const year = nowIST.getUTCFullYear();
+    const month = nowIST.getUTCMonth();
+    const date = nowIST.getUTCDate();
+
+    // Start of Today in Asia/Kolkata (00:00:00.000 IST)
+    const todayStart = new Date(Date.UTC(year, month, date, 0, 0, 0, 0) - IST_OFFSET);
+    // End of Today: strictly up to the current time
+    const todayEnd = asOf;
+
+    // Start of Yesterday in Asia/Kolkata (00:00:00.000 IST)
+    const yesterdayStart = new Date(Date.UTC(year, month, date - 1, 0, 0, 0, 0) - IST_OFFSET);
+    // End of Yesterday in Asia/Kolkata (23:59:59.999 IST)
+    const yesterdayEnd = new Date(todayStart.getTime() - 1);
+
+    const [todayReport, yesterdayReport] = await Promise.all([
+        getSalesReportData({ startDate: todayStart, endDate: todayEnd, limit: 1 }),
+        getSalesReportData({ startDate: yesterdayStart, endDate: yesterdayEnd, limit: 1 }),
+    ]);
+
+    const todayNetSales = Math.max(0, todayReport?.summary?.netSalesRecognized || 0);
+    const yesterdayNetSales = Math.max(0, yesterdayReport?.summary?.netSalesRecognized || 0);
+    const totalSales = todayNetSales + yesterdayNetSales;
+
+    return {
+        todaySales: todayNetSales,
+        yesterdaySales: yesterdayNetSales,
+        totalSales,
+        todayNetSales,
+        yesterdayNetSales,
+        lastTwoDaysSales: totalSales,
+        todayStart,
+        todayEnd,
+        yesterdayStart,
+        yesterdayEnd,
+    };
+};
+
 module.exports = {
     getDateRange,
     formatIstDate,
@@ -1163,6 +1212,7 @@ module.exports = {
     getTopBestSellers,
     getDashboardAnalytics,
     getSalesReportMetrics,
+    getLastTwoDaysSales,
     sanitizeForSpreadsheet,
     sanitizeSpreadsheetData,
 };

@@ -323,49 +323,105 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         // Finding 2: Admin cancellation refunds paid ONLINE/WALLET orders to customer's wallet
         let totalRefundCredited = 0;
         let hadRefundFailure = false;
-        if (latestOrder.paymentStatus === "COMPLETED") {
+        const isLatestPaidOrder = isPaidOrder || latestOrder.paymentStatus === "COMPLETED" || latestOrder.paymentStatus === "REFUNDED" || Boolean(latestOrder.paidAt);
+        if (isLatestPaidOrder && latestOrder.paymentMethod !== "COD") {
             for (const item of cancelledSuccessfully) {
                 const refundAmount = item.finalPayable != null ? item.finalPayable : item.lineTotal;
                 if (refundAmount > 0) {
-                    const credRes = await walletService.creditWallet({
-                        userId: latestOrder.userId,
-                        amount: refundAmount,
-                        reason: "ORDER_CANCELLATION",
-                        description: `Admin cancellation refund for "${item.productName}" in Order #${latestOrder.orderNumber}`,
-                        orderId: latestOrder._id,
-                        orderNumber: latestOrder.orderNumber,
-                        referenceId: `REFUND_ADM_CAN_${latestOrder._id}_${item._id}`,
+                    const refundRef = `REFUND_CAN_${latestOrder._id}_${item._id}`;
+                    const existingTx = await Transaction.findOne({
+                        referenceId: { $in: [refundRef, `REFUND_ADM_CAN_${latestOrder._id}_${item._id}`] },
                     });
-                    if (credRes && credRes.success) {
-                        if (!credRes.isDuplicate) {
-                            totalRefundCredited += refundAmount;
-                        }
+                    if (existingTx) {
                         await Order.updateOne(
                             { _id: orderId, "items._id": item._id },
-                            { $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundAmount } }
+                            { $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundAmount, "items.$.refundStatus": "COMPLETED" } }
                         ).catch(() => {});
-                    } else {
-                        hadRefundFailure = true;
+                        const targetItem = latestOrder.items.id(item._id);
+                        if (targetItem) {
+                            targetItem.refundIssued = true;
+                            targetItem.refundStatus = "COMPLETED";
+                            targetItem.refundAmount = refundAmount;
+                        }
+                    } else if (!item.refundIssued) {
+                        const credRes = await walletService.creditWallet({
+                            userId: latestOrder.userId,
+                            amount: refundAmount,
+                            reason: "ORDER_CANCELLATION",
+                            description: `Admin cancellation refund for "${item.productName}" in Order #${latestOrder.orderNumber}`,
+                            orderId: latestOrder._id,
+                            orderNumber: latestOrder.orderNumber,
+                            referenceId: refundRef,
+                        }).catch((err) => ({ success: false, message: err?.message || "Wallet credit failed" }));
+                        if (credRes && credRes.success) {
+                            if (!credRes.isDuplicate) {
+                                totalRefundCredited += refundAmount;
+                            }
+                            await Order.updateOne(
+                                { _id: orderId, "items._id": item._id },
+                                { $set: { "items.$.refundIssued": true, "items.$.refundAmount": refundAmount, "items.$.refundStatus": "COMPLETED" } }
+                            ).catch(() => {});
+                            const targetItem = latestOrder.items.id(item._id);
+                            if (targetItem) {
+                                targetItem.refundIssued = true;
+                                targetItem.refundStatus = "COMPLETED";
+                                targetItem.refundAmount = refundAmount;
+                            }
+                        } else {
+                            hadRefundFailure = true;
+                            await Order.updateOne(
+                                { _id: orderId, "items._id": item._id },
+                                { $set: { "items.$.refundIssued": false, "items.$.refundAmount": refundAmount, "items.$.refundStatus": "REFUND_PENDING" } }
+                            ).catch(() => {});
+                            const targetItem = latestOrder.items.id(item._id);
+                            if (targetItem) {
+                                targetItem.refundIssued = false;
+                                targetItem.refundStatus = "REFUND_PENDING";
+                                targetItem.refundAmount = refundAmount;
+                            }
+                        }
                     }
                 }
             }
 
             if (isAllCancelled && latestOrder.pricing?.shippingFee > 0) {
-                const shipRes = await walletService.creditWallet({
-                    userId: latestOrder.userId,
-                    amount: latestOrder.pricing.shippingFee,
-                    reason: "ORDER_CANCELLATION",
-                    description: `Admin cancellation refund for shipping fee in Order #${latestOrder.orderNumber}`,
-                    orderId: latestOrder._id,
-                    orderNumber: latestOrder.orderNumber,
-                    referenceId: `REFUND_ADM_CAN_${latestOrder._id}_SHIPPING`,
+                const shipRef = `REFUND_CAN_${latestOrder._id}_SHIPPING`;
+                const existingShipTx = await Transaction.findOne({
+                    referenceId: { $in: [shipRef, `REFUND_ADM_CAN_${latestOrder._id}_SHIPPING`] },
                 });
-                if (shipRes && shipRes.success) {
-                    if (!shipRes.isDuplicate) {
-                        totalRefundCredited += latestOrder.pricing.shippingFee;
-                    }
+                if (existingShipTx) {
+                    latestOrder.pricing.shippingRefundStatus = "COMPLETED";
+                    await Order.updateOne(
+                        { _id: latestOrder._id },
+                        { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                    ).catch(() => {});
                 } else {
-                    hadRefundFailure = true;
+                    const shipRes = await walletService.creditWallet({
+                        userId: latestOrder.userId,
+                        amount: latestOrder.pricing.shippingFee,
+                        reason: "ORDER_CANCELLATION",
+                        description: `Admin cancellation refund for shipping fee in Order #${latestOrder.orderNumber}`,
+                        orderId: latestOrder._id,
+                        orderNumber: latestOrder.orderNumber,
+                        referenceId: shipRef,
+                    }).catch((err) => ({ success: false, message: err?.message || "Wallet credit failed" }));
+                    if (shipRes && shipRes.success) {
+                        if (!shipRes.isDuplicate) {
+                            totalRefundCredited += latestOrder.pricing.shippingFee;
+                        }
+                        latestOrder.pricing.shippingRefundStatus = "COMPLETED";
+                        await Order.updateOne(
+                            { _id: latestOrder._id },
+                            { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                        ).catch(() => {});
+                    } else {
+                        hadRefundFailure = true;
+                        latestOrder.pricing.shippingRefundStatus = "REFUND_PENDING";
+                        await Order.updateOne(
+                            { _id: latestOrder._id },
+                            { $set: { "pricing.shippingRefundStatus": "REFUND_PENDING" } }
+                        ).catch(() => {});
+                    }
                 }
             }
         }
@@ -373,35 +429,36 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         if (totalRefundCredited > 0) {
             latestOrder.pricing.walletRefundIssued =
                 (latestOrder.pricing.walletRefundIssued || 0) + totalRefundCredited;
+            latestOrder.pricing.purchaseRefundTotal =
+                (latestOrder.pricing.purchaseRefundTotal || 0) + totalRefundCredited;
+            latestOrder.pricing.refundAmount =
+                (latestOrder.pricing.refundAmount || 0) + totalRefundCredited;
         }
 
         // Finding 6: Accurately derive overall order status
         latestOrder.orderStatus = calculateOrderStatusFromItems(latestOrder.items);
 
+        const hasPendingItemRefunds = (latestOrder.items || []).some(
+            (i) => i.refundStatus === "REFUND_PENDING" || (["CANCELLED", "RETURN_APPROVED", "RETURNED"].includes(i.status) && !i.refundIssued && (i.finalPayable != null ? i.finalPayable : i.lineTotal) > 0)
+        );
+        const hasPendingShippingRefund = latestOrder.pricing?.shippingRefundStatus === "REFUND_PENDING";
+        const hasAnyPendingRefund = hadRefundFailure || hasPendingItemRefunds || hasPendingShippingRefund;
+
         if (isAllCancelled) {
             latestOrder.cancellationReason = adminNote ? `Admin Cancelled: ${adminNote.trim()}` : "Cancelled by Admin";
             latestOrder.cancelledAt = now;
             latestOrder.cancelledBy = "ADMIN";
-            if (latestOrder.paymentMethod === "COD") {
+            if (latestOrder.paymentMethod === "COD" || !isPaidOrder) {
                 latestOrder.paymentStatus = "CANCELLED";
                 await Payment.updateMany({ orderId: latestOrder._id }, { $set: { status: "CANCELLED" } });
-            } else if (latestOrder.paymentStatus === "COMPLETED") {
+            } else if (!hasAnyPendingRefund && ((latestOrder.pricing?.purchaseRefundTotal || 0) > 0 || totalRefundCredited > 0)) {
                 latestOrder.paymentStatus = "REFUNDED";
-                await Payment.updateMany(
-                    { orderId: latestOrder._id },
-                    { $set: { status: "REFUNDED", refundedAt: now, refundAmount: latestOrder.pricing?.walletRefundIssued || totalRefundCredited } }
-                );
             }
         } else {
             if (latestOrder.paymentMethod === "COD") {
                 await Payment.updateMany(
                     { orderId: latestOrder._id, status: "PENDING" },
                     { $set: { amount: currentPayable } }
-                );
-            } else if (totalRefundCredited > 0) {
-                await Payment.updateMany(
-                    { orderId: latestOrder._id },
-                    { $inc: { refundAmount: totalRefundCredited } }
                 );
             }
         }
@@ -415,7 +472,11 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         }
 
         await latestOrder.save();
-        let message = `Order updated to "${latestOrder.orderStatus.replace(/_/g, " ")}".`;
+        await syncOrderRefundAccounting(orderId);
+        const freshOrder = await Order.findById(orderId);
+        const finalOrderToReturn = freshOrder || latestOrder;
+
+        let message = `Order updated to "${finalOrderToReturn.orderStatus.replace(/_/g, " ")}".`;
         if (totalRefundCredited > 0) {
             message += ` ₹${totalRefundCredited.toFixed(2)} refunded to customer's wallet.`;
         }
@@ -425,7 +486,7 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         return {
             success: true,
             message,
-            order: latestOrder,
+            order: finalOrderToReturn,
             hadRefundFailure,
         };
     } else {
@@ -611,7 +672,9 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
 
         // Finding 2: Admin cancellation refunds paid orders to wallet
         let totalRefundCredited = 0;
-        if (updatedOrder.paymentStatus === "COMPLETED" || updatedOrder.paymentStatus === "REFUNDED") {
+        let hadRefundFailure = false;
+        const isOrderPaid = isPaidOrder || updatedOrder.paymentStatus === "COMPLETED" || updatedOrder.paymentStatus === "REFUNDED" || Boolean(updatedOrder.paidAt);
+        if (isOrderPaid && updatedOrder.paymentMethod !== "COD") {
             const itemRefund = cancelledItem.finalPayable != null ? cancelledItem.finalPayable : cancelledItem.lineTotal;
             const refundRef = `REFUND_CAN_${updatedOrder._id}_${cancelledItem._id}`;
             const existingTx = await Transaction.findOne({
@@ -626,16 +689,36 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
                     orderId: updatedOrder._id,
                     orderNumber: updatedOrder.orderNumber,
                     referenceId: refundRef,
-                });
-                if (credRes.success) {
+                }).catch((err) => ({ success: false, message: err?.message || "Wallet credit failed" }));
+                if (credRes && credRes.success) {
                     if (!credRes.isDuplicate) {
                         totalRefundCredited += itemRefund;
                     }
                     await Order.updateOne(
                         { _id: orderId, "items._id": itemId },
-                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund } }
+                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund, "items.$.refundStatus": "COMPLETED" } }
                     ).catch(() => {});
+                    cancelledItem.refundIssued = true;
+                    cancelledItem.refundStatus = "COMPLETED";
+                    cancelledItem.refundAmount = itemRefund;
+                } else {
+                    hadRefundFailure = true;
+                    await Order.updateOne(
+                        { _id: orderId, "items._id": itemId },
+                        { $set: { "items.$.refundIssued": false, "items.$.refundAmount": itemRefund, "items.$.refundStatus": "REFUND_PENDING" } }
+                    ).catch(() => {});
+                    cancelledItem.refundIssued = false;
+                    cancelledItem.refundStatus = "REFUND_PENDING";
+                    cancelledItem.refundAmount = itemRefund;
                 }
+            } else if (existingTx) {
+                cancelledItem.refundIssued = true;
+                cancelledItem.refundStatus = "COMPLETED";
+                cancelledItem.refundAmount = itemRefund;
+                await Order.updateOne(
+                    { _id: orderId, "items._id": itemId },
+                    { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund, "items.$.refundStatus": "COMPLETED" } }
+                ).catch(() => {});
             }
 
             const isAllNowCancelled = updatedOrder.items.every((i) => i.status === "CANCELLED");
@@ -653,10 +736,26 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
                         orderId: updatedOrder._id,
                         orderNumber: updatedOrder.orderNumber,
                         referenceId: shipRef,
-                    });
-                    if (shipRes.success && !shipRes.isDuplicate) {
-                        totalRefundCredited += updatedOrder.pricing.shippingFee;
+                    }).catch((err) => ({ success: false, message: err?.message || "Wallet credit failed" }));
+                    if (shipRes && shipRes.success) {
+                        if (!shipRes.isDuplicate) {
+                            totalRefundCredited += updatedOrder.pricing.shippingFee;
+                        }
+                        updatedOrder.pricing.shippingRefundStatus = "COMPLETED";
+                        await Order.updateOne(
+                            { _id: updatedOrder._id },
+                            { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                        ).catch(() => {});
+                    } else {
+                        hadRefundFailure = true;
+                        updatedOrder.pricing.shippingRefundStatus = "REFUND_PENDING";
+                        await Order.updateOne(
+                            { _id: updatedOrder._id },
+                            { $set: { "pricing.shippingRefundStatus": "REFUND_PENDING" } }
+                        ).catch(() => {});
                     }
+                } else {
+                    updatedOrder.pricing.shippingRefundStatus = "COMPLETED";
                 }
             }
         }
@@ -687,7 +786,25 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
 
         const newOrderStatus = calculateOrderStatusFromItems(orderForCalc.items);
 
-        const wasPaid = updatedOrder.paymentStatus === "COMPLETED" || totalRefundCredited > 0;
+        const wasPaid = updatedOrder.paymentStatus === "COMPLETED" || updatedOrder.paymentStatus === "REFUNDED" || Boolean(updatedOrder.paidAt) || totalRefundCredited > 0;
+
+        const hasPendingItemRefunds = (orderForCalc.items || []).some(
+            (i) => i.refundStatus === "REFUND_PENDING" || (["CANCELLED", "RETURN_APPROVED", "RETURNED"].includes(i.status) && !i.refundIssued && (i.finalPayable != null ? i.finalPayable : i.lineTotal) > 0)
+        );
+        const hasPendingShippingRefund = orderForCalc.pricing?.shippingRefundStatus === "REFUND_PENDING";
+        const hasAnyPendingRefund = hadRefundFailure || hasPendingItemRefunds || hasPendingShippingRefund;
+
+        let finalPaymentStatus = orderForCalc.paymentStatus;
+        if (isAllCancelled) {
+            if (updatedOrder.paymentMethod === "COD" || !wasPaid) {
+                finalPaymentStatus = "CANCELLED";
+            } else if (!hasAnyPendingRefund && ((orderForCalc.pricing?.purchaseRefundTotal || 0) + totalRefundCredited > 0)) {
+                finalPaymentStatus = "REFUNDED";
+            } else {
+                finalPaymentStatus = orderForCalc.paymentStatus === "PENDING" ? "PENDING" : "COMPLETED";
+            }
+        }
+
         const setFields = {
             orderStatus: newOrderStatus,
             "pricing.cancellationDeduction": totalCancelledDeduction,
@@ -698,9 +815,7 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
                       cancellationReason: cancelledItem.cancellationReason,
                       cancelledAt: now,
                       cancelledBy: "ADMIN",
-                      ...(updatedOrder.paymentMethod === "COD" || !wasPaid
-                          ? { paymentStatus: "CANCELLED" }
-                          : { paymentStatus: "REFUNDED" }),
+                      paymentStatus: finalPaymentStatus,
                   }
                 : {}),
         };
@@ -714,29 +829,23 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
             };
         }
 
-        const cumulativeRefund = (updatedOrder.pricing?.walletRefundIssued || 0) + totalRefundCredited;
         if (isAllCancelled) {
-            if (updatedOrder.paymentMethod === "COD") {
+            if (updatedOrder.paymentMethod === "COD" || finalPaymentStatus === "CANCELLED") {
                 await Payment.updateMany({ orderId }, { $set: { status: "CANCELLED" } });
-            } else if (updatedOrder.paymentStatus === "COMPLETED" || updatedOrder.paymentStatus === "REFUNDED") {
-                await Payment.updateMany(
-                    { orderId },
-                    { $set: { status: "REFUNDED", refundedAt: now, refundAmount: cumulativeRefund } }
-                );
             }
         } else if (updatedOrder.paymentMethod === "COD") {
             await Payment.updateMany({ orderId, status: "PENDING" }, { $set: { amount: currentPayable } });
-        } else if (totalRefundCredited > 0) {
-            await Payment.updateMany({ orderId }, { $inc: { refundAmount: totalRefundCredited } });
         }
 
         await Order.updateOne({ _id: orderId }, updateOps);
+        await syncOrderRefundAccounting(orderId);
         const finalOrder = await Order.findById(orderId);
 
         return {
             success: true,
             message: `Product "${cancelledItem.productName}" cancelled successfully.${totalRefundCredited > 0 ? ` ₹${totalRefundCredited.toFixed(2)} refunded to customer's wallet.` : ""}`,
             order: finalOrder,
+            hadRefundFailure,
         };
     } else {
         // Forward progression delivery workflow:
@@ -1154,7 +1263,12 @@ const updatePaymentStatus = async (orderId, newPaymentStatus) => {
     }
 
     // Cannot mark payment as REFUNDED if never paid
-    if (normalizedStatus === "REFUNDED" && order.paymentStatus !== "COMPLETED" && order.paymentStatus !== "PARTIALLY_REFUNDED") {
+    if (
+        normalizedStatus === "REFUNDED" &&
+        order.paymentStatus !== "COMPLETED" &&
+        order.paymentStatus !== "PARTIALLY_REFUNDED" &&
+        order.paymentStatus !== "REFUNDED"
+    ) {
         return {
             success: false,
             message: "Cannot mark payment as REFUNDED because payment was not previously completed. Unpaid orders should be marked CANCELLED or FAILED.",
@@ -1176,51 +1290,108 @@ const updatePaymentStatus = async (orderId, newPaymentStatus) => {
             order,
         };
     } else if (normalizedStatus === "REFUNDED") {
-        const targetRefundAmt =
-            order.pricing.returnCredit > 0 ? order.pricing.returnCredit : order.pricing.totalAmount || 0;
+        // Step 1: Verify actual collected amount using existing helper
+        const { collectedAmount: verifiedCollected, isAmbiguous, ambiguousReason } =
+            await getVerifiedCollectedAmount(order);
 
-        const currentRefundIssued = order.pricing?.walletRefundIssued || 0;
-        const deltaToRefund = Math.max(0, targetRefundAmt - currentRefundIssued);
+        if (isAmbiguous) {
+            return {
+                success: false,
+                message: ambiguousReason || "Cannot issue manual refund: verified collected payment status is ambiguous.",
+                order,
+            };
+        }
 
+        // Step 2: Sync and load clean purchase vs duplicate refund accounting from durable ledger
+        await syncOrderRefundAccounting(order._id);
+        const currentOrder = (await Order.findById(order._id)) || order;
+
+        const completedPurchaseRefunds = currentOrder.pricing?.purchaseRefundTotal || 0;
+        const duplicateRefundTotal = currentOrder.pricing?.duplicateRefundTotal || 0;
+
+        const maxPurchaseAmount =
+            currentOrder.pricing?.totalAmount != null
+                ? currentOrder.pricing.totalAmount
+                : (currentOrder.pricing?.originalTotalAmount || 0);
+
+        const targetPurchaseRefund =
+            currentOrder.pricing?.returnCredit > 0 ? currentOrder.pricing.returnCredit : maxPurchaseAmount;
+
+        // Step 3: Calculate remaining purchase refund using verified purchase collections only
+        // Separate duplicate-payment refunds from purchase collection calculations
+        const verifiedPurchaseCollection =
+            verifiedCollected > maxPurchaseAmount
+                ? Math.min(maxPurchaseAmount, Math.max(0, verifiedCollected - duplicateRefundTotal))
+                : Math.min(maxPurchaseAmount, verifiedCollected);
+
+        if (verifiedPurchaseCollection <= 0 && maxPurchaseAmount > 0) {
+            return {
+                success: false,
+                message: "Cannot mark payment as REFUNDED: no verified purchase payment was collected.",
+                order: currentOrder,
+            };
+        }
+
+        const maxRefundable = Math.min(targetPurchaseRefund, verifiedPurchaseCollection);
+        const deltaToRefund = Math.max(0, Math.round((maxRefundable - completedPurchaseRefunds) * 100) / 100);
+
+        // Step 4: Issue wallet credit for remaining balance if not yet credited
         if (deltaToRefund > 0) {
-            const refundRef = `REFUND_MANUAL_${order._id}_FINAL`;
+            const refundRef = `REFUND_MANUAL_${currentOrder._id}_${Math.round(completedPurchaseRefunds)}_${Math.round(deltaToRefund)}`;
             const credRes = await walletService.creditWallet({
-                userId: order.userId,
+                userId: currentOrder.userId,
                 amount: deltaToRefund,
                 reason: "ORDER_REFUND",
-                description: `Manual admin refund for Order #${order.orderNumber}`,
-                orderId: order._id,
-                orderNumber: order.orderNumber,
+                description: `Manual admin refund for Order #${currentOrder.orderNumber}`,
+                orderId: currentOrder._id,
+                orderNumber: currentOrder.orderNumber,
                 referenceId: refundRef,
             });
 
-            if (!credRes.success) {
+            if (!credRes || !credRes.success) {
+                // Failed credits must remain recoverable without marking REFUNDED
                 return {
                     success: false,
-                    message: credRes.message || "Failed to credit wallet for manual refund.",
-                    order,
+                    message: (credRes && credRes.message) || "Failed to credit wallet for manual refund.",
+                    order: currentOrder,
                 };
             }
         }
 
-        // Set REFUNDED ONLY AFTER wallet credit has successfully succeeded
-        order.paymentStatus = "REFUNDED";
-        order.refundedAt = now;
-        order.pricing.refundAmount = targetRefundAmt;
-        if (deltaToRefund > 0) {
-            order.pricing.walletRefundIssued = (order.pricing.walletRefundIssued || 0) + deltaToRefund;
+        // Step 5: Mark REFUNDED only when the required refund is confirmed complete
+        const finalPurchaseRefundTotal = Math.min(maxRefundable, completedPurchaseRefunds + deltaToRefund);
+
+        currentOrder.paymentStatus = "REFUNDED";
+        currentOrder.refundedAt = currentOrder.refundedAt || now;
+        if (!currentOrder.pricing) currentOrder.pricing = {};
+        currentOrder.pricing.refundAmount = finalPurchaseRefundTotal;
+        currentOrder.pricing.purchaseRefundTotal = finalPurchaseRefundTotal;
+        currentOrder.pricing.duplicateRefundTotal = duplicateRefundTotal;
+        currentOrder.pricing.walletRefundIssued = finalPurchaseRefundTotal + duplicateRefundTotal;
+
+        // Mark any cancelled or returned items on this order as refund completed
+        for (const item of currentOrder.items || []) {
+            if (["CANCELLED", "RETURN_APPROVED", "RETURNED"].includes(item.status)) {
+                item.refundIssued = true;
+                item.refundStatus = "COMPLETED";
+                if (item.refundAmount == null || item.refundAmount === 0) {
+                    item.refundAmount = item.finalPayable != null ? item.finalPayable : item.lineTotal;
+                }
+            }
         }
-        await order.save();
+        if (currentOrder.pricing.shippingRefundStatus === "REFUND_PENDING") {
+            currentOrder.pricing.shippingRefundStatus = "COMPLETED";
+            currentOrder.pricing.shippingRefundIssued = true;
+        }
 
-        await Payment.updateMany(
-            { orderId: order._id },
-            { $set: { status: "REFUNDED", refundedAt: now, refundAmount: targetRefundAmt } }
-        );
+        await currentOrder.save();
+        await syncOrderRefundAccounting(currentOrder._id);
 
+        const finalOrder = (await Order.findById(currentOrder._id)) || currentOrder;
         return {
             success: true,
             message: `Payment status updated to "REFUNDED".`,
-            order,
+            order: finalOrder,
         };
     } else {
         order.paymentStatus = normalizedStatus;
@@ -1365,6 +1536,274 @@ const isItemCancelledBeforePayment = (order, item) => {
 };
 
 /**
+ * Helper to classify an order refund transaction into 'PURCHASE', 'DUPLICATE', 'UNRELATED', or 'AMBIGUOUS'
+ * Adheres strictly to:
+ * - Inspect transaction reasons, reference IDs, and payment IDs.
+ * - Do not assume ORDER_REFUND always means a purchase refund; existing duplicate refunds may use that reason.
+ * - Exclude referral rewards or unrelated wallet credits.
+ * - Report ambiguous records rather than guessing.
+ */
+const classifyRefundTransaction = (tx, { primaryPaymentId, duplicatePaymentIds, itemIds = [] }) => {
+    const reason = (tx.reason || "").toUpperCase();
+    const refId = tx.referenceId || "";
+    const desc = tx.description || "";
+
+    // 1. Exclude unrelated non-refund transactions
+    const UNRELATED_REASONS = [
+        "REFERRAL_REWARD",
+        "REFERRAL_CLAWBACK",
+        "ADMIN_ADJUSTMENT",
+        "BONUS",
+        "ORDER_PURCHASE_ROLLBACK",
+        "ORDER_PAYMENT",
+        "ORDER_PURCHASE",
+    ];
+    if (UNRELATED_REASONS.includes(reason) || tx.type !== "CREDIT") {
+        return { type: "UNRELATED" };
+    }
+
+    // 2. Check for DUPLICATE refund indicators
+    const hasDuplicateReason = reason === "DUPLICATE_PAYMENT";
+    const hasDuplicateRefPrefix = Boolean(
+        refId && (/^REFUND_DUP_/i.test(refId) || /_DUP_/i.test(refId) || /^DUP_/i.test(refId))
+    );
+    const hasDuplicateInDesc = Boolean(desc && /duplicate/i.test(desc));
+    const hasDuplicatePaymentId = Array.from(duplicatePaymentIds || []).some(
+        (dupId) => (refId && refId.includes(dupId)) || (desc && desc.includes(dupId))
+    );
+
+    if (hasDuplicateReason || hasDuplicateRefPrefix || hasDuplicateInDesc || hasDuplicatePaymentId) {
+        return { type: "DUPLICATE" };
+    }
+
+    // 3. Check for PURCHASE refund indicators
+    const hasPurchaseReason = ["ORDER_CANCELLATION", "CANCELLATION_REFUND", "ORDER_RETURN", "RETURN_REFUND"].includes(reason);
+    const hasPurchaseRefPrefix = Boolean(
+        refId && (/^REFUND_(?:CAN|ADM_CAN|RET|EXCESS|MANUAL|LATE)/i.test(refId) || /SHIPPING/i.test(refId))
+    );
+    const hasPurchaseInDesc = Boolean(desc && /(cancellation|cancelled|return|returned|restock|shipping fee|late payment)/i.test(desc));
+    const hasItemId = (itemIds || []).some((id) => refId && refId.includes(id));
+    const hasPrimaryPaymentId = Boolean(
+        primaryPaymentId && ((refId && refId.includes(primaryPaymentId)) || (desc && desc.includes(primaryPaymentId)))
+    );
+
+    if (hasPurchaseReason || hasPurchaseRefPrefix || hasPurchaseInDesc || hasItemId || (hasPrimaryPaymentId && !hasDuplicateRefPrefix)) {
+        return { type: "PURCHASE" };
+    }
+
+    // 4. Ambiguous check: If reason is ORDER_REFUND (or other refund reason) with unclear metadata
+    return { type: "AMBIGUOUS" };
+};
+
+/**
+ * Helper to determine if an order is eligible for cancellation refund and verify paid funds.
+ * Guarantees that unpaid online cancellations and undelivered COD orders never receive refunds,
+ * and confirms wallet purchases using confirmed debit transactions in the ledger.
+ */
+const isCancellationRefundEligible = async (orderOrDoc) => {
+    if (!orderOrDoc) return false;
+    const order = orderOrDoc && (orderOrDoc.paymentMethod || orderOrDoc.items)
+        ? orderOrDoc
+        : await Order.findById(orderOrDoc);
+    if (!order) return false;
+
+    const method = (order.paymentMethod || "COD").toUpperCase();
+
+    // 1. COD cancellation is NEVER eligible for refund prior to collection (payment occurs on delivery)
+    if (method === "COD") {
+        return false;
+    }
+
+    // 2. WALLET orders: confirm verified successful debit transaction from ledger
+    if (method === "WALLET") {
+        const debitTx = await Transaction.findOne({
+            orderId: order._id,
+            type: "DEBIT",
+            reason: { $in: ["ORDER_PURCHASE", "ORDER_PAYMENT"] },
+        });
+        return Boolean(debitTx && Number(debitTx.amount) > 0);
+    }
+
+    // 3. ONLINE orders: verify payment was captured / completed
+    if (method === "ONLINE") {
+        const isPaid = order.paymentStatus === "COMPLETED" || order.paymentStatus === "REFUNDED" || Boolean(order.paidAt);
+        if (!isPaid && (!order.pricing?.collectedAmount || order.pricing.collectedAmount <= 0)) {
+            return false;
+        }
+        return true;
+    }
+
+    return false;
+};
+
+/**
+ * Shared Accounting Helper:
+ * Synchronize order pricing refund totals and payment refund records directly from the durable ledger.
+ * Guarantees that purchaseRefundTotal, duplicateRefundTotal, walletRefundIssued, and payment refund amounts
+ * are 100% consistent and idempotent across user, admin, and recovery flows.
+ */
+const syncOrderRefundAccounting = async (orderIdOrDoc) => {
+    const order = orderIdOrDoc && (orderIdOrDoc.items || orderIdOrDoc.orderNumber)
+        ? orderIdOrDoc
+        : await Order.findById(orderIdOrDoc);
+    if (!order) return null;
+
+    let primaryPaymentId = order.razorpayPaymentId || null;
+    if (!primaryPaymentId) {
+        const completedPayment = await Payment.findOne({
+            orderId: order._id,
+            status: "COMPLETED",
+            razorpayPaymentId: { $ne: null },
+        });
+        if (completedPayment && completedPayment.razorpayPaymentId) {
+            primaryPaymentId = completedPayment.razorpayPaymentId;
+        }
+    }
+    if (!primaryPaymentId && (order.paymentAttempts || []).length > 0) {
+        const firstSuccessAtt = order.paymentAttempts.find(
+            (att) => att.status === "SUCCESS" && att.razorpayPaymentId
+        );
+        if (firstSuccessAtt) {
+            primaryPaymentId = firstSuccessAtt.razorpayPaymentId;
+        }
+    }
+
+    const duplicatePaymentIds = new Set();
+    for (const att of order.paymentAttempts || []) {
+        if (!att.razorpayPaymentId) continue;
+        if (att.status === "REFUNDED_DUPLICATE" || att.status === "REFUND_PENDING") {
+            duplicatePaymentIds.add(att.razorpayPaymentId);
+        } else if (primaryPaymentId && att.razorpayPaymentId !== primaryPaymentId && (att.status === "SUCCESS" || att.status === "CAPTURED")) {
+            duplicatePaymentIds.add(att.razorpayPaymentId);
+        }
+    }
+
+    const initialPayments = await Payment.find({ orderId: order._id });
+    for (const p of initialPayments) {
+        if (p.razorpayPaymentId && primaryPaymentId && p.razorpayPaymentId !== primaryPaymentId) {
+            duplicatePaymentIds.add(p.razorpayPaymentId);
+        }
+    }
+
+    const itemIds = (order.items || []).map((i) => i._id.toString());
+
+    const allRefundTxs = await Transaction.find({
+        type: "CREDIT",
+        $or: [{ orderId: order._id }, { orderNumber: order.orderNumber }],
+    });
+
+    let totalPurchaseRefunds = 0;
+    let totalDuplicateRefunds = 0;
+    const ambiguousErrors = [];
+    const seenTxIds = new Set();
+
+    if (allRefundTxs.length > 0) {
+        for (const tx of allRefundTxs) {
+            if (seenTxIds.has(tx._id.toString())) continue;
+            seenTxIds.add(tx._id.toString());
+
+            const cls = classifyRefundTransaction(tx, { primaryPaymentId, duplicatePaymentIds, itemIds });
+            if (cls.type === "PURCHASE") {
+                totalPurchaseRefunds += Number(tx.amount) || 0;
+            } else if (cls.type === "DUPLICATE") {
+                totalDuplicateRefunds += Number(tx.amount) || 0;
+            } else if (cls.type === "AMBIGUOUS") {
+                ambiguousErrors.push(
+                    `Ambiguous refund transaction ${tx._id} (amount: ₹${tx.amount}, reason: "${tx.reason}", referenceId: "${tx.referenceId || "none"}", description: "${tx.description || ""}"): cannot be unambiguously classified as a purchase refund or duplicate refund.`
+                );
+            }
+        }
+    } else {
+        totalDuplicateRefunds = order.pricing?.duplicateRefundTotal || 0;
+        totalPurchaseRefunds = order.pricing?.purchaseRefundTotal != null && order.pricing.purchaseRefundTotal > 0
+            ? order.pricing.purchaseRefundTotal
+            : Math.max(0, (order.pricing?.walletRefundIssued || 0) - totalDuplicateRefunds);
+    }
+
+    const allCancelled = (order.items || []).length > 0 && order.items.every((i) => i.status === "CANCELLED");
+
+    if (!order.pricing) {
+        order.pricing = {};
+    }
+    order.pricing.purchaseRefundTotal = totalPurchaseRefunds;
+    order.pricing.duplicateRefundTotal = totalDuplicateRefunds;
+    order.pricing.walletRefundIssued = totalPurchaseRefunds + totalDuplicateRefunds;
+    order.pricing.refundAmount = totalPurchaseRefunds;
+    order.refundAmount = totalPurchaseRefunds;
+
+    const hasPendingItemAccounting = (order.items || []).some(
+        (i) => i.refundStatus === "REFUND_PENDING" || (["CANCELLED", "RETURN_APPROVED", "RETURNED"].includes(i.status) && !i.refundIssued && (i.finalPayable != null ? i.finalPayable : i.lineTotal) > 0)
+    );
+    const hasPendingShippingAccounting = order.pricing?.shippingRefundStatus === "REFUND_PENDING";
+    const hasPendingRefunds = hasPendingItemAccounting || hasPendingShippingAccounting;
+
+    const isFullyRefunded = allCancelled && !hasPendingRefunds && totalPurchaseRefunds > 0;
+
+    if (allCancelled) {
+        order.orderStatus = "CANCELLED";
+        if (order.paymentMethod === "COD" || order.paymentStatus === "PENDING" || order.paymentStatus === "CANCELLED") {
+            order.paymentStatus = "CANCELLED";
+        } else if (isFullyRefunded) {
+            order.paymentStatus = "REFUNDED";
+        } else if (order.paymentStatus === "REFUNDED") {
+            order.paymentStatus = "COMPLETED";
+        }
+    }
+
+    await Order.updateOne(
+        { _id: order._id },
+        {
+            $set: {
+                "pricing.purchaseRefundTotal": totalPurchaseRefunds,
+                "pricing.duplicateRefundTotal": totalDuplicateRefunds,
+                "pricing.walletRefundIssued": totalPurchaseRefunds + totalDuplicateRefunds,
+                "pricing.refundAmount": totalPurchaseRefunds,
+                ...(allCancelled ? { orderStatus: "CANCELLED", paymentStatus: order.paymentStatus } : {}),
+            },
+        }
+    );
+
+    // Update Payment documents according to their actual meaning and associated payment
+    const finalPayments = await Payment.find({ orderId: order._id });
+    const now = new Date();
+    for (const payment of finalPayments) {
+        const isDuplicatePayment =
+            (payment.razorpayPaymentId && duplicatePaymentIds.has(payment.razorpayPaymentId)) ||
+            (payment.attemptId && Array.from(duplicatePaymentIds).includes(payment.attemptId));
+
+        if (isDuplicatePayment) {
+            const paymentRefund = Math.min(payment.amount, totalDuplicateRefunds);
+            const isDuplicateFullyRefunded = paymentRefund >= payment.amount && payment.amount > 0;
+            await Payment.updateOne(
+                { _id: payment._id },
+                {
+                    $set: {
+                        refundAmount: paymentRefund,
+                        ...(isDuplicateFullyRefunded ? { status: "REFUNDED", refundedAt: payment.refundedAt || now } : {}),
+                    },
+                }
+            ).catch(() => {});
+        } else {
+            const purchasePaymentRefund = Math.min(payment.amount, totalPurchaseRefunds);
+            const isPurchaseFullyRefunded = !hasPendingRefunds && (purchasePaymentRefund >= payment.amount && payment.amount > 0);
+            await Payment.updateOne(
+                { _id: payment._id },
+                {
+                    $set: {
+                        refundAmount: purchasePaymentRefund,
+                        ...(isPurchaseFullyRefunded
+                            ? { status: "REFUNDED", refundedAt: payment.refundedAt || now }
+                            : (hasPendingRefunds && payment.status === "REFUNDED" ? { status: "COMPLETED" } : {})),
+                    },
+                }
+            ).catch(() => {});
+        }
+    }
+
+    return { order, totalPurchaseRefunds, totalDuplicateRefunds, ambiguousErrors };
+};
+
+/**
  * Reconcile and recover order state on standalone MongoDB.
  * Safely resumes interrupted cancellations, returns, refunds, inventory restorations, and clawbacks.
  * Accurately prevents refunding uncollected money, isolates duplicate payment refunds, and preserves idempotency.
@@ -1419,30 +1858,92 @@ const reconcileOrderState = async (orderId) => {
         }
     }
 
+    let primaryPaymentId = order.razorpayPaymentId || null;
+    if (!primaryPaymentId) {
+        const completedPayment = await Payment.findOne({
+            orderId: order._id,
+            status: "COMPLETED",
+            razorpayPaymentId: { $ne: null },
+        });
+        if (completedPayment && completedPayment.razorpayPaymentId) {
+            primaryPaymentId = completedPayment.razorpayPaymentId;
+        }
+    }
+    if (!primaryPaymentId && (order.paymentAttempts || []).length > 0) {
+        const firstSuccessAtt = order.paymentAttempts.find(
+            (att) => att.status === "SUCCESS" && att.razorpayPaymentId
+        );
+        if (firstSuccessAtt) {
+            primaryPaymentId = firstSuccessAtt.razorpayPaymentId;
+        }
+    }
+
+    const duplicatePaymentIds = new Set();
+    let primaryAttemptSeen = false;
+
+    for (const att of order.paymentAttempts || []) {
+        if (!att.razorpayPaymentId) continue;
+        if (att.status === "REFUNDED_DUPLICATE" || att.status === "REFUND_PENDING") {
+            duplicatePaymentIds.add(att.razorpayPaymentId);
+        } else if (primaryPaymentId && att.razorpayPaymentId === primaryPaymentId) {
+            primaryAttemptSeen = true;
+        } else if (att.status === "SUCCESS" || att.status === "CAPTURED") {
+            if (primaryAttemptSeen || primaryPaymentId) {
+                duplicatePaymentIds.add(att.razorpayPaymentId);
+            } else {
+                primaryPaymentId = att.razorpayPaymentId;
+                primaryAttemptSeen = true;
+            }
+        }
+    }
+
+    const initialPayments = await Payment.find({ orderId: order._id });
+    for (const p of initialPayments) {
+        if (p.razorpayPaymentId && primaryPaymentId && p.razorpayPaymentId !== primaryPaymentId) {
+            duplicatePaymentIds.add(p.razorpayPaymentId);
+        }
+    }
+    const itemIds = (order.items || []).map((i) => i._id.toString());
+
     // Step B: Calculate available purchase refund pool
     // Recorded purchase refunds already issued (excluding duplicate payments)
     const existingRefundTxs = await Transaction.find({
-        orderId: order._id,
         type: "CREDIT",
+        $or: [{ orderId: order._id }, { orderNumber: order.orderNumber }],
     });
 
-    const priorPurchaseRefunds = existingRefundTxs
-        .filter(
-            (tx) =>
-                ["ORDER_CANCELLATION", "ORDER_RETURN", "ORDER_REFUND", "CANCELLATION_REFUND", "RETURN_REFUND"].includes(tx.reason) &&
-                (!tx.referenceId || !tx.referenceId.startsWith("REFUND_DUP_"))
-        )
-        .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+    let priorPurchaseRefunds = 0;
+    let priorDuplicateRefunds = 0;
+
+    for (const tx of existingRefundTxs) {
+        const cls = classifyRefundTransaction(tx, { primaryPaymentId, duplicatePaymentIds, itemIds });
+        if (cls.type === "PURCHASE") {
+            priorPurchaseRefunds += Number(tx.amount) || 0;
+        } else if (cls.type === "DUPLICATE") {
+            priorDuplicateRefunds += Number(tx.amount) || 0;
+        } else if (cls.type === "AMBIGUOUS") {
+            unresolvedOps.push(
+                `Ambiguous refund transaction ${tx._id} (amount: ₹${tx.amount}, reason: "${tx.reason}", referenceId: "${tx.referenceId || "none"}", description: "${tx.description || ""}"): cannot be unambiguously classified as a purchase refund or duplicate refund.`
+            );
+        }
+    }
 
     // Active merchandise payable (items that are NOT cancelled or returned)
     const activeItemsPayable = (order.items || [])
         .filter((i) => !["CANCELLED", "RETURNED", "RETURN_APPROVED"].includes(i.status))
         .reduce((sum, i) => sum + (i.finalPayable != null ? i.finalPayable : i.lineTotal), 0);
 
+    // Capped purchase collection excludes duplicate collections and cannot exceed order's total amount
+    const maxPurchaseAmount = order.pricing?.originalTotalAmount || order.pricing?.totalAmount || 0;
+    const purchaseCollectedAmount = Math.min(
+        maxPurchaseAmount,
+        Math.max(0, verifiedCollected - priorDuplicateRefunds)
+    );
+
     // Available purchase refund pool
     let purchaseRefundPool = isAmbiguous
         ? 0
-        : Math.max(0, verifiedCollected - activeItemsPayable - priorPurchaseRefunds);
+        : Math.max(0, purchaseCollectedAmount - activeItemsPayable - priorPurchaseRefunds);
 
     // Step C: Repair interrupted item cancellations & returns refunds
     for (const item of order.items) {
@@ -1456,12 +1957,13 @@ const reconcileOrderState = async (orderId) => {
             );
 
             if (existingTx) {
-                if (!item.refundIssued) {
+                if (!item.refundIssued || item.refundStatus !== "COMPLETED") {
                     await Order.updateOne(
                         { _id: order._id, "items._id": item._id },
-                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemPayable } }
+                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemPayable, "items.$.refundStatus": "COMPLETED" } }
                     );
                     item.refundIssued = true;
+                    item.refundStatus = "COMPLETED";
                 }
             } else if (!isPrePayment && !item.refundIssued && itemPayable > 0 && order.paymentMethod !== "COD") {
                 // Post-payment cancellation with no refund issued yet
@@ -1486,10 +1988,16 @@ const reconcileOrderState = async (orderId) => {
                         }
                         await Order.updateOne(
                             { _id: order._id, "items._id": item._id },
-                            { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemPayable } }
+                            { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemPayable, "items.$.refundStatus": "COMPLETED" } }
                         );
                         item.refundIssued = true;
+                        item.refundStatus = "COMPLETED";
                     } else {
+                        await Order.updateOne(
+                            { _id: order._id, "items._id": item._id },
+                            { $set: { "items.$.refundStatus": "REFUND_PENDING", "items.$.refundAmount": itemPayable } }
+                        ).catch(() => {});
+                        item.refundStatus = "REFUND_PENDING";
                         unresolvedOps.push(
                             `Wallet credit failed for cancelled item ${item._id}: ${cred?.message || "Unknown error"}`
                         );
@@ -1509,12 +2017,13 @@ const reconcileOrderState = async (orderId) => {
             const existingTx = existingRefundTxs.find((tx) => tx.referenceId === refundRef);
 
             if (existingTx) {
-                if (!item.refundIssued) {
+                if (!item.refundIssued || item.refundStatus !== "COMPLETED") {
                     await Order.updateOne(
                         { _id: order._id, "items._id": item._id },
-                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund } }
+                        { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund, "items.$.refundStatus": "COMPLETED" } }
                     );
                     item.refundIssued = true;
+                    item.refundStatus = "COMPLETED";
                 }
             } else if (!item.refundIssued && itemRefund > 0) {
                 // Return refund is only valid if money was actually collected for delivered goods
@@ -1542,10 +2051,16 @@ const reconcileOrderState = async (orderId) => {
                         }
                         await Order.updateOne(
                             { _id: order._id, "items._id": item._id },
-                            { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund } }
+                            { $set: { "items.$.refundIssued": true, "items.$.refundAmount": itemRefund, "items.$.refundStatus": "COMPLETED" } }
                         );
                         item.refundIssued = true;
+                        item.refundStatus = "COMPLETED";
                     } else {
+                        await Order.updateOne(
+                            { _id: order._id, "items._id": item._id },
+                            { $set: { "items.$.refundStatus": "REFUND_PENDING", "items.$.refundAmount": itemRefund } }
+                        ).catch(() => {});
+                        item.refundStatus = "REFUND_PENDING";
                         unresolvedOps.push(
                             `Wallet credit failed for returned item ${item._id}: ${cred?.message || "Unknown error"}`
                         );
@@ -1559,8 +2074,123 @@ const reconcileOrderState = async (orderId) => {
         }
     }
 
+    // Step C.2: Recover interrupted duplicate and late payment refunds
+    const pendingPaymentAttempts = (order.paymentAttempts || []).filter(
+        (att) =>
+            att.amount > 0 &&
+            att.razorpayPaymentId &&
+            (att.status === "REFUND_PENDING" || att.status === "SUCCESS" || att.status === "CAPTURED")
+    );
+
+    for (const att of pendingPaymentAttempts) {
+        const isDuplicateAttempt =
+            duplicatePaymentIds.has(att.razorpayPaymentId) ||
+            (primaryPaymentId && att.razorpayPaymentId !== primaryPaymentId);
+
+        const allItemsCancelledBeforePayment =
+            (order.items || []).length > 0 &&
+            (order.items || []).every((i) => i.status === "CANCELLED" && isItemCancelledBeforePayment(order, i));
+
+        const isLatePaymentAttempt =
+            !isDuplicateAttempt &&
+            att.razorpayPaymentId === primaryPaymentId &&
+            (att.status === "REFUND_PENDING" || allItemsCancelledBeforePayment) &&
+            (order.orderStatus === "CANCELLED" || order.orderStatus === "EXPIRED" || allItemsCancelledBeforePayment);
+
+        if (isDuplicateAttempt) {
+            const dupRef = `REFUND_DUP_${order._id}_${att.razorpayPaymentId}`;
+            const existingTx = existingRefundTxs.find(
+                (tx) =>
+                    tx.referenceId === dupRef ||
+                    (tx.referenceId && tx.referenceId.includes(att.razorpayPaymentId)) ||
+                    (tx.description && tx.description.includes(att.razorpayPaymentId))
+            );
+
+            if (existingTx) {
+                if (att.status !== "REFUNDED_DUPLICATE") {
+                    await Order.updateOne(
+                        { _id: order._id, "paymentAttempts._id": att._id },
+                        { $set: { "paymentAttempts.$.status": "REFUNDED_DUPLICATE" } }
+                    );
+                    att.status = "REFUNDED_DUPLICATE";
+                }
+            } else {
+                const cred = await walletService.creditWallet({
+                    userId: order.userId,
+                    amount: att.amount,
+                    reason: "DUPLICATE_PAYMENT",
+                    description: `Reconciled duplicate payment refund for payment ${att.razorpayPaymentId} in Order #${order.orderNumber}`,
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    referenceId: dupRef,
+                });
+
+                if (cred && cred.success) {
+                    await Order.updateOne(
+                        { _id: order._id, "paymentAttempts._id": att._id },
+                        { $set: { "paymentAttempts.$.status": "REFUNDED_DUPLICATE" } }
+                    );
+                    att.status = "REFUNDED_DUPLICATE";
+                    duplicatePaymentIds.add(att.razorpayPaymentId);
+                } else {
+                    await Order.updateOne(
+                        { _id: order._id, "paymentAttempts._id": att._id },
+                        { $set: { "paymentAttempts.$.status": "REFUND_PENDING", "paymentAttempts.$.errorReason": cred?.message || "Wallet credit failed" } }
+                    ).catch(() => {});
+                    unresolvedOps.push(
+                        `Failed to recover duplicate payment refund for ${att.razorpayPaymentId}: ${cred?.message || "Wallet credit failed"}`
+                    );
+                }
+            }
+        } else if (isLatePaymentAttempt) {
+            const lateRef = `REFUND_LATE_${order._id}_${att.razorpayPaymentId}`;
+            const existingTx = existingRefundTxs.find(
+                (tx) =>
+                    tx.referenceId === lateRef ||
+                    (tx.referenceId && tx.referenceId.includes(att.razorpayPaymentId)) ||
+                    (tx.description && tx.description.includes(att.razorpayPaymentId))
+            );
+
+            if (existingTx) {
+                if (att.status !== "REFUNDED_LATE") {
+                    await Order.updateOne(
+                        { _id: order._id, "paymentAttempts._id": att._id },
+                        { $set: { "paymentAttempts.$.status": "REFUNDED_LATE" } }
+                    );
+                    att.status = "REFUNDED_LATE";
+                }
+            } else {
+                const cred = await walletService.creditWallet({
+                    userId: order.userId,
+                    amount: att.amount,
+                    reason: "ORDER_REFUND",
+                    description: `Reconciled late payment refund for payment ${att.razorpayPaymentId} on cancelled Order #${order.orderNumber}`,
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    referenceId: lateRef,
+                });
+
+                if (cred && cred.success) {
+                    await Order.updateOne(
+                        { _id: order._id, "paymentAttempts._id": att._id },
+                        { $set: { "paymentAttempts.$.status": "REFUNDED_LATE" } }
+                    );
+                    att.status = "REFUNDED_LATE";
+                } else {
+                    await Order.updateOne(
+                        { _id: order._id, "paymentAttempts._id": att._id },
+                        { $set: { "paymentAttempts.$.status": "REFUND_PENDING", "paymentAttempts.$.errorReason": cred?.message || "Wallet credit failed" } }
+                    ).catch(() => {});
+                    unresolvedOps.push(
+                        `Failed to recover late payment refund for ${att.razorpayPaymentId}: ${cred?.message || "Wallet credit failed"}`
+                    );
+                }
+            }
+        }
+    }
+
     // Step D: Shipping refund for all-cancelled paid orders
-    const allCancelled = order.items.every((i) => i.status === "CANCELLED");
+    const allCancelled = (order.items || []).length > 0 && order.items.every((i) => i.status === "CANCELLED");
     if (
         allCancelled &&
         !isAmbiguous &&
@@ -1572,7 +2202,15 @@ const reconcileOrderState = async (orderId) => {
         const existingShipTx = existingRefundTxs.find(
             (tx) => tx.referenceId === shipRef || tx.referenceId === `REFUND_ADM_CAN_${order._id}_SHIPPING`
         );
-        if (!existingShipTx) {
+        if (existingShipTx) {
+            if (order.pricing.shippingRefundStatus !== "COMPLETED") {
+                order.pricing.shippingRefundStatus = "COMPLETED";
+                await Order.updateOne(
+                    { _id: order._id },
+                    { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                ).catch(() => {});
+            }
+        } else {
             const cred = await walletService.creditWallet({
                 userId: order.userId,
                 amount: order.pricing.shippingFee,
@@ -1582,10 +2220,22 @@ const reconcileOrderState = async (orderId) => {
                 orderNumber: order.orderNumber,
                 referenceId: shipRef,
             });
-            if (cred && cred.success && !cred.isDuplicate) {
-                refundDelta += order.pricing.shippingFee;
-                purchaseRefundPool = Math.max(0, purchaseRefundPool - order.pricing.shippingFee);
-            } else if (!cred || !cred.success) {
+            if (cred && cred.success) {
+                if (!cred.isDuplicate) {
+                    refundDelta += order.pricing.shippingFee;
+                    purchaseRefundPool = Math.max(0, purchaseRefundPool - order.pricing.shippingFee);
+                }
+                order.pricing.shippingRefundStatus = "COMPLETED";
+                await Order.updateOne(
+                    { _id: order._id },
+                    { $set: { "pricing.shippingRefundStatus": "COMPLETED" } }
+                ).catch(() => {});
+            } else {
+                order.pricing.shippingRefundStatus = "REFUND_PENDING";
+                await Order.updateOne(
+                    { _id: order._id },
+                    { $set: { "pricing.shippingRefundStatus": "REFUND_PENDING" } }
+                ).catch(() => {});
                 unresolvedOps.push(`Shipping fee refund failed: ${cred?.message || "Unknown error"}`);
             }
         }
@@ -1643,47 +2293,19 @@ const reconcileOrderState = async (orderId) => {
                   totalReturnCredit
           );
 
-    // Step G: Rebuild refund totals strictly separating purchase vs duplicate refunds
-    const allRefundTxsAfter = await Transaction.find({
-        orderId: order._id,
-        type: "CREDIT",
-    });
-
-    const duplicateTxs = allRefundTxsAfter.filter(
-        (tx) => tx.reason === "DUPLICATE_PAYMENT" || (tx.referenceId && tx.referenceId.startsWith("REFUND_DUP_"))
-    );
-    const duplicateRefundTotal = duplicateTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-
-    const purchaseTxs = allRefundTxsAfter.filter(
-        (tx) =>
-            ["ORDER_CANCELLATION", "ORDER_RETURN", "ORDER_REFUND", "CANCELLATION_REFUND", "RETURN_REFUND"].includes(tx.reason) &&
-            (!tx.referenceId || !tx.referenceId.startsWith("REFUND_DUP_"))
-    );
-    const totalPurchaseRefunds = purchaseTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-
-    order.pricing.purchaseRefundTotal = totalPurchaseRefunds;
-    order.pricing.duplicateRefundTotal = duplicateRefundTotal;
-    order.pricing.walletRefundIssued = totalPurchaseRefunds + duplicateRefundTotal;
-    order.pricing.refundAmount = totalPurchaseRefunds;
-
-    // Update Payment documents refundAmount
-    const totalAllRefunds = totalPurchaseRefunds + duplicateRefundTotal;
-    if (totalAllRefunds > 0) {
-        await Payment.updateMany(
-            {
-                orderId: order._id,
-                $or: [
-                    { refundAmount: { $lt: totalAllRefunds } },
-                    { refundAmount: { $exists: false } },
-                    { refundAmount: null },
-                ],
-            },
-            { $set: { refundAmount: totalAllRefunds } }
-        ).catch(() => {});
+    // Step G: Rebuild refund totals strictly separating purchase vs duplicate refunds from durable ledger
+    const syncRes = await syncOrderRefundAccounting(order._id);
+    if (syncRes && syncRes.ambiguousErrors && syncRes.ambiguousErrors.length > 0) {
+        for (const err of syncRes.ambiguousErrors) {
+            if (!unresolvedOps.includes(err)) unresolvedOps.push(err);
+        }
     }
-
-    order.orderStatus = calculateOrderStatusFromItems(order.items);
-    await order.save();
+    const refreshedAfterSync = await Order.findById(order._id);
+    if (refreshedAfterSync) {
+        order.pricing = refreshedAfterSync.pricing;
+        order.paymentStatus = refreshedAfterSync.paymentStatus;
+        order.orderStatus = refreshedAfterSync.orderStatus;
+    }
 
     if (unresolvedOps.length > 0) {
         return {
@@ -1698,6 +2320,89 @@ const reconcileOrderState = async (orderId) => {
     return { success: true, message: "Order reconciled successfully.", order };
 };
 
+/**
+ * Discover and recover pending wallet refunds across orders (or for a specific order).
+ * Idempotently retries failed wallet credits using stable operation IDs and durable facts.
+ * 
+ * @param {string|mongoose.Types.ObjectId|null} targetOrderId - Optional order ID for targeted recovery
+ * @returns {Promise<{success: boolean, totalOrdersScanned: number, recoveredOrdersCount: number, unresolvedOrdersCount: number, details: Array}>}
+ */
+const recoverPendingRefunds = async (targetOrderId = null) => {
+    let query = {};
+    if (targetOrderId) {
+        const id = targetOrderId._id || targetOrderId;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return {
+                success: false,
+                totalOrdersScanned: 0,
+                recoveredOrdersCount: 0,
+                unresolvedOrdersCount: 0,
+                message: "Invalid target order ID.",
+                details: [],
+            };
+        }
+        query = { _id: id };
+    } else {
+        query = {
+            $or: [
+                { "items.refundStatus": "REFUND_PENDING" },
+                { "pricing.shippingRefundStatus": "REFUND_PENDING" },
+                { "paymentAttempts.status": "REFUND_PENDING" },
+                {
+                    paymentStatus: { $in: ["COMPLETED", "REFUNDED"] },
+                    items: {
+                        $elemMatch: {
+                            status: { $in: ["CANCELLED", "RETURN_APPROVED", "RETURNED"] },
+                            refundIssued: { $ne: true },
+                            refundStatus: { $ne: "COMPLETED" },
+                        },
+                    },
+                },
+            ],
+        };
+    }
+
+    const pendingOrders = await Order.find(query).select("_id orderNumber");
+    let recoveredOrdersCount = 0;
+    let unresolvedOrdersCount = 0;
+    const details = [];
+
+    for (const ord of pendingOrders) {
+        try {
+            const res = await reconcileOrderState(ord._id);
+            if (res && res.success) {
+                recoveredOrdersCount++;
+                details.push({ orderId: ord._id, orderNumber: ord.orderNumber, success: true });
+            } else {
+                unresolvedOrdersCount++;
+                details.push({
+                    orderId: ord._id,
+                    orderNumber: ord.orderNumber,
+                    success: false,
+                    errors: res?.errors || [res?.message || "Reconciliation failed"],
+                });
+            }
+        } catch (err) {
+            unresolvedOrdersCount++;
+            details.push({
+                orderId: ord._id,
+                orderNumber: ord.orderNumber,
+                success: false,
+                errors: [err.message],
+            });
+        }
+    }
+
+    const overallSuccess = unresolvedOrdersCount === 0;
+    return {
+        success: overallSuccess,
+        totalOrdersScanned: pendingOrders.length,
+        recoveredOrdersCount,
+        unresolvedOrdersCount,
+        details,
+    };
+};
+
 module.exports = {
     getAdminOrders,
     getAdminOrderDetails,
@@ -1708,6 +2413,9 @@ module.exports = {
     restockReturnItem,
     updatePaymentStatus,
     reconcileOrderState,
+    recoverPendingRefunds,
+    isCancellationRefundEligible,
+    syncOrderRefundAccounting,
     VALID_ORDER_STATUSES,
     VALID_PAYMENT_STATUSES,
 };
