@@ -342,19 +342,6 @@ const loadWallet = async (req, res) => {
             limit: 10,
         });
 
-        const User = require("../../models/user/userModel");
-        let user = await User.findById(req.session.userId).select("referralId fullName").lean();
-
-        // If user lacks a referralId, generate and persist one now
-        if (user && !user.referralId) {
-            let candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
-            while (await User.exists({ referralId: candidateRef })) {
-                candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
-            }
-            await User.updateOne({ _id: user._id }, { $set: { referralId: candidateRef } });
-            user.referralId = candidateRef;
-        }
-
         res.render("user/wallet", {
             title: "My Wallet",
             balance: result.balance,
@@ -363,7 +350,6 @@ const loadWallet = async (req, res) => {
             totalTransactions: result.totalTransactions,
             totalPages: result.totalPages,
             currentPage: result.currentPage,
-            referralId: user ? user.referralId : null,
             notice: req.query.notice || null,
         });
     } catch (error) {

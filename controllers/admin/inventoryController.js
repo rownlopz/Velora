@@ -23,18 +23,7 @@ const loadInventory = async (req, res) => {
             limit: 10,
         });
 
-        res.render("admin/inventory", {
-            items: result.items,
-            totalVariants: result.totalVariants,
-            totalPages: result.totalPages,
-            currentPage: result.currentPage,
-            stats: result.stats,
-            categories: result.categories,
-            search: result.search,
-            status: result.status,
-            categoryId: result.categoryId,
-            sort: result.sort,
-        });
+        res.render("admin/inventory", result);
     } catch (error) {
         console.error("Admin Load Inventory Error:", error);
         res.status(500).send("Something went wrong");
@@ -42,75 +31,33 @@ const loadInventory = async (req, res) => {
 };
 
 const updateStockController = async (req, res) => {
-    const isAjax =
-        req.headers["x-requested-with"] === "XMLHttpRequest" ||
-        req.headers.accept?.includes("application/json");
-
+    const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
     try {
         const { variantId } = req.params;
-        const { stock, expectedStock } = req.body;
+        const { stock } = req.body;
+        const result = await updateVariantStock(variantId, stock);
 
-        const result = await updateVariantStock(variantId, stock, expectedStock);
-
-        if (!result.success) {
-            if (isAjax) {
-                return res.status(400).json({ success: false, message: result.message });
-            }
-            return res.redirect(`/admin/inventory?error=${encodeURIComponent(result.message)}`);
-        }
-
-        if (isAjax) {
-            return res.json({
-                success: true,
-                message: result.message,
-                newStock: result.newStock,
-                variantId: result.variantId,
-            });
-        }
-
-        return res.redirect(`/admin/inventory?success=${encodeURIComponent(result.message)}`);
+        if (isAjax) return res.status(result.success ? 200 : 400).json(result);
+        return res.redirect(`/admin/inventory?${result.success ? "success" : "error"}=${encodeURIComponent(result.message)}`);
     } catch (error) {
         console.error("Admin Update Stock Error:", error);
-        if (isAjax) {
-            return res.status(500).json({ success: false, message: "Internal server error" });
-        }
+        if (isAjax) return res.status(500).json({ success: false, message: "Internal server error" });
         res.redirect("/admin/inventory?error=Something+went+wrong");
     }
 };
 
 const quickAdjustStockController = async (req, res) => {
-    const isAjax =
-        req.headers["x-requested-with"] === "XMLHttpRequest" ||
-        req.headers.accept?.includes("application/json");
-
+    const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
     try {
         const { variantId } = req.params;
         const { delta } = req.body;
-
         const result = await adjustVariantStock(variantId, delta);
 
-        if (!result.success) {
-            if (isAjax) {
-                return res.status(400).json({ success: false, message: result.message });
-            }
-            return res.redirect(`/admin/inventory?error=${encodeURIComponent(result.message)}`);
-        }
-
-        if (isAjax) {
-            return res.json({
-                success: true,
-                message: result.message,
-                newStock: result.newStock,
-                variantId: result.variantId,
-            });
-        }
-
-        return res.redirect(`/admin/inventory?success=${encodeURIComponent(result.message)}`);
+        if (isAjax) return res.status(result.success ? 200 : 400).json(result);
+        return res.redirect(`/admin/inventory?${result.success ? "success" : "error"}=${encodeURIComponent(result.message)}`);
     } catch (error) {
-        console.error("Admin Quick Adjust Stock Error:", error);
-        if (isAjax) {
-            return res.status(500).json({ success: false, message: "Internal server error" });
-        }
+        console.error("Admin Adjust Stock Error:", error);
+        if (isAjax) return res.status(500).json({ success: false, message: "Internal server error" });
         res.redirect("/admin/inventory?error=Something+went+wrong");
     }
 };

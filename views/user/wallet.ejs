@@ -17,31 +17,29 @@
         <div class="flex items-center gap-2 text-xs text-gray-500 mb-6">
             <a href="/profile" class="hover:text-black transition">Account</a>
             <span>&bull;</span>
-            <span class="text-black font-medium">Wallet & Referrals</span>
+            <span class="text-black font-medium">My Wallet</span>
         </div>
 
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div>
                 <h1 class="text-3xl font-medium tracking-tight text-gray-900">Velora Wallet</h1>
-                <p class="text-xs text-gray-500 mt-1">Manage store credit, view refunds, and invite friends to earn wallet rewards.</p>
+                <p class="text-xs text-gray-500 mt-1">Manage your store credit and track your complete payment and refund history.</p>
             </div>
             <a href="/checkout" class="inline-flex items-center gap-2 px-5 py-2.5 bg-black text-white text-xs font-semibold uppercase tracking-wider rounded-xl hover:bg-gray-800 transition">
                 Use at Checkout
             </a>
         </div>
 
-        <!-- Top Grid: Balance Card & Referral Card -->
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-10">
-
-            <!-- Wallet Balance Card -->
-            <div class="md:col-span-5 bg-gradient-to-br from-black to-neutral-900 text-white rounded-3xl p-8 relative overflow-hidden shadow-lg flex flex-col justify-between min-h-[220px]">
+        <!-- Top Wallet Balance Card -->
+        <div class="mb-10">
+            <div class="max-w-md bg-gradient-to-br from-black to-neutral-900 text-white rounded-3xl p-8 relative overflow-hidden shadow-lg flex flex-col justify-between min-h-[200px]">
                 <div class="absolute -right-8 -bottom-8 w-40 h-40 bg-white/5 rounded-full pointer-events-none"></div>
                 <div class="flex items-center justify-between relative z-10">
                     <span class="text-xs uppercase tracking-widest text-neutral-400 font-semibold">Available Balance</span>
-                    <span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/30 text-black">Active</span>
+                    <span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/30">Active</span>
                 </div>
                 <div class="my-4 relative z-10">
-                    <p class="text-4xl md:text-5xl font-bold tracking-tight text-black">
+                    <p class="text-4xl md:text-5xl font-bold tracking-tight text-white">
                         &#8377;<%= (balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
                     </p>
                     <p class="text-[11px] text-neutral-400 mt-1">Instant store credit applicable at checkout</p>
@@ -51,40 +49,6 @@
                     <span>100% Protected</span>
                 </div>
             </div>
-
-            <!-- Referral Rewards Card -->
-            <div class="md:col-span-7 bg-white border border-gray-200 rounded-3xl p-8 shadow-sm flex flex-col justify-between">
-                <div>
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="px-2.5 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-bold uppercase tracking-wider rounded-full">Referral Program</span>
-                    </div>
-                    <h2 class="text-xl font-medium text-gray-900">Invite Friends & Earn &#8377;100</h2>
-                    <p class="text-xs text-gray-500 mt-1 leading-relaxed">
-                        Share your unique referral code. When a friend signs up with your code, you receive <strong>&#8377;100</strong> and they receive a <strong>&#8377;50</strong> welcome bonus immediately in their wallet!
-                    </p>
-                </div>
-
-                <div class="mt-6 pt-5 border-t border-gray-100 space-y-3">
-                    <div class="flex flex-col sm:flex-row items-center gap-3">
-                        <div class="flex-1 w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
-                            <span class="text-xs text-gray-500 font-medium">Your Referral Code:</span>
-                            <span id="refCodeText" class="font-mono font-bold text-gray-900 tracking-wider text-sm"><%= referralId || 'N/A' %></span>
-                        </div>
-                        <button type="button" id="copyRefBtn"
-                            class="w-full sm:w-auto px-5 py-2.5 bg-black text-white text-xs font-semibold uppercase tracking-wider rounded-xl hover:bg-gray-800 transition shrink-0 cursor-pointer">
-                            Copy Code
-                        </button>
-                    </div>
-
-                    <% if (referralId) { %>
-                        <div class="flex items-center justify-between text-xs text-gray-500 px-1">
-                            <span>Share link: <code id="shareLinkText" class="text-gray-700 select-all font-mono">/signup?ref=<%= referralId %></code></span>
-                            <button type="button" id="copyShareLinkBtn" class="text-black font-semibold hover:underline">Copy Link</button>
-                        </div>
-                    <% } %>
-                </div>
-            </div>
-
         </div>
 
         <!-- Transaction History -->
@@ -101,7 +65,7 @@
                 <div class="text-center py-16">
                     <svg class="mx-auto text-gray-300 mb-3" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
                     <p class="text-sm font-medium text-gray-800">No transactions yet</p>
-                    <p class="text-xs text-gray-400 mt-1">Refunds and referral rewards will appear here automatically.</p>
+                    <p class="text-xs text-gray-400 mt-1">Refunds and wallet credits will appear here automatically.</p>
                 </div>
             <% } else { %>
                 <div class="overflow-x-auto">
@@ -111,7 +75,6 @@
                                 <th class="pb-3 font-semibold">Date & Time</th>
                                 <th class="pb-3 font-semibold">Type</th>
                                 <th class="pb-3 font-semibold">Reason & Description</th>
-                                <th class="pb-3 font-semibold">Reference</th>
                                 <th class="pb-3 font-semibold text-right">Amount</th>
                                 <th class="pb-3 font-semibold text-right">Balance After</th>
                             </tr>
@@ -142,9 +105,6 @@
                                         <% if (tx.orderNumber) { %>
                                             <a href="/orders/<%= tx.orderId %>" class="text-[10px] text-black underline font-mono mt-0.5 inline-block">Order #<%= tx.orderNumber %></a>
                                         <% } %>
-                                    </td>
-                                    <td class="py-4 font-mono text-[11px] text-gray-500 whitespace-nowrap">
-                                        <%= tx.referenceId || '-' %>
                                     </td>
                                     <td class="py-4 font-semibold text-right whitespace-nowrap text-sm <%= tx.type === 'CREDIT' ? 'text-emerald-700' : 'text-rose-700' %>">
                                         <%= tx.type === 'CREDIT' ? '+' : '-' %>&#8377;<%= (tx.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
@@ -180,38 +140,6 @@
 </main>
 
 <%- include("../partials/storeFooter") %>
-
-<script>
-(function () {
-    const copyRefBtn = document.getElementById('copyRefBtn');
-    const refCodeText = document.getElementById('refCodeText');
-    const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
-
-    if (copyRefBtn && refCodeText) {
-        copyRefBtn.addEventListener('click', function () {
-            const code = refCodeText.textContent.trim();
-            navigator.clipboard.writeText(code).then(() => {
-                copyRefBtn.textContent = 'Copied!';
-                setTimeout(() => { copyRefBtn.textContent = 'Copy Code'; }, 1500);
-            }).catch(() => {
-                alert('Code: ' + code);
-            });
-        });
-    }
-
-    if (copyShareLinkBtn) {
-        copyShareLinkBtn.addEventListener('click', function () {
-            const fullUrl = window.location.origin + '/signup?ref=' + (refCodeText ? refCodeText.textContent.trim() : '');
-            navigator.clipboard.writeText(fullUrl).then(() => {
-                copyShareLinkBtn.textContent = 'Copied Link!';
-                setTimeout(() => { copyShareLinkBtn.textContent = 'Copy Link'; }, 1500);
-            }).catch(() => {
-                alert('URL: ' + fullUrl);
-            });
-        });
-    }
-})();
-</script>
 
 </body>
 </html>
