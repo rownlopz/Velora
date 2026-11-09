@@ -194,7 +194,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Email
         const emailVal = emailInput.value.trim();
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const emailRegex = /^[a-zA-Z0-9]+([._%+-][a-zA-Z0-9]+)*@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
         if (!emailVal) {
             showError(emailInput, document.getElementById("emailError"), "Email address is required");
             isValid = false;
@@ -207,12 +207,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Phone
         const phoneVal = phoneInput.value.trim();
-        const phoneRegex = /^[0-9]{10}$/;
+        const phoneRegex = /^[6-9]\d{9}$/;
+        const isRepeatingPhone = /^(\d)\1{9}$/.test(phoneVal);
         if (!phoneVal) {
             showError(phoneInput, document.getElementById("phoneError"), "Phone number is required");
             isValid = false;
-        } else if (!phoneRegex.test(phoneVal)) {
-            showError(phoneInput, document.getElementById("phoneError"), "Please enter a valid 10-digit phone number");
+        } else if (!phoneRegex.test(phoneVal) || isRepeatingPhone) {
+            showError(phoneInput, document.getElementById("phoneError"), "Please enter a valid 10-digit mobile number");
             isValid = false;
         } else {
             clearError(phoneInput, document.getElementById("phoneError"));
@@ -247,6 +248,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!isValid) {
             e.preventDefault();
+        }
+    });
+
+    // Real-time blur and input validation for email and phone
+    const emailRegex = /^[a-zA-Z0-9]+([._%+-][a-zA-Z0-9]+)*@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+    const phoneRegex = /^[6-9]\d{9}$/;
+
+    emailInput.addEventListener("blur", () => {
+        const val = emailInput.value.trim();
+        if (!val) {
+            showError(emailInput, document.getElementById("emailError"), "Email address is required");
+        } else if (!emailRegex.test(val)) {
+            showError(emailInput, document.getElementById("emailError"), "Please enter a valid email address");
+        } else {
+            clearError(emailInput, document.getElementById("emailError"));
+        }
+    });
+
+    emailInput.addEventListener("input", () => {
+        const val = emailInput.value.trim();
+        if (emailRegex.test(val)) {
+            clearError(emailInput, document.getElementById("emailError"));
+        }
+    });
+
+    phoneInput.addEventListener("blur", () => {
+        const val = phoneInput.value.trim();
+        if (!val) {
+            showError(phoneInput, document.getElementById("phoneError"), "Phone number is required");
+        } else if (!phoneRegex.test(val) || /^(\d)\1{9}$/.test(val)) {
+            showError(phoneInput, document.getElementById("phoneError"), "Please enter a valid 10-digit mobile number");
+        } else {
+            clearError(phoneInput, document.getElementById("phoneError"));
+        }
+    });
+
+    phoneInput.addEventListener("input", () => {
+        const val = phoneInput.value.trim();
+        if (phoneRegex.test(val) && !/^(\d)\1{9}$/.test(val)) {
+            clearError(phoneInput, document.getElementById("phoneError"));
         }
     });
 });

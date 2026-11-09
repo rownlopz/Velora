@@ -33,23 +33,10 @@ const getDateRange = (rangeType = "daily", customStart = null, customEnd = null)
     return { startDate: new Date(startDate.getTime() - IST_OFFSET), endDate: new Date(endDate.getTime() - IST_OFFSET) };
 };
 
-const getLastTwoDaysSales = async () => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    const paidMatch = { orderStatus: { $ne: "CANCELLED" }, $or: [{ paymentStatus: "COMPLETED" }, { paymentMethod: "COD", orderStatus: "DELIVERED" }] };
-
-    const [todayAgg, yestAgg] = await Promise.all([
-        Order.aggregate([{ $match: { ...paidMatch, placedAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } } } }]),
-        Order.aggregate([{ $match: { ...paidMatch, placedAt: { $gte: yesterday, $lt: today } } }, { $group: { _id: null, total: { $sum: { $ifNull: ["$pricing.currentPayable", "$pricing.totalAmount"] } } } }])
-    ]);
-    const todaySales = todayAgg[0]?.total || 0;
-    const yesterdaySales = yestAgg[0]?.total || 0;
-    return { todaySales, yesterdaySales, totalSales: todaySales + yesterdaySales, lastTwoDaysSales: todaySales + yesterdaySales };
-};
-
 const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const qualifyingSalesMatch = { orderStatus: { $nin: ["CANCELLED", "FAILED"] }, $or: [{ paymentStatus: "COMPLETED" }, { paymentMethod: "COD", orderStatus: "DELIVERED" }] };
+
 
     let timeline = [], timeMatch = {};
     if (filterType === "daily") {
@@ -86,7 +73,7 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
     for (const s of stats) {
         const slot = filterType === "daily" ? timeline.find(t => t.day === s._id.day && t.month === s._id.month)
             : filterType === "yearly" ? timeline.find(t => t.year === s._id.year)
-            : timeline.find(t => t.month === s._id.month && (!t.year || t.year === s._id.year));
+                : timeline.find(t => t.month === s._id.month && (!t.year || t.year === s._id.year));
         if (slot) { slot.totalRevenue += s.totalRevenue; slot.orderCount += s.orderCount; }
     }
 
@@ -108,7 +95,7 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
         ])
     ]);
 
-    return { filterType, targetYear, monthlyStats: timeline, topProducts, topCategories, topBrands };
+    return { filterType, targetYear, monthlyStats: timeline, topProducts, topCategories, topBrands, };
 };
 
 const getSalesReportData = async (options = {}) => {
@@ -171,8 +158,14 @@ const getSalesReportData = async (options = {}) => {
 };
 
 module.exports = {
-    getDateRange, formatIstDate, getLastTwoDaysSales, getDashboardAnalytics, getSalesReportData,
-    generateSalesExcel: exportService.generateSalesExcel, generateSalesPdf: exportService.generateSalesPdf,
-    generateExcelReport: exportService.generateExcelReport, generatePdfReport: exportService.generatePdfReport,
-    sanitizeForSpreadsheet: exportService.sanitizeForSpreadsheet, sanitizeSpreadsheetData: exportService.sanitizeSpreadsheetData,
+    getDateRange,
+    formatIstDate,
+    getDashboardAnalytics,
+    getSalesReportData,
+    generateSalesExcel: exportService.generateSalesExcel,
+    generateSalesPdf: exportService.generateSalesPdf,
+    generateExcelReport: exportService.generateExcelReport,
+    generatePdfReport: exportService.generatePdfReport,
+    sanitizeForSpreadsheet: exportService.sanitizeForSpreadsheet,
+    sanitizeSpreadsheetData: exportService.sanitizeSpreadsheetData,
 };

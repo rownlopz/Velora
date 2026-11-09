@@ -16,19 +16,21 @@ const validateSignup = (data) => {
     }
 
     // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9]+([._%+-][a-zA-Z0-9]+)*@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     if (!email || !email.trim()) {
         errors.email = "Email address is required";
     } else if (!emailRegex.test(email.trim())) {
         errors.email = "Please enter a valid email address";
     }
 
-    // Phone validation (10 digits)
-    const phoneRegex = /^[0-9]{10}$/;
-    if (!phone || !phone.trim()) {
+    // Phone validation (10 digits starting with 6-9, non-repeating)
+    const phoneRegex = /^[6-9]\d{9}$/;
+    const phoneVal = phone ? phone.trim() : "";
+    const isRepeatingPhone = /^(\d)\1{9}$/.test(phoneVal);
+    if (!phoneVal) {
         errors.phone = "Phone number is required";
-    } else if (!phoneRegex.test(phone.trim())) {
-        errors.phone = "Please enter a valid 10-digit phone number";
+    } else if (!phoneRegex.test(phoneVal) || isRepeatingPhone) {
+        errors.phone = "Please enter a valid 10-digit mobile number";
     }
 
     // Password validation
@@ -59,11 +61,15 @@ const validateFullName = (fullName) => {
 };
 
 const validatePhone = (phone, { required = true } = {}) => {
-    const phoneRegex = /^[0-9]{10}$/;
-    if (!phone || !phone.trim()) {
+    const phoneVal = phone ? phone.trim() : "";
+    if (!phoneVal) {
         return required ? "Phone number is required" : null;
     }
-    if (!phoneRegex.test(phone.trim())) return "Please enter a valid 10-digit phone number";
+    const phoneRegex = /^[6-9]\d{9}$/;
+    const isRepeatingPhone = /^(\d)\1{9}$/.test(phoneVal);
+    if (!phoneRegex.test(phoneVal) || isRepeatingPhone) {
+        return "Please enter a valid 10-digit mobile number";
+    }
     return null;
 };
 

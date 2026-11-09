@@ -36,10 +36,10 @@
                 <div class="absolute -right-8 -bottom-8 w-40 h-40 bg-white/5 rounded-full pointer-events-none"></div>
                 <div class="flex items-center justify-between relative z-10">
                     <span class="text-xs uppercase tracking-widest text-neutral-400 font-semibold">Available Balance</span>
-                    <span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/30">Active</span>
+                    <span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/30 text-black">Active</span>
                 </div>
                 <div class="my-4 relative z-10">
-                    <p class="text-4xl md:text-5xl font-bold tracking-tight text-white">
+                    <p class="text-4xl md:text-5xl font-bold tracking-tight text-black">
                         &#8377;<%= (balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
                     </p>
                     <p class="text-[11px] text-neutral-400 mt-1">Instant store credit applicable at checkout</p>

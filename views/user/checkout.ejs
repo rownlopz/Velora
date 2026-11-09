@@ -230,6 +230,19 @@
                                 </button>
                             </div>
                         <% } else { %>
+                            <% if (typeof availableCoupons !== 'undefined' && availableCoupons && availableCoupons.length > 0) { %>
+                                <div class="mb-2.5">
+                                    <label for="couponSelectDropdown" class="block text-[11px] font-medium text-gray-500 mb-1">Available Coupons</label>
+                                    <select id="couponSelectDropdown" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-black bg-gray-50 text-gray-800 cursor-pointer">
+                                        <option value="">-- Choose an available coupon --</option>
+                                        <% availableCoupons.forEach(function(c) { %>
+                                            <option value="<%= c.code %>">
+                                                <%= c.code %> &ndash; <%= c.discountType === 'PERCENTAGE' ? c.discountValue + '% OFF' : '₹' + c.discountValue + ' OFF' %><% if (c.minPurchase > 0) { %> (Min: ₹<%= c.minPurchase.toLocaleString('en-IN') %>)<% } %><% if (c.maxDiscount) { %> (Max: ₹<%= c.maxDiscount.toLocaleString('en-IN') %>)<% } %>
+                                            </option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                            <% } %>
                             <div class="flex gap-2">
                                 <input type="text" id="couponCodeInput" placeholder="Enter coupon code" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs uppercase tracking-wider outline-none focus:border-black bg-gray-50">
                                 <button type="button" id="applyCouponBtn" class="px-4 py-2 bg-black text-white text-xs font-semibold uppercase tracking-wider rounded-xl hover:bg-gray-800 transition cursor-pointer">
@@ -631,14 +644,21 @@
     // Coupon Apply & Remove
     const applyCouponBtn = document.getElementById('applyCouponBtn');
     const couponCodeInput = document.getElementById('couponCodeInput');
+    const couponSelectDropdown = document.getElementById('couponSelectDropdown');
     const removeCouponBtn = document.getElementById('removeCouponBtn');
+
+    if (couponSelectDropdown && couponCodeInput) {
+        couponSelectDropdown.addEventListener('change', function () {
+            couponCodeInput.value = this.value || '';
+        });
+    }
 
     if (applyCouponBtn && couponCodeInput) {
         applyCouponBtn.addEventListener('click', async function (e) {
             e.preventDefault();
-            const code = couponCodeInput.value.trim();
+            const code = (couponCodeInput.value || (couponSelectDropdown ? couponSelectDropdown.value : '')).trim();
             if (!code) {
-                if (typeof showToast === 'function') showToast('Please enter a coupon code.', 'warning');
+                if (typeof showToast === 'function') showToast('Please enter or select a coupon code.', 'warning');
                 return;
             }
 

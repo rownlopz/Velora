@@ -1,14 +1,13 @@
 const reportService = require("../../services/admin/reportService");
-const { getSalesReportData, getLastTwoDaysSales } = require("../../services/admin/reportService");
+const { getSalesReportData, } = require("../../services/admin/reportService");
 
 
 const loadDashboard = async (req, res) => {
     try {
         const filterType = req.query.filterType || "monthly";
         const targetYear = req.query.year ? parseInt(req.query.year, 10) : null;
-        const [analytics, lastTwoDaysSales] = await Promise.all([
+        const [analytics] = await Promise.all([
             reportService.getDashboardAnalytics(filterType, targetYear),
-            reportService.getLastTwoDaysSales(),
         ]);
 
         res.render("admin/dashboard", {
@@ -20,10 +19,6 @@ const loadDashboard = async (req, res) => {
             topProducts: analytics.topProducts,
             topCategories: analytics.topCategories,
             topBrands: analytics.topBrands,
-            totalSales: lastTwoDaysSales.totalSales,
-            todaySales: lastTwoDaysSales.todaySales,
-            yesterdaySales: lastTwoDaysSales.yesterdaySales,
-            lastTwoDaysSales: lastTwoDaysSales.totalSales,
         });
     } catch (error) {
         console.error("Load Dashboard Error:", error);
@@ -41,7 +36,7 @@ const loadSalesReport = async (req, res) => {
             endDate,
             page,
             limit: 15,
-         
+
         });
 
         res.render("admin/sales-report", {
@@ -54,7 +49,7 @@ const loadSalesReport = async (req, res) => {
             orders: reportData.orders,
             currentPage: reportData.currentPage,
             totalPages: reportData.totalPages,
-            
+
         });
     } catch (error) {
         console.error("Load Sales Report Error:", error);

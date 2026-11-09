@@ -59,7 +59,7 @@ const removeFromWishlist = async (userId, variantId) => {
     return { success: true };
 };
 
-const getWishlistDetails = async (userId, { page = 1, limit = 8 } = {}) => {
+const getWishlistDetails = async (userId, { page = 1, limit = 8,} = {}) => {
     const wishlist = await getOrCreateWishlist(userId);
 
     const safePage = Math.max(1, parseInt(page, 10) || 1);

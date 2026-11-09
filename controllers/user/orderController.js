@@ -65,6 +65,7 @@ const loadCheckout = async (req, res) => {
             addresses: result.addresses,
             selectedAddress: result.selectedAddress,
             walletBalance: result.walletBalance,
+            availableCoupons: result.availableCoupons || [],
             shippingThreshold: SHIPPING_THRESHOLD,
             shippingFlatFee: SHIPPING_FLAT_FEE,
             checkoutToken,

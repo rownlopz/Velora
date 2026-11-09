@@ -20,25 +20,11 @@
             <main class="px-8 py-8 max-w-7xl">
 
                 <div class="flex justify-between items-start mb-8">
-                    <div>
+                     <div>
                         <p class="text-xs text-gray-400 uppercase tracking-widest mb-1">Admin / Analytics</p>
                         <h1 class="text-3xl font-bold text-gray-900">Store Dashboard</h1>
-                        <div class="mt-2.5 flex flex-wrap items-center gap-2.5">
-                            <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg shadow-sm">
-                                <span class="text-xs text-gray-500 font-medium">Today's Net Sales:</span>
-                                <span class="text-sm font-bold text-gray-900">₹<%= (typeof todaySales !== 'undefined' ? todaySales : 0).toLocaleString('en-IN') %></span>
-                            </div>
-                            <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg shadow-sm">
-                                <span class="text-xs text-gray-500 font-medium">Yesterday's Net Sales:</span>
-                                <span class="text-sm font-bold text-gray-900">₹<%= (typeof yesterdaySales !== 'undefined' ? yesterdaySales : 0).toLocaleString('en-IN') %></span>
-                            </div>
-                            <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
-                                <span class="text-xs text-gray-600 font-medium">Last 2 Days:</span>
-                                <span class="text-sm font-bold text-gray-900">₹<%= (typeof totalSales !== 'undefined' ? totalSales : (typeof lastTwoDaysSales !== 'undefined' ? lastTwoDaysSales : 0)).toLocaleString('en-IN') %></span>
-                            </div>
-                        </div>
                         <p class="text-gray-500 mt-2 text-sm">Real-time performance overview, sales trends, and top performers.</p>
-                    </div>
+                    </div> 
 
                     <div class="flex items-center gap-3">
                         <div class="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm">

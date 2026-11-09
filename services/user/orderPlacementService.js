@@ -5,6 +5,7 @@ const Cart = require("../../models/order/cartModel");
 const Address = require("../../models/user/addressModel");
 const Variant = require("../../models/product/variantModel");
 const Category = require("../../models/product/categoryModel");
+const Coupon = require("../../models/order/couponModel");
 const { getCartDetails } = require("./cartService");
 const { getAddresses } = require("./addressService");
 const { getOrCreateWallet, debitWallet } = require("./walletService");
@@ -39,6 +40,27 @@ const getCheckoutDetails = async (userId) => {
     const selectedAddress = addresses.find((a) => a.isDefault) || addresses[0] || null;
     const wallet = await getOrCreateWallet(userId);
 
+    // Fetch active available coupons for the user
+    const now = new Date();
+    const activeCoupons = await Coupon.find({
+        isActive: true,
+        startDate: { $lte: now },
+        endDate: { $gte: now },
+    }).sort({ discountValue: -1 }).lean();
+
+    const availableCoupons = activeCoupons.filter((c) => {
+        if (c.usageLimit != null && c.usedCount >= c.usageLimit) {
+            return false;
+        }
+        if (userId && Array.isArray(c.usersUsed)) {
+            const userUsage = c.usersUsed.find((u) => String(u.userId) === String(userId));
+            if (userUsage && userUsage.usageCount >= (c.perUserLimit || 1)) {
+                return false;
+            }
+        }
+        return true;
+    });
+
     return {
         success: true,
         items: cartDetails.items,
@@ -58,6 +80,7 @@ const getCheckoutDetails = async (userId) => {
         addresses,
         selectedAddress,
         walletBalance: wallet.balance || 0,
+        availableCoupons,
     };
 };
 
