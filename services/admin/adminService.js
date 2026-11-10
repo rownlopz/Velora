@@ -52,7 +52,6 @@ const toggleUserStatus = async (userId) => {
         };
     }
 
-
     if (user.role !== "USER") {
         return {
             success: false,

@@ -441,14 +441,12 @@
     const addNewAddressBtn = document.getElementById('addNewAddressBtn');
     const addFirstAddressBtn = document.getElementById('addFirstAddressBtn');
 
-    // Currently selected address ID
     let currentAddressId = null;
     const initialRadio = document.querySelector('input[name="selectedAddressRadio"]:checked');
     if (initialRadio) {
         currentAddressId = initialRadio.value;
     }
 
-    // Radio click handling for address cards
     document.addEventListener('change', function (e) {
         if (e.target.name === 'selectedAddressRadio') {
             currentAddressId = e.target.value;
@@ -462,7 +460,6 @@
         }
     });
 
-    // Make clicking the card select the radio
     document.addEventListener('click', function (e) {
         const card = e.target.closest('.address-card');
         if (!card || e.target.closest('.edit-address-btn') || e.target.type === 'radio') return;
@@ -473,7 +470,6 @@
         }
     });
 
-    // Open Modal for New Address
     function openNewAddressModal() {
         modalTitle.textContent = 'Add Delivery Address';
         addressForm.reset();
@@ -486,7 +482,6 @@
     if (addNewAddressBtn) addNewAddressBtn.addEventListener('click', openNewAddressModal);
     if (addFirstAddressBtn) addFirstAddressBtn.addEventListener('click', openNewAddressModal);
 
-    // Open Modal for Edit Address
     document.addEventListener('click', function (e) {
         const btn = e.target.closest('.edit-address-btn');
         if (!btn) return;
@@ -516,7 +511,6 @@
         }
     });
 
-    // Close Modal
     function closeModal() {
         addressModal.classList.add('hidden');
         clearErrors();
@@ -548,7 +542,6 @@
         }
     }
 
-    // Save Address (AJAX)
     addressForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         clearErrors();
@@ -606,7 +599,6 @@
                 return;
             }
 
-            // Successfully saved address — reload page to reflect updated address list
             closeModal();
             if (typeof showToast === 'function') {
                 showToast(addressId ? 'Address updated' : 'Address added', 'success');
@@ -623,7 +615,6 @@
         }
     });
 
-    // Payment method radio change handling
     const placeOrderBtnText = document.getElementById('placeOrderBtnText');
     function updatePaymentBtnText() {
         const selectedMethod = document.querySelector('input[name="paymentMethodRadio"]:checked')?.value;
@@ -641,7 +632,6 @@
     });
     updatePaymentBtnText();
 
-    // Coupon Apply & Remove
     const applyCouponBtn = document.getElementById('applyCouponBtn');
     const couponCodeInput = document.getElementById('couponCodeInput');
     const couponSelectDropdown = document.getElementById('couponSelectDropdown');
@@ -720,11 +710,9 @@
         });
     }
 
-    // Place Order handler (COD, WALLET, ONLINE)
     placeOrderBtn.addEventListener('click', async function (e) {
         e.preventDefault();
 
-        // 1. Validate that an address is selected
         const selectedRadio = document.querySelector('input[name="selectedAddressRadio"]:checked');
         const addressId = selectedRadio ? selectedRadio.value : currentAddressId;
 
@@ -737,7 +725,6 @@
 
         const selectedPaymentMethod = document.querySelector('input[name="paymentMethodRadio"]:checked')?.value || 'ONLINE';
 
-        // Prevent duplicate submissions
         if (placeOrderBtn.disabled) return;
         placeOrderBtn.disabled = true;
         const originalText = placeOrderBtn.innerHTML;
@@ -779,7 +766,6 @@
                 return;
             }
 
-            // Online Razorpay Payment flow
             if (data.isOnline && data.razorpay) {
                 const options = {
                     key: data.razorpay.keyId,
@@ -834,7 +820,6 @@
                 return;
             }
 
-            // Direct success (COD or Wallet)
             if (data.redirectUrl) {
                 if (typeof updateNavCartCount === 'function') {
                     updateNavCartCount(0);

@@ -15,7 +15,7 @@ const getCategories = async ({ search = "", page = 1, limit = 10 }) => {
 
     const [categories, totalCategories] = await Promise.all([
         Category.find(query)
-            .sort({ createdAt: -1 }) // newest first
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(safeLimit),
 
@@ -115,11 +115,6 @@ const toggleCategoryStatus = async (categoryId) => {
     return { success: true, category };
 };
 
-/**
- * Soft delete: the document is never physically removed from MongoDB.
- * It's marked isDeleted + deletedAt, and every user-facing / admin-listing
- * query filters isDeleted: false, so it simply stops appearing anywhere.
- */
 const softDeleteCategory = async (categoryId) => {
     const category = await Category.findOne({ _id: categoryId, isDeleted: false });
     if (!category) {

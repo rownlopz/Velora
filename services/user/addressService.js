@@ -119,14 +119,11 @@ const setDefaultAddress = async (userId, addressId) => {
         return { success: false, message: "Address not found" };
     }
 
-    // Single-document atomic claim on User
     await User.findByIdAndUpdate(userId, { $set: { defaultAddressId: addressId } });
 
-    // Read the winner address ID
     const user = await User.findById(userId);
     const authoritativeId = user?.defaultAddressId || addressId;
 
-    // Synchronize Address documents so exactly the authoritative winner is default
     await Address.updateMany({ userId, _id: { $ne: authoritativeId } }, { $set: { isDefault: false } });
     await Address.updateOne({ _id: authoritativeId, userId }, { $set: { isDefault: true } });
 

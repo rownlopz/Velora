@@ -40,7 +40,7 @@ const getBestActiveOffer = async (productId, categoryId, now = new Date(), regul
                 savings = Math.min(regPrice, off.discountValue);
             }
         } else {
-            // When regularPrice is not known, compare discount rates / values as fallback
+
             savings = off.discountValue;
         }
 
@@ -48,7 +48,7 @@ const getBestActiveOffer = async (productId, categoryId, now = new Date(), regul
             highestSavings = savings;
             bestOffer = off;
         } else if (savings === highestSavings && bestOffer) {
-            // Tie-break: product-specific offer wins over category offer
+
             if (off.offerType === "PRODUCT" && bestOffer.offerType === "CATEGORY") {
                 bestOffer = off;
             }
@@ -112,7 +112,6 @@ const calculateItemPrice = (variant, product, offer = null) => {
     };
 };
 
-
 const getAuthoritativeItemPrice = async (variant, product, now = new Date()) => {
     if (!variant) return { displayPrice: 0, regularPrice: 0, effectiveUnitPrice: 0, appliedOffer: null };
     const regPrice = Number(variant.regularPrice) || 0;
@@ -131,7 +130,7 @@ const getAuthoritativeItemPrice = async (variant, product, now = new Date()) => 
     };
 };
 
-const TAX_RATE = 0.05; // 5% fixed tax rate
+const TAX_RATE = 0.05;
 
 const isItemAvailable = (item) => {
     if (!item) return false;
@@ -144,11 +143,9 @@ const isItemAvailable = (item) => {
     return true;
 };
 
-
 const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) => {
     if (!items || items.length === 0) return items || [];
 
-    // Eligible items are those where isAvailable !== false and lineTotal > 0
     const totalSubtotalPaise = Math.round(
         items.reduce((sum, i) => {
             if (i.isAvailable === false) return sum;
@@ -157,7 +154,6 @@ const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) =>
     );
     const couponPaise = Math.round((Number(totalCouponDiscount) || 0) * 100);
 
-    // 1. Coupon allocation in integer paise
     let allocatedCouponSumPaise = 0;
     const allocatedItems = items.map((item) => {
         const isEligible = item.isAvailable !== false && (Number(item.lineTotal) || 0) > 0;
@@ -176,7 +172,6 @@ const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) =>
         };
     });
 
-    // Distribute remainder coupon paise to largest line total eligible items
     let remainderCouponPaise = couponPaise - allocatedCouponSumPaise;
     if (remainderCouponPaise > 0) {
         const sortedIndices = allocatedItems
@@ -190,8 +185,6 @@ const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) =>
         }
     }
 
-    // 2. Tax calculation and allocation in integer paise
-    // Taxable merchandise amount = merchandise subtotal after offers minus coupon discount
     const taxableAmountPaise = Math.max(0, totalSubtotalPaise - couponPaise);
     const totalTaxPaise = Math.round((taxableAmountPaise * Math.round(taxRate * 100)) / 100);
 
@@ -212,7 +205,6 @@ const allocateCouponAndTax = (items, totalCouponDiscount, taxRate = TAX_RATE) =>
         allocatedTaxSumPaise += itemTaxSharePaise;
     });
 
-    // Distribute remainder tax paise to largest taxable eligible items
     let remainderTaxPaise = totalTaxPaise - allocatedTaxSumPaise;
     if (remainderTaxPaise > 0) {
         const sortedIndices = allocatedItems
@@ -248,13 +240,12 @@ const allocateCouponDiscount = (items, totalCouponDiscount) => {
     return allocateCouponAndTax(items, totalCouponDiscount, 0);
 };
 
-
 const calculateCartPricing = async (cartItems, couponCode = "", userId = null) => {
     const now = new Date();
     const pricedItems = [];
 
-    let rawSubtotal = 0; // based on original regular prices
-    let effectiveSubtotal = 0; // based on post-offer prices
+    let rawSubtotal = 0;
+    let effectiveSubtotal = 0;
     let totalOfferDiscount = 0;
     let totalSaleDiscount = 0;
 
@@ -270,17 +261,14 @@ const calculateCartPricing = async (cartItems, couponCode = "", userId = null) =
         const lineRegularTotal = pricing.regularPrice * quantity;
         const lineEffectiveTotal = pricing.effectiveUnitPrice * quantity;
 
-        // Promotional offer discount applies ONLY when an active offer is applied
         const unitOfferDiscount = pricing.appliedOffer ? (Number(pricing.appliedOffer.unitDiscount) || 0) : 0;
         const lineOfferDiscount = unitOfferDiscount * quantity;
 
-        // Normal catalogue sale discount applies when effective unit price is reduced without an active offer
         const unitSaleDiscount = !pricing.appliedOffer ? Math.max(0, pricing.regularPrice - pricing.effectiveUnitPrice) : 0;
         const lineSaleDiscount = unitSaleDiscount * quantity;
 
         const isEligible = isItemAvailable(item);
 
-        // Only available items contribute to subtotal calculations (Finding 76 & Bug 11)
         if (isEligible) {
             rawSubtotal += lineRegularTotal;
             effectiveSubtotal += lineEffectiveTotal;
@@ -320,7 +308,6 @@ const calculateCartPricing = async (cartItems, couponCode = "", userId = null) =
         });
     }
 
-    // Evaluate Coupon if provided
     let couponDiscount = 0;
     let appliedCoupon = null;
     let couponError = null;
@@ -354,7 +341,7 @@ const calculateCartPricing = async (cartItems, couponCode = "", userId = null) =
         } else if (coupon.usageLimit != null && coupon.usedCount >= coupon.usageLimit) {
             couponError = "This coupon has reached its maximum usage limit.";
         } else {
-            // Check per-user limit
+
             if (userId) {
                 const userUsage = coupon.usersUsed?.find(
                     (u) => u.userId.toString() === userId.toString()
@@ -400,7 +387,6 @@ const calculateCartPricing = async (cartItems, couponCode = "", userId = null) =
     const taxAmount = taxAmountPaise / 100;
     const totalAmount = totalAmountPaise / 100;
 
-    // Allocate order-level coupon discount and 5% tax deterministically across items
     const finalItems = allocateCouponAndTax(pricedItems, couponDiscount, TAX_RATE);
 
     return {

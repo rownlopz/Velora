@@ -14,9 +14,9 @@ const passport = require("./config/passport");
 const { startReservationExpiryCron } = require("./services/user/orderService");
 
 const app = express();
-//Connect Database
+
 connectDB();
-//Middleware
+
 app.use(express.json({
     verify: (req, res, buf) => {
         req.rawBody = buf;
@@ -31,11 +31,10 @@ app.use((req, res, next) => {
     next();
 });
 
-//ViewEngine
 app.set("view engine", "ejs");
-//Static Folder
+
 app.use(express.static(path.join(__dirname, "public")));
-//Routes
+
 app.use("/admin", adminRoute);
 app.use("/", userRoute);
 

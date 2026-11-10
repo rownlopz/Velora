@@ -92,9 +92,6 @@
 </header>
 
 <script>
-// ============================================================
-// Toast System
-// ============================================================
 (function () {
     const COLORS = {
         success: { bg: '#000', border: '#333', icon: '✓' },
@@ -138,7 +135,6 @@
         toast.appendChild(closeBtn);
         container.appendChild(toast);
 
-        // Animate in
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 toast.style.opacity = '1';
@@ -146,7 +142,6 @@
             });
         });
 
-        // Auto-dismiss
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateX(24px)';
@@ -154,12 +149,10 @@
         }, duration);
     };
 
-    // Override browser alert with Toast system
     window.alert = function (message) {
         window.showToast(message, 'info');
     };
 
-    // Automatically show toast if cartSuccess, cartError, or notice exists in URL parameters
     window.addEventListener('DOMContentLoaded', function () {
         try {
             const params = new URLSearchParams(window.location.search);
@@ -171,9 +164,6 @@
         } catch (e) {}
     });
 
-    // ============================================================
-    // Confirm Dialog
-    // ============================================================
     let _confirmCallback = null;
     window.showConfirm = function (message, onConfirm, confirmLabel) {
         document.getElementById('confirmMessage').textContent = message;
@@ -198,9 +188,6 @@
         }
     });
 
-    // ============================================================
-    // Navbar badge update helper — called after cart/wishlist changes
-    // ============================================================
     window.updateNavCartCount = function (count) {
         const badge = document.getElementById('cartBadge');
         if (!badge) return;

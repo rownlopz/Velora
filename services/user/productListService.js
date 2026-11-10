@@ -5,7 +5,7 @@ const escapeRegex = require("../../utils/escapeRegex");
 
 const parseListingQuery = (query = {}) => {
     const search = typeof query.search === "string" ? query.search.trim() : "";
-    
+
     const parseArrayOrCsv = (val) => {
         if (Array.isArray(val)) {
             return val.map(s => (typeof s === "string" ? s.trim() : "")).filter(Boolean);
@@ -55,7 +55,6 @@ const listProducts = async (filters, limit = 12) => {
 
     const pipeline = [];
 
-    // Only show ACTIVE, non-deleted products to users
     const baseMatch = { isDeleted: false, status: "ACTIVE" };
     if (search) {
         const escaped = escapeRegex(search);
@@ -66,9 +65,8 @@ const listProducts = async (filters, limit = 12) => {
     }
     pipeline.push({ $match: baseMatch });
 
-  
     if (categories && categories.length > 0) {
-        // Only allow filtering by active, non-deleted categories
+
         const catDocs = await Category.find({ slug: { $in: categories }, isDeleted: false, isActive: true });
         const catIds = catDocs.map(c => c._id);
         if (catIds.length > 0) {
@@ -78,7 +76,6 @@ const listProducts = async (filters, limit = 12) => {
         }
     }
 
-    // Join the category doc — only include products with active, non-deleted categories.
     pipeline.push({
         $lookup: {
             from: "categories",
@@ -92,14 +89,13 @@ const listProducts = async (filters, limit = 12) => {
             categoryDoc: { $arrayElemAt: ["$categoryDoc", 0] },
         },
     });
-    // Exclude products whose category is inactive or deleted
+
     pipeline.push({
         $match: {
             "categoryDoc.isActive": true,
             "categoryDoc.isDeleted": false,
         },
     });
-
 
     const variantPipeline = [
         { $match: { $expr: { $eq: ["$productId", "$$productId"] }, isActive: true } },
@@ -108,7 +104,7 @@ const listProducts = async (filters, limit = 12) => {
         variantPipeline.push({ $match: { size: { $in: sizes } } });
     }
     if (colors && colors.length > 0) {
-        // Case-insensitive color matching using regex
+
         const colorRegexes = colors.map(c => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"));
         variantPipeline.push({ $match: { color: { $in: colorRegexes } } });
     }
@@ -122,7 +118,6 @@ const listProducts = async (filters, limit = 12) => {
         },
     });
 
-    // A product with zero active variants has no price info — exclude it.
     pipeline.push({ $match: { "activeVariants.0": { $exists: true } } });
 
     const now = new Date();
@@ -252,7 +247,6 @@ const listProducts = async (filters, limit = 12) => {
         },
     });
 
-
     if (minPrice !== undefined || maxPrice !== undefined) {
         const priceMatch = {};
         if (minPrice !== undefined) priceMatch.$gte = minPrice;
@@ -315,7 +309,6 @@ const listProducts = async (filters, limit = 12) => {
     };
 };
 
-
 const getListingFilterOptions = async () => {
     const categories = await Category.find({ isDeleted: false, isActive: true }).sort({ name: 1 });
     const activeCatIds = categories.map(c => c._id);
@@ -340,7 +333,6 @@ const getListingFilterOptions = async () => {
         },
     ]);
 
-    
     const [variantAttributes] = await Product.aggregate([
         { $match: { isDeleted: false, status: "ACTIVE", categoryId: { $in: activeCatIds } } },
         {

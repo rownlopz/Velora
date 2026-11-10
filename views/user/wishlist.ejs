@@ -187,7 +187,6 @@
         }
     }
 
-    // ---- Remove from wishlist ----
     document.addEventListener('click', async function (e) {
         const btn = e.target.closest('.remove-wishlist-btn');
         if (!btn) return;
@@ -213,7 +212,6 @@
         }
     });
 
-    // ---- Move to Cart from Wishlist ----
     document.addEventListener('click', async function (e) {
         const btn = e.target.closest('.move-to-cart-btn');
         if (!btn) return;

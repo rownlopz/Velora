@@ -340,7 +340,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const endpoint = inWishlist 
                     ? `/wishlist/${variantId}/remove` 
                     : '/wishlist/add';
-                
+
                 const options = inWishlist
                     ? {
                         method: 'POST',
@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (data.success) {
                     const nowInWishlist = !inWishlist;
                     this.dataset.inWishlist = nowInWishlist ? 'true' : 'false';
-                    
+
                     const svg = this.querySelector('svg');
                     if (nowInWishlist) {
                         this.classList.add('active');
@@ -422,7 +422,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // Add to Cart from product listing
     document.addEventListener('click', async function (e) {
         const btn = e.target.closest('.add-to-cart-listing-btn');
         if (!btn) return;

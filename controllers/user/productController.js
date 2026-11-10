@@ -39,9 +39,9 @@ const loadCategories = async (req, res, next) => {
     try {
         const Category = require("../../models/product/categoryModel");
         const Product = require("../../models/product/productModel");
-        
+
         const categories = await Category.find({ isDeleted: false, isActive: true }).sort({ name: 1 }).lean();
-        
+
         for (const cat of categories) {
             const product = await Product.findOne({ categoryId: cat._id, isDeleted: false, status: "ACTIVE" }).select("thumbnail").lean();
             cat.image = product ? product.thumbnail : "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg";
@@ -58,7 +58,7 @@ const loadProductDetail = async (req, res) => {
         const result = await getProductDetail(req.params.slug);
 
         if (!result.success) {
-            // Product not found, unlisted, or category inactive — redirect to shop.
+
             return res.redirect(`/products?notice=${encodeURIComponent(result.message)}`);
         }
 

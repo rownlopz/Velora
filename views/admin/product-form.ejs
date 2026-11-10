@@ -207,7 +207,6 @@
             console.log(type, message);
         };
 
-        // ---- Dynamic variant rows ----
         let variantIndex = document.querySelectorAll('#variantRows .variant-row').length;
         function addVariantRow() {
             const container = document.getElementById('variantRows');
@@ -235,7 +234,6 @@
             variantIndex++;
         }
 
-        // ---- Manage image count and primary badge ----
         function updateImageBadgesAndCount() {
             const allTiles = [
                 ...document.querySelectorAll('.existing-image-tile'),
@@ -266,7 +264,6 @@
             }
         }
 
-        // ---- Remove existing images ----
         function removeExistingImage(btn) {
             const tile = btn.closest('.existing-image-tile');
             if (!tile) return;
@@ -275,13 +272,12 @@
             showAdminToast('Image removed', 'info');
         }
 
-        // ---- Image select → crop queue → preview ----
         const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
         const MAX_SIZE = 5 * 1024 * 1024;
         let cropQueue = [];
         let cropQueueIndex = 0;
         let cropper = null;
-        let croppedFiles = []; // File objects that will actually be submitted
+        let croppedFiles = [];
 
         document.getElementById('imageInput').addEventListener('change', (e) => {
             const files = Array.from(e.target.files).filter(f => {
@@ -358,7 +354,6 @@
         }
 
         function removeNewImage(btn, index) {
-            // Mark as removed — set to null so indices stay stable
             croppedFiles[index] = null;
             btn.closest('.new-image-tile').remove();
             syncFileInput();
@@ -366,14 +361,12 @@
             showAdminToast('Image removed', 'info');
         }
 
-        // Replaces the file input's FileList with our non-null cropped versions
         function syncFileInput() {
             const dataTransfer = new DataTransfer();
             croppedFiles.forEach(f => { if (f) dataTransfer.items.add(f); });
             document.getElementById('imageInput').files = dataTransfer.files;
         }
 
-        // ---- Client-side validation — does NOT reload the page ----
         function handleFormSubmit() {
             const errorBanner = document.getElementById('clientValidationError');
             errorBanner.classList.add('hidden');
@@ -485,7 +478,6 @@
             document.getElementById('productForm').submit();
         }
 
-        // Initialize on load
         window.addEventListener('DOMContentLoaded', () => {
             updateImageBadgesAndCount();
             const serverErr = document.getElementById('serverValidationError');

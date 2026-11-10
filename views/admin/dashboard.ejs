@@ -243,7 +243,6 @@
         const revenueValues = chartData.map(d => Number(d.totalRevenue) || 0);
         const orderValues = chartData.map(d => Number(d.orderCount) || 0);
 
-        // Revenue Line Chart
         const revCanvas = document.getElementById('revenueChart');
         if (revCanvas) {
             const ctx = revCanvas.getContext('2d');
@@ -322,7 +321,6 @@
             });
         }
 
-        // Orders Bar Chart
         const ordCanvas = document.getElementById('ordersChart');
         if (ordCanvas) {
             new Chart(ordCanvas, {

@@ -1,9 +1,5 @@
 const PDFDocument = require("pdfkit");
 
-/**
- * Generates and streams a professional, multipage-safe PDF tax invoice
- * using authoritative purchase snapshots and current order adjustments.
- */
 const generateInvoicePdf = (order, res) => {
     const doc = new PDFDocument({
         margin: 50,
@@ -23,7 +19,7 @@ const generateInvoicePdf = (order, res) => {
 
     const printHeader = (isFirstPage = true) => {
         if (isFirstPage) {
-            // Header Branding
+
             doc
                 .fontSize(22)
                 .font("Helvetica-Bold")
@@ -35,7 +31,6 @@ const generateInvoicePdf = (order, res) => {
                 .text("Contemporary Luxury & Timeless Fashion", 50, 72)
                 .text("www.velorastore.com | support@velora.com", 50, 84);
 
-            // Invoice Meta (Right side)
             doc
                 .fontSize(15)
                 .font("Helvetica-Bold")
@@ -70,7 +65,6 @@ const generateInvoicePdf = (order, res) => {
 
             doc.moveTo(50, headerBottom).lineTo(545, headerBottom).strokeColor("#e5e7eb").lineWidth(1).stroke();
 
-            // Shipping Address with dynamic text measurement
             let shipY = headerBottom + 10;
             doc
                 .fontSize(9)
@@ -98,7 +92,7 @@ const generateInvoicePdf = (order, res) => {
 
             return shipY;
         } else {
-            // Continuation header for multipage documents
+
             doc
                 .fontSize(9)
                 .font("Helvetica")
@@ -138,7 +132,6 @@ const generateInvoicePdf = (order, res) => {
         }
     };
 
-    // Render Items with dynamic height measurement
     order.items.forEach((item) => {
         const itemStatus = (item.status || "PENDING").toUpperCase();
         const isItemCancelled = itemStatus === "CANCELLED" || isOrderCancelled;
@@ -178,7 +171,6 @@ const generateInvoicePdf = (order, res) => {
         const rowHeight = Math.max(descHeight, 14) + reasonHeight + feedbackHeight + 8;
         checkPageBreak(rowHeight);
 
-        // Print row details
         doc
             .fontSize(8)
             .font(isItemCancelled ? "Helvetica-Oblique" : isItemReturned ? "Helvetica-Oblique" : "Helvetica")
@@ -218,8 +210,7 @@ const generateInvoicePdf = (order, res) => {
         doc.moveTo(50, currentY - 2).lineTo(545, currentY - 2).strokeColor("#f3f4f6").lineWidth(0.5).stroke();
     });
 
-    // Summary Section with dynamic height calculation
-    let summaryHeight = 65; // base lines + dividers + total
+    let summaryHeight = 65;
     if (order.pricing?.taxAmount > 0) summaryHeight += 15;
     if (order.pricing?.discount > 0) summaryHeight += 15;
     if (order.pricing?.cancellationDeduction > 0) summaryHeight += 15;
@@ -331,7 +322,6 @@ const generateInvoicePdf = (order, res) => {
         .text("Total Payable / Paid:", summaryLabelX, currentY)
         .text(`INR ${finalPayable.toLocaleString("en-IN")}`, summaryValX, currentY, { width: summaryValWidth, align: "right" });
 
-    // Dynamic Safe Footer (Guaranteed not to overlap)
     if (currentY + 60 > 770) {
         doc.addPage();
         currentY = 50;

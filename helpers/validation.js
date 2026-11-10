@@ -1,12 +1,8 @@
-/**
- * Validates signup form data.
- * Returns an object with field-level error messages or null if all fields are valid.
- */
+
 const validateSignup = (data) => {
     const errors = {};
     const { fullName, email, phone, password, confirmPassword } = data;
 
-    // Full Name validation
     if (!fullName || !fullName.trim()) {
         errors.fullName = "Full name is required";
     } else if (fullName.trim().length < 2) {
@@ -15,7 +11,6 @@ const validateSignup = (data) => {
         errors.fullName = "Full name can only contain letters and spaces";
     }
 
-    // Email validation
     const emailRegex = /^[a-zA-Z0-9]+([._%+-][a-zA-Z0-9]+)*@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     if (!email || !email.trim()) {
         errors.email = "Email address is required";
@@ -23,7 +18,6 @@ const validateSignup = (data) => {
         errors.email = "Please enter a valid email address";
     }
 
-    // Phone validation (10 digits starting with 6-9, non-repeating)
     const phoneRegex = /^[6-9]\d{9}$/;
     const phoneVal = phone ? phone.trim() : "";
     const isRepeatingPhone = /^(\d)\1{9}$/.test(phoneVal);
@@ -33,7 +27,6 @@ const validateSignup = (data) => {
         errors.phone = "Please enter a valid 10-digit mobile number";
     }
 
-    // Password validation
     if (!password) {
         errors.password = "Password is required";
     } else if (password.length < 8) {
@@ -42,7 +35,6 @@ const validateSignup = (data) => {
         errors.password = "Password must contain at least one letter and one number";
     }
 
-    // Confirm Password validation
     if (!confirmPassword) {
         errors.confirmPassword = "Please confirm your password";
     } else if (password !== confirmPassword) {
@@ -51,7 +43,6 @@ const validateSignup = (data) => {
 
     return Object.keys(errors).length > 0 ? errors : null;
 };
-
 
 const validateFullName = (fullName) => {
     if (!fullName || !fullName.trim()) return "Full name is required";

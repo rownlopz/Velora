@@ -34,7 +34,6 @@ const runStartupMigrations = async () => {
             }
         }
 
-        // Deduplicate product slugs before ensuring unique index on products.slug
         const productCollection = db.collection("products");
         if (productCollection) {
             const duplicateSlugGroups = await productCollection
@@ -46,7 +45,7 @@ const runStartupMigrations = async () => {
                 .toArray();
 
             for (const group of duplicateSlugGroups) {
-                // Keep the first document, rename subsequent duplicates without deleting any
+
                 const docs = group.docs;
                 for (let i = 1; i < docs.length; i++) {
                     const doc = docs[i];
@@ -63,7 +62,6 @@ const runStartupMigrations = async () => {
                 }
             }
 
-            // Fill missing or blank slugs safely
             const missingSlugProducts = await productCollection
                 .find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: "" }] })
                 .toArray();

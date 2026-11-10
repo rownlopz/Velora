@@ -22,7 +22,6 @@ const {
 const { applyCoupon, removeCoupon } = require("../../services/user/cartService");
 const { getWalletDetails } = require("../../services/user/walletService");
 
-// Clean helper to handle action responses (AJAX JSON vs HTML redirect)
 const handleActionResponse = (req, res, result, redirectUrl, fallbackMsg = "Action failed") => {
     const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
     if (!result.success) {
@@ -88,7 +87,6 @@ const placeOrderController = async (req, res) => {
             return res.redirect(`/checkout?notice=${encodeURIComponent(msg)}`);
         }
 
-        // Recover existing order on lost response or retry before session token check
         if (checkoutToken) {
             const existingOrder = await Order.findOne({ checkoutToken: checkoutToken.trim(), userId: req.session.userId });
             if (existingOrder) {
@@ -255,7 +253,6 @@ const retryPaymentController = async (req, res) => {
     try {
         const result = await retryOrderPayment(req.session.userId, req.params.orderId);
 
-        // 1. Order is already paid or successfully recovered to COMPLETED status
         if (result.isAlreadyPaid || (result.order && result.order.paymentStatus === "COMPLETED")) {
             const destOrder = result.order;
             const redirectUrl = destOrder.paymentMethod === "COD"
@@ -271,7 +268,6 @@ const retryPaymentController = async (req, res) => {
             });
         }
 
-        // 2. Late payment belongs to a cancelled order and was refunded to wallet
         if (result.isCancelledLateRefund || result.isAlreadyRefunded) {
             const destOrder = result.order;
             const noticeMsg = result.message || "Order was cancelled and payment has been refunded to your wallet.";
@@ -286,7 +282,6 @@ const retryPaymentController = async (req, res) => {
             });
         }
 
-        // 3. Genuine failure (unresolved lookup, lock contention, verification error, cancelled order without payment)
         if (!result.success) {
             return res.status(400).json({
                 success: false,
@@ -296,7 +291,6 @@ const retryPaymentController = async (req, res) => {
             });
         }
 
-        // 4. Safely retryable with valid new Razorpay checkout configuration
         return res.json({
             success: true,
             order: result.order,
@@ -310,7 +304,7 @@ const retryPaymentController = async (req, res) => {
 };
 
 const razorpayWebhookController = async (req, res) => {
-    // Disable/unmount unused webhook endpoint so it cannot perform financial mutations (Constraint)
+
     return res.status(403).json({
         success: false,
         message: "Razorpay webhooks are disabled for this stage. No mutations will be performed.",

@@ -9,7 +9,6 @@ const { setUserLocals } = require("../../middlewares/sessionLocals");
 router.use(userSessionConfig);
 router.use(setUserLocals);
 
-// Clean up any accidentally quoted or encoded URLs (e.g. /%22/checkout%22 -> /checkout)
 router.use((req, res, next) => {
     if (req.url.includes('%22') || req.url.includes('"')) {
         const cleanUrl = '/' + req.url.replace(/%22|"/g, '').replace(/^\/+/, '');
@@ -31,7 +30,6 @@ const cartController = require("../../controllers/user/cartController");
 const wishlistController = require("../../controllers/user/wishlistController");
 const orderController = require("../../controllers/user/orderController");
 
-// Protected User Routes
 router.get("/", userAuth, userController.loadHome);
 router.get("/products", productController.loadProducts);
 router.get("/products/:slug/variants", productController.getProductVariantsController);
@@ -44,18 +42,15 @@ router.post("/cart/:variantId/increment", userAuth, cartController.incrementCont
 router.post("/cart/:variantId/decrement", userAuth, cartController.decrementController);
 router.post("/cart/:variantId/remove", userAuth, cartController.removeController);
 
-// Checkout & Orders
 router.get("/checkout", userAuth, orderController.loadCheckout);
 router.get("/check-out", (req, res) => res.redirect("/checkout"));
 router.get("/cart/checkout", (req, res) => res.redirect("/checkout"));
 router.get(['/%22/checkout%22', '/"checkout"', '/"/checkout"'], (req, res) => res.redirect("/checkout"));
 router.post("/checkout/place-order", userAuth, orderController.placeOrderController);
 
-// Coupon Actions
 router.post("/checkout/apply-coupon", userAuth, orderController.applyCouponController);
 router.post("/checkout/remove-coupon", userAuth, orderController.removeCouponController);
 
-// Razorpay Online Payment Verification & Retry
 router.post("/checkout/verify-razorpay", userAuth, orderController.verifyRazorpayPaymentController);
 router.get("/orders/:orderId/payment-status", userAuth, orderController.getPaymentStatusController);
 router.get("/orders/:orderId/payment-success", userAuth, orderController.loadPaymentSuccess);
@@ -63,20 +58,16 @@ router.get("/orders/:orderId/payment-failed", userAuth, orderController.loadPaym
 router.post("/orders/:orderId/retry-payment", userAuth, orderController.retryPaymentController);
 router.post("/webhook/razorpay", orderController.razorpayWebhookController);
 
-// Wallet Management
 router.get("/wallet", userAuth, orderController.loadWallet);
 
-// Order Management Routes
 router.get("/orders", userAuth, orderController.loadOrderList);
 router.get("/orders/:orderId/success", userAuth, orderController.loadOrderSuccess);
 router.get("/orders/:orderId/invoice", userAuth, orderController.downloadInvoiceController);
 router.get("/orders/:orderId", userAuth, orderController.loadOrderDetails);
 
-// Order & Item Cancellation
 router.post("/orders/:orderId/cancel", userAuth, orderController.cancelOrderController);
 router.post("/orders/:orderId/items/:itemId/cancel", userAuth, orderController.cancelOrderItemController);
 
-// Order & Item Returns (delivered only)
 router.post("/orders/:orderId/return", userAuth, orderController.returnOrderController);
 router.post("/orders/:orderId/items/:itemId/return", userAuth, orderController.returnOrderItemController);
 
@@ -84,7 +75,6 @@ router.get("/wishlist", userAuth, wishlistController.loadWishlist);
 router.post("/wishlist/add", userAuth, wishlistController.addToWishlistController);
 router.post("/wishlist/:variantId/remove", userAuth, wishlistController.removeFromWishlistController);
 
-// Guest Auth Routes
 router.get("/signup", isGuest, userController.loadSignup);
 router.post("/signup", isGuest, userController.signup);
 
@@ -105,11 +95,9 @@ router.get("/logout", (req, res) => {
     req.session.destroy(() => res.redirect("/login"));
 });
 
-// Google SSO
 router.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"], session: false }));
 router.get("/auth/google/callback", googleAuthController.googleCallback);
 
-// Profile
 router.get("/profile", userAuth, profileController.loadProfile);
 router.get("/profile/edit", userAuth, profileController.loadEditProfile);
 router.post("/profile/edit", userAuth, handleAvatarUpload, profileController.updateProfileController);
@@ -122,7 +110,6 @@ router.post("/profile/change-email", userAuth, profileController.requestEmailCha
 router.post("/profile/change-email/verify", userAuth, profileController.confirmEmailChangeController);
 router.post("/profile/change-email/resend-otp", userAuth, profileController.resendEmailChangeOtpController);
 
-// Address Management
 router.get("/addresses", userAuth, addressController.loadAddresses);
 router.get("/addresses/add", userAuth, addressController.loadAddAddress);
 router.post("/addresses/add", userAuth, addressController.addAddressController);

@@ -137,7 +137,7 @@
 
                     <!-- Left: Items & Fulfillment Notes (2 cols) -->
                     <div class="lg:col-span-2 space-y-8">
-                        
+
                         <!-- Order Items Card with Independent Process -->
                         <div class="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-xs">
                             <div class="flex items-center justify-between pb-4 border-b border-neutral-100 mb-6">
@@ -233,7 +233,7 @@
 
                                         <!-- Item Status Process Controls & Return Approval Row -->
                                         <div class="bg-neutral-50/80 p-3.5 rounded-xl border border-neutral-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-                                            
+
                                             <!-- Return Requested Admin Action Bar -->
                                             <% if (itmSt === 'RETURN_REQUESTED') { %>
                                                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
@@ -414,7 +414,7 @@
 
                     <!-- Right Column: Customer Details, Shipping, Financials (1 col) -->
                     <div class="space-y-8">
-                        
+
                         <!-- Customer Details Card -->
                         <div class="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs">
                             <h2 class="text-base font-semibold text-neutral-900 pb-3 border-b border-neutral-100 mb-4 flex items-center justify-between">
@@ -682,7 +682,6 @@
             }, 4000);
         }
 
-        // Check URL params for messages without double-decoding
         const params = new URLSearchParams(window.location.search);
         if (params.get('success')) {
             showNotification(params.get('success'), 'success');
@@ -712,7 +711,6 @@
             document.getElementById('rejectReturnModal').classList.add('hidden');
         }
 
-        // Bind data-attribute event listeners for safe quote handling
         document.addEventListener('click', function (e) {
             const approveBtn = e.target.closest('.approve-return-trigger-btn');
             if (approveBtn) {

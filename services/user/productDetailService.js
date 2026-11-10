@@ -3,7 +3,6 @@ const Variant = require("../../models/product/variantModel");
 const Category = require("../../models/product/categoryModel");
 const Review = require("../../models/product/reviewModel");
 
-
 const { getAuthoritativeItemPrice } = require("../common/pricingService");
 
 const getProductDetail = async (slug) => {
@@ -13,12 +12,10 @@ const getProductDetail = async (slug) => {
         return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
     }
 
-    // Block access to INACTIVE products — treat them as if they don't exist for users.
     if (product.status !== "ACTIVE") {
         return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
     }
 
-    // Also block if the category is inactive/deleted.
     const categoryInactive =
         !product.categoryId ||
         product.categoryId.isDeleted === true ||
@@ -28,12 +25,12 @@ const getProductDetail = async (slug) => {
         return { success: false, reason: "NOT_FOUND", message: "This product could not be found." };
     }
 
-    const isUnavailable = false; // Only active products in active categories reach here
+    const isUnavailable = false;
 
     const rawVariants = await Variant.find({ productId: product._id, isActive: true }).sort({ createdAt: 1 });
 
     if (rawVariants.length === 0) {
-        // No purchasable variants at all — nothing to show.
+
         return { success: false, reason: "UNAVAILABLE", message: "This product is currently unavailable." };
     }
 
@@ -104,7 +101,6 @@ const getProductDetail = async (slug) => {
     };
 };
 
-
 const checkVariantAvailability = async (variantId) => {
     const variant = await Variant.findById(variantId);
     if (!variant || !variant.isActive) {
@@ -116,7 +112,6 @@ const checkVariantAvailability = async (variantId) => {
         return { available: false, reason: "This product is no longer available." };
     }
 
-    // Also check the category is active.
     const category = await Category.findOne({ _id: product.categoryId, isDeleted: false, isActive: true });
     if (!category) {
         return { available: false, reason: "This product is currently unavailable." };

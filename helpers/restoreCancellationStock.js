@@ -22,8 +22,6 @@ const restoreCancellationStock = async (orderId, item) => {
         return;
     }
 
-    // A repeated request is safe if this cancellation
-    // has already restored the stock.
     const alreadyRestored = await Variant.exists({
         _id: item.variantId,
         cancellationRestockKeys: key,

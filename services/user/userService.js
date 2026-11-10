@@ -127,7 +127,6 @@ const verifySignupOtp = async ({
         10
     );
 
-    // Generate unique referral ID for new user
     let candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
     while (await User.exists({ referralId: candidateRef })) {
         candidateRef = "VEL" + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -152,12 +151,8 @@ const verifySignupOtp = async ({
         referredBy: referrer ? referrer._id : null,
     });
 
-    // Ensure wallet exists for user
     await getOrCreateWallet(user._id);
 
-    // Process referral bonuses per confirmed policy:
-    // Referrer: ₹100 upon signup & email verification
-    // Referee: ₹50 upon signup & email verification
     if (referrer && referrer._id.toString() !== user._id.toString()) {
         await creditWallet({
             userId: referrer._id,
@@ -362,7 +357,6 @@ const verifyResetOtp = async ({ email, enteredOtp }) => {
     };
 };
 
-
 const resetPassword = async ({ email, password }) => {
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -385,7 +379,6 @@ const resetPassword = async ({ email, password }) => {
         success: true
     };
 };
-
 
 module.exports = {
     signupUser,

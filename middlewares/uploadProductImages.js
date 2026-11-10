@@ -3,11 +3,9 @@ const sharp = require("sharp");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 
-
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per image
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_IMAGES = 8;
-
 
 const storage = multer.memoryStorage();
 

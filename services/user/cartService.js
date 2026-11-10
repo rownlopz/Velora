@@ -5,7 +5,6 @@ const Category = require("../../models/product/categoryModel");
 const { checkVariantAvailability } = require("./productDetailService");
 const { removeFromWishlist } = require("./wishlistService");
 
-
 const MAX_QUANTITY_PER_ITEM = 5;
 
 const getOrCreateCart = async (userId) => {
@@ -15,7 +14,6 @@ const getOrCreateCart = async (userId) => {
     }
     return cart;
 };
-
 
 const { calculateCartPricing } = require("../common/pricingService");
 
@@ -53,7 +51,6 @@ const getCartDetails = async (userId, customCouponCode = null) => {
         })
     );
 
-    // Auto-remove unlisted/deleted products from the cart document.
     const unlistedVariantIds = rawItems
         .filter((i) => i.productUnlisted || !i.variant)
         .map((i) => i.variantId.toString());
@@ -67,14 +64,12 @@ const getCartDetails = async (userId, customCouponCode = null) => {
 
     const visibleItems = rawItems.filter((i) => !i.productUnlisted && i.variant);
 
-    // Determine coupon code to evaluate
     const effectiveCouponCode = customCouponCode !== null
         ? customCouponCode
         : (cart.appliedCoupon && cart.appliedCoupon.code ? cart.appliedCoupon.code : "");
 
     const pricing = await calculateCartPricing(visibleItems, effectiveCouponCode, userId);
 
-    // If a saved coupon is no longer valid, automatically clear it from cart
     if (cart.appliedCoupon && cart.appliedCoupon.code && pricing.couponError) {
         await Cart.updateOne({ userId }, { $set: { appliedCoupon: null } });
     } else if (pricing.appliedCoupon && (!cart.appliedCoupon || cart.appliedCoupon.code !== pricing.appliedCoupon.code)) {
@@ -95,7 +90,6 @@ const getCartDetails = async (userId, customCouponCode = null) => {
         );
     }
 
-    // Merge pricing outputs back into items
     const enrichedItems = pricing.items.map((pi, idx) => {
         const raw = visibleItems[idx];
         const isAvail = raw.isAvailable && pi.isAvailable !== false;

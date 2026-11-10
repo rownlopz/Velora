@@ -23,7 +23,6 @@
 
         <% if (typeof removedUnlistedCount !== 'undefined' && removedUnlistedCount > 0) { %>
             <script>
-                // Show toast after storeHeader scripts load
                 window.addEventListener('DOMContentLoaded', function () {
                     if (typeof showToast === 'function') {
                         showToast('Some unavailable products were removed from your cart.', 'warning');
@@ -48,7 +47,7 @@
                              data-variant-id="<%= item.variantId %>">
                             <div class="w-20 h-24 bg-gray-100 rounded-md overflow-hidden shrink-0">
                                 <% if (item.product && item.product.thumbnail) { %>
-                                    
+
                                     <img src="<%= item.product.thumbnail %>" class="w-full h-full object-cover">
                                 <% } %>
                             </div>
@@ -147,7 +146,6 @@
 
 <script>
 (function () {
-    // Format INR
     function fmtINR(n) {
         return '\u20b9' + Number(n).toLocaleString('en-IN');
     }
@@ -236,7 +234,6 @@
         }
     }
 
-    // ---- Increment ----
     document.addEventListener('click', async function (e) {
         const btn = e.target.closest('.increment-btn');
         if (!btn) return;
@@ -255,7 +252,6 @@
             if (!data.success) {
                 showToast(data.message || 'Unable to update cart', 'warning');
             } else {
-                // Update qty display
                 const row = btn.closest('.cart-item');
                 if (row && data.item) {
                     row.querySelector('.item-qty').textContent = data.item.quantity;
@@ -273,7 +269,6 @@
         }
     });
 
-    // ---- Decrement ----
     document.addEventListener('click', async function (e) {
         const btn = e.target.closest('.decrement-btn');
         if (!btn) return;
@@ -309,7 +304,6 @@
         }
     });
 
-    // ---- Remove ----
     document.addEventListener('click', function (e) {
         const btn = e.target.closest('.remove-btn');
         if (!btn) return;

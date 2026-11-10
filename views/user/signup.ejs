@@ -151,7 +151,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const passwordInput = document.getElementById("password");
     const confirmPasswordInput = document.getElementById("confirmPassword");
 
-    // Toggle password visibility
     document.querySelectorAll(".toggle-password").forEach((btn) => {
         btn.addEventListener("click", () => {
             const input = btn.previousElementSibling;
@@ -173,11 +172,9 @@ document.addEventListener("DOMContentLoaded", () => {
         errorEl.textContent = "";
     };
 
-    // Client-side validation on submit
     signupForm.addEventListener("submit", (e) => {
         let isValid = true;
 
-        // Full Name
         const fullNameVal = fullNameInput.value.trim();
         if (!fullNameVal) {
             showError(fullNameInput, document.getElementById("fullNameError"), "Full name is required");
@@ -192,7 +189,6 @@ document.addEventListener("DOMContentLoaded", () => {
             clearError(fullNameInput, document.getElementById("fullNameError"));
         }
 
-        // Email
         const emailVal = emailInput.value.trim();
         const emailRegex = /^[a-zA-Z0-9]+([._%+-][a-zA-Z0-9]+)*@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
         if (!emailVal) {
@@ -205,7 +201,6 @@ document.addEventListener("DOMContentLoaded", () => {
             clearError(emailInput, document.getElementById("emailError"));
         }
 
-        // Phone
         const phoneVal = phoneInput.value.trim();
         const phoneRegex = /^[6-9]\d{9}$/;
         const isRepeatingPhone = /^(\d)\1{9}$/.test(phoneVal);
@@ -219,7 +214,6 @@ document.addEventListener("DOMContentLoaded", () => {
             clearError(phoneInput, document.getElementById("phoneError"));
         }
 
-        // Password
         const passwordVal = passwordInput.value;
         if (!passwordVal) {
             showError(passwordInput, document.getElementById("passwordError"), "Password is required");
@@ -234,7 +228,6 @@ document.addEventListener("DOMContentLoaded", () => {
             clearError(passwordInput, document.getElementById("passwordError"));
         }
 
-        // Confirm Password
         const confirmVal = confirmPasswordInput.value;
         if (!confirmVal) {
             showError(confirmPasswordInput, document.getElementById("confirmPasswordError"), "Please confirm your password");
@@ -251,7 +244,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Real-time blur and input validation for email and phone
     const emailRegex = /^[a-zA-Z0-9]+([._%+-][a-zA-Z0-9]+)*@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     const phoneRegex = /^[6-9]\d{9}$/;
 

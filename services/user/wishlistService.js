@@ -36,7 +36,6 @@ const addToWishlist = async (userId, variantId) => {
         throw new Error("Product category is currently unavailable");
     }
 
-    // Atomic insert: ensure wishlist doc exists, then conditionally push if not already present
     await Wishlist.updateOne(
         { userId },
         { $setOnInsert: { userId, items: [] } },
@@ -69,7 +68,6 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8,} = {}) => {
     const clampedPage = Math.min(safePage, totalPages);
     const startIndex = (clampedPage - 1) * safeLimit;
 
-    // Sliced items in reverse chronological order
     const reversedItems = (wishlist.items || []).slice().reverse();
     const paginatedItems = reversedItems.slice(startIndex, startIndex + safeLimit);
 
@@ -77,24 +75,24 @@ const getWishlistDetails = async (userId, { page = 1, limit = 8,} = {}) => {
         paginatedItems.map(async (item) => {
             const variant = await Variant.findById(item.variantId);
             const product = variant ? await Product.findById(variant.productId) : null;
-            
-            const category = product && product.categoryId  
+
+            const category = product && product.categoryId
                 ? await Category.findById(product.categoryId)
                 : null;
 
             const isCategoryActive = Boolean(
-                category && 
+                category &&
                 !category.isDeleted &&
                 category.isActive
             );
-            
+
             const isProductListed = Boolean(
-                product && 
-                !product.isDeleted && 
+                product &&
+                !product.isDeleted &&
                 product.status === "ACTIVE" &&
                 isCategoryActive
             );
-            
+
             const variantCount = product ? await Variant.countDocuments({ productId: product._id, isActive: true }) : 0;
             const inStockVariantCount = product ? await Variant.countDocuments({ productId: product._id, isActive: true, stock: { $gt: 0 } }) : 0;
             const hasInStockVariants = inStockVariantCount > 0;

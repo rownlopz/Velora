@@ -13,7 +13,6 @@ const { getRazorpayInstance, isRazorpayConfigured } = require("../../config/razo
 const { recordCouponUsage, releaseCouponUsage } = require("../admin/couponService");
 const restoreCancellationStock = require("../../helpers/restoreCancellationStock");
 
-// Standard transparent shipping rule: Free delivery above ₹10,000, else ₹100
 const SHIPPING_THRESHOLD = 10000;
 const SHIPPING_FLAT_FEE = 100;
 
@@ -22,9 +21,6 @@ const calculateShippingFee = (subtotal) => {
     return subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT_FEE;
 };
 
-/**
- * 1. Load checkout summary (cart items, addresses, discounts, wallet balance)
- */
 const getCheckoutDetails = async (userId) => {
     const cartDetails = await getCartDetails(userId);
 
@@ -40,7 +36,6 @@ const getCheckoutDetails = async (userId) => {
     const selectedAddress = addresses.find((a) => a.isDefault) || addresses[0] || null;
     const wallet = await getOrCreateWallet(userId);
 
-    // Fetch active available coupons for the user
     const now = new Date();
     const activeCoupons = await Coupon.find({
         isActive: true,
@@ -84,9 +79,6 @@ const getCheckoutDetails = async (userId) => {
     };
 };
 
-/**
- * Helper to generate unique order number
- */
 const generateOrderNumber = async () => {
     for (let attempt = 0; attempt < 5; attempt++) {
         const candidate = `VEL-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -96,9 +88,6 @@ const generateOrderNumber = async () => {
     return `VEL-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 };
 
-/**
- * 2. Place order (COD, ONLINE via Razorpay, or WALLET)
- */
 const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToken = "") => {
     const validMethods = ["COD", "ONLINE", "WALLET"];
     const normalizedMethod = (paymentMethod || "COD").trim().toUpperCase();
@@ -119,7 +108,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
         return { success: false, message: "Selected delivery address not found." };
     }
 
-    // Idempotency: return existing order if already created with this checkout token
     const trimmedToken = (checkoutToken || "").trim();
     if (trimmedToken) {
         const existingOrder = await Order.findOne({ checkoutToken: trimmedToken, userId });
@@ -131,7 +119,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
         }
     }
 
-    // Verify cart items and availability
     const cartDetails = await getCartDetails(userId);
     if (!cartDetails.items || cartDetails.items.length === 0) {
         return { success: false, message: "Your shopping bag is empty." };
@@ -143,7 +130,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
         return { success: false, message: `Coupon issue: ${cartDetails.couponError}.` };
     }
 
-    // Check wallet balance if WALLET payment
     if (normalizedMethod === "WALLET") {
         const wallet = await getOrCreateWallet(userId);
         if (wallet.balance < cartDetails.totalAmount) {
@@ -161,7 +147,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
     let createdOrder = null;
 
     try {
-        // Reserve coupon usage if applied
+
         if (appliedCouponId) {
             const couponResult = await recordCouponUsage(appliedCouponId, userId, orderNumber);
             if (!couponResult.success) {
@@ -170,7 +156,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             couponRecorded = true;
         }
 
-        // Build order item snapshots
         const orderItems = [];
         for (const item of cartDetails.items) {
             let categoryName = item.product.categoryId?.name || "";
@@ -214,7 +199,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             });
         }
 
-        // Atomically deduct inventory stock
         for (const item of orderItems) {
             const result = await Variant.updateOne(
                 { _id: item.variantId, isActive: true, stock: { $gte: item.quantity } },
@@ -222,7 +206,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             );
 
             if (result.modifiedCount === 0) {
-                // Rollback any stock decremented so far
+
                 for (const dec of decrementedVariants) {
                     await Variant.updateOne({ _id: dec.variantId }, { $inc: { stock: dec.quantity } }).catch(() => {});
                 }
@@ -234,7 +218,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             decrementedVariants.push({ variantId: item.variantId, quantity: item.quantity });
         }
 
-        // Create Order document
         const initialPaymentStatus = normalizedMethod === "WALLET" ? "COMPLETED" : "PENDING";
         const initialOrderStatus = normalizedMethod === "ONLINE" ? "PENDING" : "PLACED";
 
@@ -290,7 +273,6 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             isWalletDebited: normalizedMethod === "WALLET",
         });
 
-        // Payment Method processing
         if (normalizedMethod === "WALLET") {
             const debitResult = await debitWallet({
                 userId,
@@ -355,13 +337,11 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
             });
         }
 
-        // Clear cart items and coupon
         await Cart.updateOne(
             { userId },
             { $set: { items: [], appliedCoupon: null, checkoutToken: null } }
         ).catch(() => {});
 
-        // Return response
         if (normalizedMethod === "ONLINE") {
             return {
                 success: true,
@@ -384,7 +364,7 @@ const placeOrder = async (userId, addressId, paymentMethod = "COD", checkoutToke
 
         return { success: true, order: createdOrder, isOnline: false };
     } catch (err) {
-        // Rollback stock and coupons on error
+
         if (createdOrder) {
             await Order.updateOne(
                 { _id: createdOrder._id },

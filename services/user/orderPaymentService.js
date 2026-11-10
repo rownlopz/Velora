@@ -5,9 +5,6 @@ const Payment = require("../../models/order/paymentModel");
 const Cart = require("../../models/order/cartModel");
 const { getRazorpayInstance, isRazorpayConfigured } = require("../../config/razorpay");
 
-/**
- * 1. Verify Razorpay Payment Signature and Update Order
- */
 const verifyRazorpayPayment = async (userId, paymentData) => {
     const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = paymentData || {};
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
@@ -22,12 +19,10 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         return { success: false, message: "Order not found." };
     }
 
-    // Idempotent: return immediately if order is already completed
     if (order.paymentStatus === "COMPLETED") {
         return { success: true, message: "Payment already verified.", order, isExisting: true };
     }
 
-    // 1. Verify HMAC SHA256 Signature
     const secret = process.env.RAZORPAY_KEY_SECRET;
     if (!secret) {
         return { success: false, message: "Payment gateway key secret is not configured." };
@@ -60,7 +55,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         return { success: false, message: "Payment verification failed: Invalid signature." };
     }
 
-    // 2. Gateway capture validation (optional live check)
     const rzp = getRazorpayInstance();
     if (rzp && rzp.payments && isRazorpayConfigured()) {
         try {
@@ -73,7 +67,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         }
     }
 
-    // 3. Mark Order as COMPLETED and PLACED
     const finalAmount = order.pricing?.currentPayable || order.pricing?.totalAmount || 0;
     order.paymentStatus = "COMPLETED";
     order.orderStatus = "PLACED";
@@ -92,7 +85,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
     });
     await order.save();
 
-    // 4. Update or Create Payment Record
     await Payment.findOneAndUpdate(
         { orderId: order._id },
         {
@@ -108,7 +100,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
         { upsert: true, new: true }
     );
 
-    // 5. Clean up items from Cart
     try {
         const variantIds = (order.items || []).map((i) => i.variantId);
         await Cart.updateOne(
@@ -122,9 +113,6 @@ const verifyRazorpayPayment = async (userId, paymentData) => {
     return { success: true, message: "Payment verified successfully.", order };
 };
 
-/**
- * 2. Retry Order Payment with fresh Razorpay Order
- */
 const retryOrderPayment = async (userId, orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -200,9 +188,6 @@ const retryOrderPayment = async (userId, orderId) => {
     }
 };
 
-/**
- * 3. Check Payment Status
- */
 const getPaymentStatus = async (userId, orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -221,9 +206,6 @@ const getPaymentStatus = async (userId, orderId) => {
     };
 };
 
-/**
- * 4. Stubs for backward compatibility
- */
 const inspectOrderGatewayPaymentState = async () => {
     return { status: "UNKNOWN", capturedPayment: null, capturedGatewayOrderId: null };
 };

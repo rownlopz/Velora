@@ -2,9 +2,6 @@ const mongoose = require("mongoose");
 const Wallet = require("../../models/user/walletModel");
 const Transaction = require("../../models/user/transactionModel");
 
-/**
- * 1. Get or create wallet for user
- */
 const getOrCreateWallet = async (userId) => {
     let wallet = await Wallet.findOne({ userId });
     if (!wallet) {
@@ -13,9 +10,6 @@ const getOrCreateWallet = async (userId) => {
     return wallet;
 };
 
-/**
- * 2. Get wallet details with paginated transactions
- */
 const getWalletDetails = async (userId, options = {}) => {
     const { page = 1, limit = 10 } = options;
     const wallet = await getOrCreateWallet(userId);
@@ -45,9 +39,6 @@ const getWalletDetails = async (userId, options = {}) => {
     };
 };
 
-/**
- * 3. Credit wallet atomically
- */
 const creditWallet = async ({
     userId,
     amount,
@@ -64,7 +55,6 @@ const creditWallet = async ({
 
     const opKey = referenceId ? String(referenceId).trim() : null;
 
-    // Check for duplicate operation if referenceId provided
     if (opKey) {
         const existingTx = await Transaction.findOne({ referenceId: opKey });
         if (existingTx) {
@@ -111,9 +101,6 @@ const creditWallet = async ({
     };
 };
 
-/**
- * 4. Debit wallet atomically
- */
 const debitWallet = async ({
     userId,
     amount,
@@ -130,7 +117,6 @@ const debitWallet = async ({
 
     const opKey = referenceId ? String(referenceId).trim() : null;
 
-    // Check for duplicate operation if referenceId provided
     if (opKey) {
         const existingTx = await Transaction.findOne({ referenceId: opKey });
         if (existingTx) {

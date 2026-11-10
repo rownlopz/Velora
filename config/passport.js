@@ -29,7 +29,7 @@ passport.use(
                     }
 
                     let userChanged = false;
-                    // existing local account signing in with Google for the first time
+
                     if (!user.googleId) {
                         user.googleId = profile.id;
                         user.isEmailVerified = true;

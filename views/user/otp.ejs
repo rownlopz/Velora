@@ -94,7 +94,7 @@
         <p id="timerContainer" class="text-center text-gray-400 text-sm mt-2">
             <span id="timerText">01:00</span>
         </p>
-        
+
         <a
             href="/signup"
             class="block text-center mt-6 text-sm text-gray-500 hover:text-black transition">
@@ -113,7 +113,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const errorMessage = document.getElementById("errorMessage");
     const successMessage = document.getElementById("successMessage");
 
-    // Focus the first input box on load
     if (digits.length > 0) {
         digits[0].focus();
     }
@@ -123,10 +122,8 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     digits.forEach((input, index) => {
-        // Handle input change
         input.addEventListener("input", (e) => {
             const val = e.target.value;
-            // Ensure only single numeric digit
             if (!/^\d$/.test(val)) {
                 e.target.value = "";
                 syncOtpValue();
@@ -135,13 +132,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
             syncOtpValue();
 
-            // Move focus to next input if not at the end
             if (val && index < digits.length - 1) {
                 digits[index + 1].focus();
             }
         });
 
-        // Handle backspace and arrow navigation
         input.addEventListener("keydown", (e) => {
             if (e.key === "Backspace") {
                 if (!input.value && index > 0) {
@@ -156,7 +151,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        // Handle paste event (allows pasting full 4-digit code)
         input.addEventListener("paste", (e) => {
             e.preventDefault();
             const pasted = (e.clipboardData || window.clipboardData).getData("text").trim();
@@ -172,7 +166,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Form submit validation
     otpForm.addEventListener("submit", (e) => {
         syncOtpValue();
         if (otpValue.value.length !== 4) {
@@ -183,7 +176,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // 60-Second Countdown Timer
     let countdownDuration = 60;
     let timerInterval = null;
 
@@ -216,7 +208,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     startTimer();
 
-    // Resend Button Click Handler
     resendBtn.addEventListener("click", async () => {
         if (resendBtn.disabled) return;
 
@@ -238,12 +229,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 successMessage.classList.remove("hidden");
                 errorMessage.classList.add("hidden");
 
-                // Clear all input boxes and refocus first
                 digits.forEach(d => d.value = "");
                 syncOtpValue();
                 digits[0].focus();
 
-                // Restart timer
                 startTimer();
             } else {
                 errorMessage.textContent = data.message || "Failed to resend code.";

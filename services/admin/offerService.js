@@ -4,10 +4,6 @@ const Product = require("../../models/product/productModel");
 const Category = require("../../models/product/categoryModel");
 const escapeRegex = require("../../utils/escapeRegex");
 
-/**
- * Normalizes input date strings to Asia/Kolkata timezone boundaries.
- * Date-only strings ("YYYY-MM-DD") are set to 00:00:00.000+05:30 for start and 23:59:59.999+05:30 for end (Finding 56).
- */
 const parseDateBoundary = (dateStr, isEndOfDay = false) => {
     if (!dateStr) return null;
     if (dateStr instanceof Date) return dateStr;
@@ -192,7 +188,6 @@ const updateOffer = async (offerId, data) => {
         endDate,
     } = data;
 
-    // Finding 55: Validate all fields on update
     if (name !== undefined) {
         if (!name || typeof name !== "string" || !name.trim()) {
             return { success: false, message: "Offer title cannot be empty." };

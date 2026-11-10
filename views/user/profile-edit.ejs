@@ -173,18 +173,12 @@
 <%- include("../partials/storeFooter") %>
 
 <script>
-    // Gives the user immediate visual confirmation that a file was picked,
-    // before they click "Save Changes". Previously the file input had no
-    // feedback at all, so a successful selection looked identical to no
-    // selection — this is purely a preview; the actual validation and
-    // upload still happen on the server exactly as before.
     (function () {
         var input = document.getElementById("avatarInput");
         var previewContainer = document.getElementById("avatarPreviewContainer");
         var helpText = document.getElementById("avatarHelpText");
         var defaultHelpText = helpText ? helpText.textContent : "";
 
-        // Kept in sync with middlewares/upload.js (jpg, jpeg, png, gif / 2MB)
         var ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif"];
         var MAX_SIZE = 2 * 1024 * 1024;
 

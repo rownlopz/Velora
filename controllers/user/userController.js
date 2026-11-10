@@ -84,7 +84,6 @@ const signup = async (req, res) => {
         const { fullName, email, phone, password, confirmPassword } = req.body;
         const formData = { fullName, email, phone };
 
-        // Validate signup form
         const errors = validateSignup(req.body);
 
         if (errors) {
@@ -97,7 +96,6 @@ const signup = async (req, res) => {
 
         const referralCode = (req.body.referralCode || req.session.referralCode || "").trim().toUpperCase();
 
-        // Business logic handled by service
         const result = await signupUser({
             fullName,
             email,
@@ -115,7 +113,6 @@ const signup = async (req, res) => {
             });
         }
 
-        // Store temporary signup data in session
         req.session.signupData = result.signupData;
 
         req.session.otpFlow = "SIGNUP";
@@ -123,7 +120,6 @@ const signup = async (req, res) => {
         delete req.session.resetPasswordVerification;
         delete req.session.resetPasswordVerified;
 
-        // Move user to OTP page
         return res.redirect("/otp");
 
     } catch (error) {
@@ -145,7 +141,6 @@ const verifyOtp = async (req, res) => {
         const { otp } = req.body;
         const flow = req.session.otpFlow;
 
-        // Password reset OTP
         if (flow === "RESET_PASSWORD") {
             const email = req.session.resetPasswordEmail;
 
@@ -169,7 +164,7 @@ const verifyOtp = async (req, res) => {
             const now = Date.now();
             req.session.resetPasswordVerification = {
                 email,
-                expiresAt: now + 15 * 60 * 1000 // valid for 15 minutes
+                expiresAt: now + 15 * 60 * 1000
             };
             req.session.resetPasswordVerified = true;
             delete req.session.otpFlow;
@@ -177,7 +172,6 @@ const verifyOtp = async (req, res) => {
             return res.redirect("/reset-password");
         }
 
-        // Signup OTP
         if (flow === "SIGNUP") {
             const signupData = req.session.signupData;
 
@@ -206,7 +200,6 @@ const verifyOtp = async (req, res) => {
             return req.session.save(() => res.redirect("/"));
         }
 
-        // No active flow (expired/stale session, or /otp hit directly)
         return res.redirect("/signup");
 
     } catch (error) {
@@ -289,12 +282,10 @@ const forgotPasswordController = async (req, res) => {
             });
         }
 
-        // Clear any previous reset verification so starting a reset for another email invalidates old state
         delete req.session.resetPasswordVerification;
         delete req.session.resetPasswordVerified;
         req.session.resetPasswordEmail = result.email;
 
-        // Same explicit flow marker as signup — see comment there.
         req.session.otpFlow = "RESET_PASSWORD";
         delete req.session.signupData;
 
@@ -339,7 +330,6 @@ const resetPasswordController = async (req, res) => {
             });
         }
 
-        // Successfully consumed: clear all password reset session state
         delete req.session.resetPasswordEmail;
         delete req.session.resetPasswordVerification;
         delete req.session.resetPasswordVerified;

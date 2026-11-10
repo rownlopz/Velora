@@ -85,7 +85,7 @@
 
             resendBtn.addEventListener("click", async () => {
                 if (resendBtn.disabled) return;
-                
+
                 resendBtn.disabled = true;
                 resendBtn.innerHTML = "Sending...";
                 resendBtn.classList.add("cursor-not-allowed", "text-gray-400");
@@ -95,9 +95,9 @@
                         method: "POST",
                         headers: { "Content-Type": "application/json" }
                     });
-                    
+
                     const data = await response.json();
-                    
+
                     if (data.success) {
                         window.location.reload();
                     } else {

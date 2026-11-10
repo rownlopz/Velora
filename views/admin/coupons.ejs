@@ -424,7 +424,6 @@
             }
         }
 
-        // Edit Coupon Modal logic
         function openEditCouponModal(data) {
             clearEditModalAlert();
             const modal = document.getElementById("editCouponModal");
@@ -654,7 +653,6 @@
             const startDate = document.getElementById("modalStartDate").value;
             const endDate = document.getElementById("modalEndDate").value;
 
-            // Client-side quick validation
             if (!code) return showModalError("Coupon code is required.");
             if (!/^[A-Z0-9_-]{3,20}$/.test(code)) {
                 return showModalError("Coupon code must be 3-20 characters long and contain only uppercase letters, numbers, hyphens, and underscores.");

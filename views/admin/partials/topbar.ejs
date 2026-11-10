@@ -91,12 +91,10 @@
 
     window.showToast = window.showAdminToast;
 
-    // Override native browser alert with admin toast
     window.alert = function (message) {
         window.showAdminToast(message, 'info');
     };
 
-    // Auto-display any query message
     window.addEventListener('DOMContentLoaded', function () {
         try {
             const params = new URLSearchParams(window.location.search);

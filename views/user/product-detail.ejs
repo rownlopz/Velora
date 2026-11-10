@@ -15,14 +15,9 @@
     <%- include("../partials/storeHeader") %>
 
         <%
-            // Group variants by color/size so the page can offer selectable
-            // options rather than a flat list, and so we can tell at a glance
-            // whether a specific combination is in stock.
             const colors = [...new Set(variants.map(v => v.color).filter(Boolean))];
             const sizes = [...new Set(variants.map(v => v.size).filter(Boolean))];
 
-            // A representative variant for the default price/discount shown
-            // before the shopper picks anything — the cheapest in-stock one.
             const inStockVariants = variants.filter(v => v.stock > 0);
             const defaultVariant = (inStockVariants.length ? inStockVariants : variants)
                 .slice().sort((a, b) => {
@@ -288,11 +283,6 @@
             <%- include("../partials/storeFooter") %>
 
                 <script>
-                    // All variants for this product, embedded so color/size selection
-                    // can look up the matching variant client-side without a page
-                    // reload. This is ONLY for UI responsiveness — the actual stock,
-                    // price, and availability are re-verified server-side when the
-                    // form is submitted, never trusted from this data alone.
                     const VARIANTS = <%- JSON.stringify(variants.map(v => ({
                         _id: String(v._id),
                         color: v.color || '',
@@ -305,7 +295,6 @@
                     let selectedColor = <%- JSON.stringify(defaultVariant && defaultVariant.color != null ? defaultVariant.color : '').replace(/</g, '\\u003c') %>;
                     let selectedSize = <%- JSON.stringify(defaultVariant && defaultVariant.size != null ? defaultVariant.size : '').replace(/</g, '\\u003c') %>;
                     let userWishlistIds = <%- JSON.stringify(typeof wishlistVariantIds !== 'undefined' ? wishlistVariantIds : []).replace(/</g, '\\u003c') %>;
-                    // Server-rendered flag — never re-enables Add-to-Cart for unavailable products.
                     const IS_UNAVAILABLE = <%= typeof isUnavailable !== 'undefined' && isUnavailable ? 'true' : 'false' %>;
 
                     function findMatchingVariant() {
@@ -353,7 +342,6 @@
 
                         if (selectedInput) selectedInput.value = variant._id;
 
-                        // Authoritative price calculation with nullish fallback
                         const effectivePrice = variant.salePrice != null ? variant.salePrice : variant.regularPrice;
                         if (priceEl) {
                             priceEl.textContent = '\u20b9' + Number(effectivePrice).toLocaleString('en-IN');
@@ -374,7 +362,6 @@
                             if (discountBadge) discountBadge.classList.add('hidden');
                         }
 
-                        // Update Wishlist Heart Icon
                         const inWishlist = userWishlistIds.includes(variant._id.toString());
                         if (heartSvg) {
                             heartSvg.setAttribute('fill', inWishlist ? '#ef4444' : 'none');
@@ -385,7 +372,6 @@
                         }
 
                         if (IS_UNAVAILABLE) {
-                            // Product/category is blocked — never allow cart or wishlist
                             if (cartBtn) {
                                 cartBtn.disabled = true;
                                 cartBtn.textContent = 'Unavailable';
@@ -404,7 +390,6 @@
                                 cartBtn.disabled = true;
                                 cartBtn.textContent = 'Out of Stock';
                             }
-                            // Out-of-stock variants remain wishlistable when product & category are listed
                             if (wishBtn) {
                                 wishBtn.disabled = false;
                                 wishBtn.classList.remove('opacity-40', 'cursor-not-allowed');
@@ -458,7 +443,6 @@
                         mainImage.src = src;
                         document.getElementById('zoomBox').style.backgroundImage = `url('${src}')`;
 
-                        // Update active thumbnail border
                         document.querySelectorAll('.thumb-btn').forEach(b => {
                             const thumbImg = b.querySelector('img');
                             if (thumbImg && thumbImg.src === mainImage.src) {
@@ -469,7 +453,6 @@
                         });
                     }
 
-                    // === Add to Cart — AJAX intercept ===
                     document.getElementById('addToCartForm').addEventListener('submit', async function (e) {
                         e.preventDefault();
                         const btn = document.getElementById('addToCartBtn');
@@ -513,7 +496,6 @@
                                 if (typeof updateNavWishlistCount === 'function' && data.wishlistCount !== undefined) {
                                     updateNavWishlistCount(data.wishlistCount);
                                 }
-                                // Item was moved/added to cart, remove from wishlist locally & update icon
                                 userWishlistIds = userWishlistIds.filter(id => id !== variantId.toString());
                                 refreshSelection();
                             } else {
@@ -527,7 +509,6 @@
                         }
                     });
 
-                    // === Wishlist Toggle Button Handler ===
                     const detailWishlistBtn = document.getElementById('wishlistBtn');
                     if (detailWishlistBtn) {
                         detailWishlistBtn.addEventListener('click', async function () {
@@ -589,20 +570,18 @@
                         });
                     }
 
-                    // === Flipkart-style lens + result box zoom ===
                     (function () {
                         const container = document.getElementById('zoomContainer');
                         const mainImg = document.getElementById('mainImage');
                         const lens = document.getElementById('zoomLens');
                         const box = document.getElementById('zoomBox');
 
-                        // Set initial background image on zoom result box
                         box.style.backgroundImage = `url('${mainImg.src}')`;
 
                         const LENS_W = lens.offsetWidth || 130;
                         const LENS_H = lens.offsetHeight || 160;
-                        const BOX_W = 430;  // matches inline style width
-                        const BOX_H = 530;  // matches inline style height
+                        const BOX_W = 430;
+                        const BOX_H = 530;
 
                         container.addEventListener('mouseenter', () => {
                             lens.classList.remove('hidden');
@@ -617,7 +596,6 @@
                         container.addEventListener('mousemove', (e) => {
                             const rect = container.getBoundingClientRect();
 
-                            // --- Position the lens (clamped inside the image) ---
                             let lx = e.clientX - rect.left - LENS_W / 2;
                             let ly = e.clientY - rect.top - LENS_H / 2;
                             lx = Math.max(0, Math.min(lx, rect.width - LENS_W));
@@ -625,13 +603,11 @@
                             lens.style.left = lx + 'px';
                             lens.style.top = ly + 'px';
 
-                            // --- Position the result box (fixed, to the right of the container) ---
                             box.style.left = (rect.right + 16) + 'px';
                             box.style.top = rect.top + 'px';
 
-                            // --- Calculate background to show the zoomed area ---
-                            const cx = BOX_W / LENS_W;   // horizontal magnification
-                            const cy = BOX_H / LENS_H;   // vertical magnification
+                            const cx = BOX_W / LENS_W;
+                            const cy = BOX_H / LENS_H;
 
                             box.style.backgroundSize = (rect.width * cx) + 'px ' + (rect.height * cy) + 'px';
                             box.style.backgroundPosition = '-' + (lx * cx) + 'px -' + (ly * cy) + 'px';

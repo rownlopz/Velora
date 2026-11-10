@@ -40,7 +40,6 @@ const productSchema = new mongoose.Schema(
             default: "",
         },
 
-     
         images: {
             type: [String],
             default: [],
@@ -66,7 +65,6 @@ const productSchema = new mongoose.Schema(
             default: false,
         },
 
-        // ACTIVE = listed/visible to shoppers. INACTIVE = "unlisted" by an admin.
         status: {
             type: String,
             enum: ["ACTIVE", "INACTIVE"],

@@ -51,7 +51,6 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
     return { success: true };
 };
 
-// Step 1: user requests to change their email -> OTP sent to the NEW email
 const requestEmailChange = async (userId, newEmail) => {
     const currentUser = await User.findById(userId);
     if (!currentUser) {
@@ -85,7 +84,6 @@ const requestEmailChange = async (userId, newEmail) => {
     return { success: true, email: normalizedEmail };
 };
 
-// Step 2: user submits the OTP sent to their new email -> email gets updated
 const confirmEmailChange = async (userId, newEmail, enteredOtp) => {
     const normalizedEmail = newEmail.toLowerCase().trim();
 
@@ -125,7 +123,6 @@ const confirmEmailChange = async (userId, newEmail, enteredOtp) => {
     return { success: true, user };
 };
 
-// Step 3: resend the OTP for email change
 const resendEmailChangeOtp = async (userId, newEmail) => {
     const user = await User.findById(userId);
     if (!user) {

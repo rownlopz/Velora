@@ -1,7 +1,6 @@
 const reportService = require("../../services/admin/reportService");
 const { getSalesReportData, } = require("../../services/admin/reportService");
 
-
 const loadDashboard = async (req, res) => {
     try {
         const filterType = req.query.filterType || "monthly";

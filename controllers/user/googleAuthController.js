@@ -1,6 +1,5 @@
 const passport = require("passport");
 
-
 const googleCallback = (req, res, next) => {
     passport.authenticate("google", { session: false }, (err, user, info) => {
         if (err) {
@@ -20,7 +19,6 @@ const googleCallback = (req, res, next) => {
             });
         }
 
-     
         req.session.userId = user._id;
         req.session.save(() => res.redirect("/"));
     })(req, res, next);

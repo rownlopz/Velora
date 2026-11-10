@@ -6,9 +6,6 @@ const formatIstDate = (date) => {
     return new Date(date).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 };
 
-/**
- * Escapes strings to prevent spreadsheet formula injection in CSV/Excel.
- */
 const sanitizeForSpreadsheet = (val) => {
     if (val == null) return "";
     const str = String(val).trim();
@@ -18,9 +15,6 @@ const sanitizeForSpreadsheet = (val) => {
     return str;
 };
 
-/**
- * Generates an Excel workbook from the sales report.
- */
 const generateSalesExcel = async (reportData) => {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "VELORA Admin";
@@ -28,18 +22,15 @@ const generateSalesExcel = async (reportData) => {
 
     const sheet = workbook.addWorksheet("Sales Report");
 
-    // Title Block
     sheet.mergeCells("A1:K1");
     const titleCell = sheet.getCell("A1");
     titleCell.value = "VELORA SALES REPORT";
     titleCell.font = { bold: true, size: 16, color: { argb: "FF000000" } };
     titleCell.alignment = { horizontal: "center" };
 
-    // Range metadata in IST
     sheet.getCell("A2").value = `Period: ${formatIstDate(reportData.startDate)} to ${formatIstDate(reportData.endDate)} (IST) | Basis: Order Placement Cohort`;
     sheet.getCell("A2").font = { italic: true, size: 11 };
 
-    // Summary Section
     sheet.addRow([]);
     sheet.addRow(["EXECUTIVE SUMMARY & FINANCIAL RECONCILIATION"]);
     sheet.addRow(["Report Date Basis", reportData.summary.cohortDescription || "Order Placement Cohort (Lifetime Financials)"]);
@@ -62,7 +53,6 @@ const generateSalesExcel = async (reportData) => {
     }
     sheet.addRow([]);
 
-    // Table Header
     const headerRow = sheet.addRow([
         "Order Number",
         "Placed Date",
@@ -88,7 +78,6 @@ const generateSalesExcel = async (reportData) => {
         fgColor: { argb: "FFF0F0F0" },
     };
 
-    // Populate rows
     reportData.allRows.forEach((row) => {
         sheet.addRow([
             sanitizeForSpreadsheet(row.orderNumber),
@@ -110,7 +99,6 @@ const generateSalesExcel = async (reportData) => {
         ]);
     });
 
-    // Auto-fit column widths
     sheet.columns.forEach((col) => {
         let maxLen = 12;
         col.eachCell({ includeEmpty: true }, (cell) => {
@@ -132,7 +120,6 @@ const generateSalesPdf = async (reportData) => {
             doc.on("data", buffers.push.bind(buffers));
             doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-            // Header
             doc.fontSize(18).font("Helvetica-Bold").text("VELORA", 35, 35);
             doc.fontSize(10).font("Helvetica").text("Official Sales & Revenue Report", 35, 58);
             doc.fontSize(8.5).text(
@@ -143,7 +130,6 @@ const generateSalesPdf = async (reportData) => {
 
             doc.moveTo(35, 90).lineTo(560, 90).strokeColor("#E5E7EB").stroke();
 
-            // Summary Grid
             doc.fontSize(10).font("Helvetica-Bold").text("EXECUTIVE SUMMARY & FINANCIAL RECONCILIATION", 35, 100);
             doc.font("Helvetica").fontSize(8);
 
@@ -167,7 +153,6 @@ const generateSalesPdf = async (reportData) => {
 
             doc.moveTo(35, 172).lineTo(560, 172).strokeColor("#E5E7EB").stroke();
 
-            // Table of Orders
             let y = 185;
             doc.fontSize(7.5).font("Helvetica-Bold");
             doc.text("ORDER NO", 35, y);

@@ -22,9 +22,6 @@ const VALID_ORDER_STATUSES = [
 
 const VALID_PAYMENT_STATUSES = ["PENDING", "COMPLETED", "FAILED", "REFUNDED", "CANCELLED"];
 
-/**
- * 1. Fetch paginated orders for Admin with filters, search, and status counters
- */
 const getAdminOrders = async (options = {}) => {
     let {
         search = "",
@@ -78,7 +75,6 @@ const getAdminOrders = async (options = {}) => {
         ];
     }
 
-    // Counts breakdown for top tabs
     const countBase = { ...filter };
     delete countBase.orderStatus;
     const statusCountsRaw = await Order.aggregate([
@@ -131,9 +127,6 @@ const getAdminOrders = async (options = {}) => {
     };
 };
 
-/**
- * 2. Fetch single order details for Admin
- */
 const getAdminOrderDetails = async (orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -149,9 +142,6 @@ const getAdminOrderDetails = async (orderId) => {
     return { success: true, order, payments };
 };
 
-/**
- * Helper: Restore stock for items
- */
 const restoreItemsStock = async (items) => {
     for (const item of items) {
         if (item.variantId && !item.isRestocked) {
@@ -162,9 +152,6 @@ const restoreItemsStock = async (items) => {
     }
 };
 
-/**
- * 3. Update entire order status (e.g. PROCESSING, SHIPPED, DELIVERED, CANCELLED)
- */
 const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", adminNote = "" } = {}) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -176,7 +163,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
     const order = await Order.findById(orderId);
     if (!order) return { success: false, message: "Order not found." };
 
-    // Prevent changing terminal states
     if (order.orderStatus === "CANCELLED") {
         return { success: false, message: "Cancelled orders cannot be modified." };
     }
@@ -190,7 +176,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
     if (deliveryNotes) order.deliveryNotes = deliveryNotes;
     if (adminNote) order.adminFeedback = adminNote;
 
-    // Handle DELIVERED
     if (newStatus === "DELIVERED") {
         order.deliveredAt = new Date();
         if (order.paymentMethod === "COD" && order.paymentStatus !== "COMPLETED") {
@@ -204,7 +189,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         });
     }
 
-    // Handle CANCELLED by Admin
     if (newStatus === "CANCELLED") {
         order.cancelledAt = new Date();
         order.cancelledBy = "ADMIN";
@@ -219,7 +203,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
             item.cancellationReason = adminNote || "Cancelled by admin";
         });
 
-        // Issue full refund to wallet if payment was collected
         const isPaid = order.paymentStatus === "COMPLETED" || (order.paymentMethod === "COD" && previousStatus === "DELIVERED");
         const payable = order.pricing?.currentPayable != null ? order.pricing.currentPayable : (order.pricing?.totalAmount || 0);
 
@@ -237,7 +220,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
         }
     }
 
-    // Handle normal progression: sync active items status
     if (["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"].includes(newStatus)) {
         (order.items || []).forEach((item) => {
             if (!["CANCELLED", "RETURN_REQUESTED", "RETURN_APPROVED", "RETURNED"].includes(item.status)) {
@@ -250,9 +232,6 @@ const updateOrderStatus = async (orderId, newStatus, { deliveryNotes = "", admin
     return { success: true, message: `Order status updated to ${newStatus}.`, order };
 };
 
-/**
- * 4. Update individual item status in an order
- */
 const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNote = "" } = {}) => {
     if (!orderId || !itemId) return { success: false, message: "Order ID and Item ID required." };
 
@@ -265,7 +244,6 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
     item.status = newStatus;
     if (adminNote) item.adminFeedback = adminNote;
 
-    // If cancelled, restore stock and refund item payable
     if (newStatus === "CANCELLED") {
         item.cancelledAt = new Date();
         item.cancellationReason = adminNote || "Cancelled by admin";
@@ -290,7 +268,6 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
         }
     }
 
-    // If all items are cancelled, cancel entire order
     const allCancelled = order.items.every((i) => i.status === "CANCELLED");
     if (allCancelled) {
         order.orderStatus = "CANCELLED";
@@ -300,9 +277,6 @@ const updateAdminOrderItemStatus = async (orderId, itemId, newStatus, { adminNot
     return { success: true, message: `Item status updated to ${newStatus}.`, order };
 };
 
-/**
- * 5. Approve Return Item (credits refund to wallet)
- */
 const approveReturnItem = async (orderId, itemId, adminMessage = "", restockImmediately = false) => {
     if (!orderId || !itemId) return { success: false, message: "Order ID and Item ID required." };
 
@@ -342,9 +316,6 @@ const approveReturnItem = async (orderId, itemId, adminMessage = "", restockImme
     return { success: true, message: "Return request approved and refund credited.", order };
 };
 
-/**
- * 6. Reject Return Item
- */
 const rejectReturnItem = async (orderId, itemId, adminMessage = "") => {
     if (!orderId || !itemId) return { success: false, message: "Order ID and Item ID required." };
 
@@ -362,9 +333,6 @@ const rejectReturnItem = async (orderId, itemId, adminMessage = "") => {
     return { success: true, message: "Return request rejected.", order };
 };
 
-/**
- * 7. Restock Return Item
- */
 const restockReturnItem = async (orderId, itemId, adminMessage = "") => {
     if (!orderId || !itemId) return { success: false, message: "Order ID and Item ID required." };
 
@@ -385,9 +353,6 @@ const restockReturnItem = async (orderId, itemId, adminMessage = "") => {
     return { success: true, message: "Item stock restored successfully.", order };
 };
 
-/**
- * 8. Update Payment Status directly
- */
 const updatePaymentStatus = async (orderId, newPaymentStatus) => {
     if (!orderId) return { success: false, message: "Order ID is required." };
     if (!VALID_PAYMENT_STATUSES.includes(newPaymentStatus)) {

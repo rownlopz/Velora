@@ -106,7 +106,6 @@
             <div class="mt-8 space-y-6">
                 <% orders.forEach((order) => { %>
                     <%
-                        // Status badge configuration
                         let badgeBg = "bg-neutral-100 text-neutral-800 border-neutral-200";
                         let dotColor = "bg-neutral-400";
 
@@ -142,7 +141,6 @@
                             dotColor = "bg-zinc-500";
                         }
 
-                        // Payment status badge
                         let paymentBadge = "bg-neutral-100 text-neutral-700 border-neutral-200";
                         if (order.paymentStatus === "COMPLETED") {
                             paymentBadge = "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -165,7 +163,7 @@
                         <!-- Order Card Header with clear column structure -->
                         <div class="bg-neutral-50/70 border-b border-neutral-200/80 px-6 py-4">
                             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 items-center">
-                                
+
                                 <!-- Order Placed Date -->
                                 <div>
                                     <span class="block text-[11px] font-medium uppercase tracking-wider text-neutral-400 mb-0.5">Order Placed</span>
@@ -234,7 +232,7 @@
                             <% order.items.forEach((item) => { %>
                                 <div class="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div class="flex items-center gap-4 min-w-0">
-                                        
+
                                             <!-- Product Thumbnail -->
                                             <div class="w-16 h-20 sm:w-20 sm:h-24 bg-neutral-100 rounded-xl overflow-hidden shrink-0 border border-neutral-200/80 shadow-xs flex items-center justify-center">
                                                 <% if (item.thumbnail) { %>
@@ -301,7 +299,7 @@
 
                         <!-- Order Card Footer -->
                         <div class="px-6 py-4 bg-neutral-50/50 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-                            
+
                             <!-- Left info -->
                             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-neutral-500">
                                 <% if (order.cancellationReason) { %>

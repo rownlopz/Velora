@@ -70,7 +70,7 @@
                 <!-- Search, Filter & Sort Controls -->
                 <div class="bg-white p-6 rounded-2xl border border-neutral-200 mb-6 shadow-xs">
                     <form action="/admin/orders" method="GET" class="flex flex-wrap gap-4 items-end">
-                        
+
                         <!-- Search Bar -->
                         <div class="flex-1 min-w-[260px]">
                             <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
@@ -192,7 +192,6 @@
 
                                 <% (orders || []).forEach((order) => { %>
                                     <%
-                                        // Status badge colors
                                         let statusBg = "bg-neutral-100 text-neutral-700 border-neutral-200";
                                         let dotColor = "bg-neutral-400";
                                         if (order.orderStatus === "PLACED" || order.orderStatus === "PENDING") {
@@ -227,7 +226,6 @@
                                             dotColor = "bg-zinc-500";
                                         }
 
-                                        // Payment badge
                                         let paymentBg = "bg-neutral-100 text-neutral-700 border-neutral-200";
                                         if (order.paymentStatus === "COMPLETED") paymentBg = "bg-emerald-50 text-emerald-700 border-emerald-200";
                                         else if (order.paymentStatus === "PENDING") paymentBg = "bg-amber-50 text-amber-700 border-amber-200";
@@ -267,7 +265,7 @@
                                         const customerPhone = order.shippingAddress?.phone || order.userId?.phone || 'N/A';
                                     %>
                                     <tr class="hover:bg-neutral-50/70 transition-colors" id="order-row-<%= order._id %>">
-                                        
+
                                         <!-- Order ID -->
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="flex items-center gap-1.5">

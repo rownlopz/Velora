@@ -2,7 +2,7 @@
 <div id="variantModalOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-200 opacity-0"
      role="dialog" aria-modal="true" aria-labelledby="variantModalTitle">
     <div id="variantModalContainer" class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl transform transition-all duration-200 scale-95 relative max-h-[90vh] flex flex-col">
-        
+
         <!-- Header with Close Button -->
         <div class="p-5 pb-3 border-b border-gray-100 flex items-start justify-between">
             <div class="flex items-center gap-3 pr-2">
@@ -134,7 +134,7 @@
     function updateSelectedVariant() {
         const sizeMatches = (v) => !_selectedSize || !v.size || v.size === _selectedSize;
         const colorMatches = (v) => !_selectedColor || !v.color || (v.color || '').toLowerCase() === (_selectedColor || '').toLowerCase();
-        
+
         _selectedVariant = _variants.find(v => sizeMatches(v) && colorMatches(v)) || null;
 
         if (_selectedVariant) {
@@ -161,7 +161,6 @@
                 confirmBtn.textContent = 'Add to Cart';
             }
 
-            // Cap quantity if exceeds stock
             const maxAllowed = Math.min(stock, 5);
             if (_quantity > maxAllowed && maxAllowed > 0) {
                 _quantity = maxAllowed;
@@ -180,7 +179,6 @@
         const uniqueSizes = [...new Set(_variants.map(v => v.size).filter(Boolean))];
         const uniqueColors = [...new Set(_variants.map(v => v.color).filter(Boolean))];
 
-        // Sizes
         sizeOptionsEl.innerHTML = '';
         uniqueSizes.forEach(size => {
             const hasStock = _variants.some(v => v.size === size && v.stock > 0);
@@ -215,7 +213,6 @@
             sizeOptionsEl.appendChild(btn);
         });
 
-        // Colors
         colorOptionsEl.innerHTML = '';
         uniqueColors.forEach(color => {
             const matchForSize = _variants.find(v => 
@@ -344,9 +341,6 @@
         }
     });
 
-    /**
-     * Public API: window.openVariantSelectionModal
-     */
     window.openVariantSelectionModal = async function({ slug, sourceVariantId = null, preselectedVariantId = null, onSuccess = null }) {
         _sourceVariantId = sourceVariantId;
         _onSuccessCallback = onSuccess;
@@ -374,7 +368,6 @@
             brandEl.textContent = _product.brand || '';
             imgEl.src = _product.thumbnail || (_variants[0] && _variants[0].images && _variants[0].images[0]) || '';
 
-            // Pre-select variant: prefer requested variant if it has stock, otherwise pick first available in-stock variant
             let initial = null;
             if (preselectedVariantId) {
                 const requested = _variants.find(v => v._id.toString() === preselectedVariantId.toString());

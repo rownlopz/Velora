@@ -11,7 +11,6 @@ const {
     VALID_PAYMENT_STATUSES,
 } = require("../../services/admin/orderService");
 
-
 const handleAdminAction = (req, res, result, orderId) => {
     const isAjax = req.headers["x-requested-with"] === "XMLHttpRequest" || req.headers.accept?.includes("application/json");
     if (!result.success) {
@@ -22,7 +21,6 @@ const handleAdminAction = (req, res, result, orderId) => {
     return res.redirect(`/admin/orders/${orderId}?success=${encodeURIComponent(result.message)}`);
 };
 
- // Lists all orders with descending order by date, filtering, sorting, and pagination
 const loadOrders = async (req, res) => {
     try {
         let {
@@ -34,7 +32,6 @@ const loadOrders = async (req, res) => {
             page = 1,
         } = req.query;
 
-        // Normalise strings
         search = typeof search === "string" ? search.trim() : "";
         status = typeof status === "string" ? status.trim() : "all";
         paymentMethod = typeof paymentMethod === "string" ? paymentMethod.trim() : "all";
@@ -52,7 +49,7 @@ const loadOrders = async (req, res) => {
             totalAmount_asc: "amount_asc",
         };
         const normalizedSort = sortMap[sort] || "date_desc";
-    
+
         const allowedStatuses = [
             "all", "ALL", "ACTIVE",
             "PENDING", "PLACED", "PROCESSING", "SHIPPED",
@@ -60,10 +57,10 @@ const loadOrders = async (req, res) => {
             "RETURN_REQUESTED", "RETURN_APPROVED", "RETURN_REJECTED", "RETURNED"
         ];
         const normalizedStatus = allowedStatuses.includes(status) ? status : "all";
-      
+
         const allowedPaymentMethods = ["all", "ALL", "COD", "ONLINE", "WALLET"];
         const normalizedPaymentMethod = allowedPaymentMethods.includes(paymentMethod) ? paymentMethod : "all";
-      
+
         const allowedPaymentStatuses = ["all", "ALL", "PENDING", "COMPLETED", "FAILED", "REFUNDED", "CANCELLED"];
         const normalizedPaymentStatus = allowedPaymentStatuses.includes(paymentStatus) ? paymentStatus : "all";
 
@@ -98,8 +95,6 @@ const loadOrders = async (req, res) => {
     }
 };
 
- //  Detailed view of an individual order
- 
 const loadOrderDetails = async (req, res) => {
     try {
         const { orderId } = req.params;
@@ -133,8 +128,6 @@ const updateOrderStatusController = async (req, res) => {
     }
 };
 
-// Update individual item status in order
- 
 const updateOrderItemStatusController = async (req, res) => {
     try {
         const { orderId, itemId } = req.params;
@@ -147,7 +140,6 @@ const updateOrderItemStatusController = async (req, res) => {
     }
 };
 
- // Admin approves return for an item
 const approveReturnItemController = async (req, res) => {
     try {
         const { orderId, itemId } = req.params;
@@ -164,7 +156,7 @@ const approveReturnItemController = async (req, res) => {
         return handleAdminAction(req, res, { success: false, message: "Internal server error" }, req.params.orderId);
     }
 };
-// Admin rejects return for an item
+
 const rejectReturnItemController = async (req, res) => {
     try {
         const { orderId, itemId } = req.params;
@@ -175,7 +167,7 @@ const rejectReturnItemController = async (req, res) => {
         return handleAdminAction(req, res, { success: false, message: "Internal server error" }, req.params.orderId);
     }
 };
-// Admin clicks Add Back to Stock for an approved return item
+
 const restockReturnItemController = async (req, res) => {
     try {
         const { orderId, itemId } = req.params;
@@ -186,7 +178,7 @@ const restockReturnItemController = async (req, res) => {
         return handleAdminAction(req, res, { success: false, message: "Internal server error" }, req.params.orderId);
     }
 };
-// Update payment statu
+
 const updatePaymentStatusController = async (req, res) => {
     try {
         const { orderId } = req.params;

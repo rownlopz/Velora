@@ -37,7 +37,6 @@ const getDashboardAnalytics = async (filterType = "monthly", targetYear = null) 
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const qualifyingSalesMatch = { orderStatus: { $nin: ["CANCELLED", "FAILED"] }, $or: [{ paymentStatus: "COMPLETED" }, { paymentMethod: "COD", orderStatus: "DELIVERED" }] };
 
-
     let timeline = [], timeMatch = {};
     if (filterType === "daily") {
         const start = new Date(); start.setDate(start.getDate() - 29); start.setHours(0, 0, 0, 0);

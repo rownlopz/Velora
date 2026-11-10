@@ -3,7 +3,6 @@ const path = require("path");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
 
-
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif"];
 
@@ -31,7 +30,7 @@ const fileFilter = (req, file, cb) => {
 const uploadAvatar = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB, matches the "Max size of 2MB" text in the UI
+    limits: { fileSize: 2 * 1024 * 1024 },
 });
 
 const handleAvatarUpload = (req, res, next) => {

@@ -57,7 +57,7 @@ const setUserLocals = async (req, res, next) => {
             res.locals.cartCount = cartCount;
             res.locals.wishlistCount = wishlistCount;
         } catch (err) {
-            // Non-fatal — degrade gracefully
+
             res.locals.cartCount = 0;
             res.locals.wishlistCount = 0;
         }

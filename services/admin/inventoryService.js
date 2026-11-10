@@ -3,9 +3,6 @@ const Variant = require("../../models/product/variantModel");
 const Product = require("../../models/product/productModel");
 const Category = require("../../models/product/categoryModel");
 
-/**
- * Fetch inventory items across products and variants with filtering, search, and sorting
- */
 const getInventory = async ({
     search = "",
     status = "all",
@@ -16,7 +13,6 @@ const getInventory = async ({
 }) => {
     const categories = await Category.find({ isDeleted: false }).sort({ name: 1 }).lean();
 
-    // 1. Overall Inventory Statistics
     const allVariants = await Variant.find({ isActive: true }).lean();
     const stats = {
         totalVariants: allVariants.length,
@@ -25,7 +21,6 @@ const getInventory = async ({
         outOfStockCount: allVariants.filter((v) => v.stock === 0).length,
     };
 
-    // 2. Query conditions
     const query = { isActive: true };
     if (status === "low" || status === "low_stock") query.stock = { $gt: 0, $lte: 10 };
     else if (status === "out" || status === "out_of_stock") query.stock = 0;
@@ -47,25 +42,21 @@ const getInventory = async ({
         ];
     }
 
-    // 3. Sorting
     const sortOption = sort === "stock_desc" ? { stock: -1 }
         : sort === "price_desc" ? { regularPrice: -1 }
         : sort === "price_asc" ? { regularPrice: 1 }
         : { stock: 1 };
 
-    // 4. Fetch variants and populate product details
     let variants = await Variant.find(query)
         .populate("productId", "name thumbnail brand slug categoryId isDeleted")
         .sort(sortOption)
         .lean();
 
-    // Filter out deleted products or mismatched category
     variants = variants.filter((v) => v.productId && !v.productId.isDeleted);
     if (categoryId && categoryId !== "all" && mongoose.Types.ObjectId.isValid(categoryId)) {
         variants = variants.filter((v) => String(v.productId.categoryId) === String(categoryId));
     }
 
-    // Product name sorting if requested
     if (sort === "name_asc") {
         variants.sort((a, b) => (a.productId?.name || "").localeCompare(b.productId?.name || ""));
     } else if (sort === "name_desc") {
@@ -77,7 +68,6 @@ const getInventory = async ({
     const currentPage = Math.max(1, Math.min(page, totalPages));
     const paginated = variants.slice((currentPage - 1) * limit, currentPage * limit);
 
-    // Structure items to match both variant.product and variant.productName expectations
     const items = paginated.map((v) => {
         const prod = v.productId || {};
         const cat = categories.find((c) => String(c._id) === String(prod.categoryId)) || {};
@@ -114,9 +104,6 @@ const getInventory = async ({
     };
 };
 
-/**
- * Direct Mongoose stock update
- */
 const updateVariantStock = async (variantId, newStock) => {
     if (!variantId || !mongoose.Types.ObjectId.isValid(variantId)) {
         return { success: false, message: "Invalid variant ID." };
@@ -137,9 +124,6 @@ const updateVariantStock = async (variantId, newStock) => {
     };
 };
 
-/**
- * Direct Mongoose stock increment / decrement
- */
 const adjustVariantStock = async (variantId, delta) => {
     if (!variantId || !mongoose.Types.ObjectId.isValid(variantId)) {
         return { success: false, message: "Invalid variant ID." };

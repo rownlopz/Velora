@@ -23,15 +23,12 @@ router.get("/login", isAdminGuest, adminController.loadLogin);
 router.post("/login", isAdminGuest, adminController.loginController);
 router.get("/logout", adminController.logoutController);
 
-// Dashboard & Analytics
 router.get("/dashboard", adminAuth, reportController.loadDashboard);
 
-// Customer Management
 router.get("/customers", adminAuth, adminController.loadCustomers);
 router.get("/users", adminAuth, adminController.loadCustomers);
 router.post("/users/:userId/toggle-status", adminAuth, adminController.toggleUserStatusController);
 
-// Marketing: Offers Management
 router.get("/offers", adminAuth, offerController.loadOffers);
 router.get("/offers/:offerId", adminAuth, offerController.getOfferController);
 router.post("/offers/create", adminAuth, offerController.createOfferController);
@@ -39,7 +36,6 @@ router.post("/offers/:offerId/edit", adminAuth, offerController.updateOfferContr
 router.post("/offers/:offerId/toggle-status", adminAuth, offerController.toggleOfferStatusController);
 router.post("/offers/:offerId/delete", adminAuth, offerController.deleteOfferController);
 
-// Marketing: Coupons Management
 router.get("/coupons", adminAuth, couponController.loadCoupons);
 router.get("/coupons/:couponId", adminAuth, couponController.getCouponController);
 router.post("/coupons/create", adminAuth, couponController.createCouponController);
@@ -47,7 +43,6 @@ router.post("/coupons/:couponId/edit", adminAuth, couponController.updateCouponC
 router.post("/coupons/:couponId/toggle-status", adminAuth, couponController.toggleCouponStatusController);
 router.post("/coupons/:couponId/delete", adminAuth, couponController.deleteCouponController);
 
-// Sales Reports & Exports
 router.get("/sales-report", adminAuth, reportController.loadSalesReport);
 router.get("/sales-report/export/excel", adminAuth, reportController.exportSalesExcelController);
 router.get("/sales-report/export/pdf", adminAuth, reportController.exportSalesPdfController);
@@ -66,7 +61,6 @@ router.post("/products/:productId/edit", adminAuth, handleProductImageUpload, re
 router.post("/products/:productId/toggle-status", adminAuth, productController.toggleProductStatusController);
 router.post("/products/:productId/delete", adminAuth, productController.deleteProductController);
 
-// Order Management Routes
 router.get("/orders", adminAuth, orderController.loadOrders);
 router.get("/orders/:orderId", adminAuth, orderController.loadOrderDetails);
 router.post("/orders/:orderId/status", adminAuth, orderController.updateOrderStatusController);
@@ -76,7 +70,6 @@ router.post("/orders/:orderId/items/:itemId/return-approve", adminAuth, orderCon
 router.post("/orders/:orderId/items/:itemId/return-reject", adminAuth, orderController.rejectReturnItemController);
 router.post("/orders/:orderId/items/:itemId/restock", adminAuth, orderController.restockReturnItemController);
 
-// Inventory / Stock Management Routes
 router.get("/inventory", adminAuth, inventoryController.loadInventory);
 router.post("/inventory/:variantId/update", adminAuth, inventoryController.updateStockController);
 router.post("/inventory/:variantId/adjust", adminAuth, inventoryController.quickAdjustStockController);

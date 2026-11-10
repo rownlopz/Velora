@@ -118,28 +118,24 @@
                 return;
             }
 
-            // 1. Handle already-paid or successfully recovered purchase BEFORE checking for Razorpay config
             if (data.isAlreadyPaid || (data.success && data.order && data.order.paymentStatus === 'COMPLETED')) {
                 const targetUrl = data.redirectUrl || '/orders/<%= order._id %>/payment-success';
                 window.location.href = targetUrl;
                 return;
             }
 
-            // 2. Handle late payment recovered for a cancelled order (refunded to wallet)
             if (data.isCancelledLateRefund || (data.order && data.order.orderStatus === 'CANCELLED' && data.order.paymentStatus === 'REFUNDED')) {
                 const targetUrl = data.redirectUrl || ('/orders/<%= order._id %>?notice=' + encodeURIComponent(data.message || 'This order was cancelled. Your payment has been refunded to your wallet.'));
                 window.location.href = targetUrl;
                 return;
             }
 
-            // 3. Handle unsuccessful retry or gateway lookup error (e.g. bug #3 retryable lookup error)
             if (!res.ok || !data.success || !data.razorpay) {
                 alert(data.message || 'Unable to retry payment at this time.');
                 resetButton(retryBtn, originalText);
                 return;
             }
 
-            // 4. Open Razorpay checkout ONLY when valid razorpay config is returned
             if (!data.razorpay.keyId || !data.razorpay.orderId) {
                 alert('Payment gateway configuration error. Please contact support.');
                 resetButton(retryBtn, originalText);

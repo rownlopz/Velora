@@ -34,7 +34,7 @@ const addToCartController = async (req, res) => {
         const result = await addToCart(req.session.userId, variantId, quantity || 1, sourceVariantId);
 
         if (isAjax) {
-            // Return updated cart and wishlist count for navbar badges
+
             const cartDetails = await getCartDetails(req.session.userId);
             const cartCount = cartDetails.items.reduce((sum, i) => sum + i.quantity, 0);
             const Wishlist = require("../../models/user/wishlistModel");

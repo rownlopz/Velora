@@ -16,9 +16,6 @@ const PREDEFINED_CANCELLATION_REASONS = [
     "Other",
 ];
 
-/**
- * 1. Fetch paginated orders for a user with status filter & search
- */
 const getUserOrders = async (userId, options = {}) => {
     const { search = "", status = "", page = 1, limit = 10 } = options;
     const filter = { userId };
@@ -61,9 +58,6 @@ const getUserOrders = async (userId, options = {}) => {
     };
 };
 
-/**
- * 2. Fetch single order details for a user
- */
 const getOrderDetails = async (userId, orderId) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -73,9 +67,6 @@ const getOrderDetails = async (userId, orderId) => {
     return { success: true, order };
 };
 
-/**
- * 3. Cancel an entire order
- */
 const cancelEntireOrder = async (userId, orderId, reason = "") => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         return { success: false, message: "Invalid order ID." };
@@ -92,7 +83,6 @@ const cancelEntireOrder = async (userId, orderId, reason = "") => {
     order.cancelledAt = new Date();
     order.cancellationReason = cleanReason;
 
-    // Restore stock for all active items
     for (const item of order.items) {
         if (!["CANCELLED", "RETURNED"].includes(item.status)) {
             item.status = "CANCELLED";
@@ -105,7 +95,6 @@ const cancelEntireOrder = async (userId, orderId, reason = "") => {
         }
     }
 
-    // Refund paid amount to wallet if paid online or wallet
     const isPaid = order.paymentStatus === "COMPLETED" || order.paymentMethod === "WALLET";
     const payable = order.pricing?.currentPayable != null ? order.pricing.currentPayable : (order.pricing?.totalAmount || 0);
 
@@ -126,9 +115,6 @@ const cancelEntireOrder = async (userId, orderId, reason = "") => {
     return { success: true, message: "Order cancelled successfully.", order };
 };
 
-/**
- * 4. Cancel a specific item in an order
- */
 const cancelOrderItem = async (userId, orderId, itemId, reason = "") => {
     if (!orderId || !itemId) return { success: false, message: "Invalid order or item ID." };
 
@@ -147,13 +133,11 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "") => {
     item.cancelledAt = new Date();
     item.cancellationReason = cleanReason;
 
-    // Restore variant stock
     if (item.variantId && !item.isRestocked) {
         await Variant.findByIdAndUpdate(item.variantId, { $inc: { stock: item.quantity } });
         item.isRestocked = true;
     }
 
-    // Refund item amount to wallet if order was paid
     const isPaid = order.paymentStatus === "COMPLETED" || order.paymentMethod === "WALLET";
     const refundAmt = item.finalPayable != null ? item.finalPayable : item.lineTotal;
 
@@ -170,16 +154,12 @@ const cancelOrderItem = async (userId, orderId, itemId, reason = "") => {
         item.refundAmount = refundAmt;
     }
 
-    // Update overall order status
     order.orderStatus = calculateOrderStatusFromItems(order.items);
     await order.save();
 
     return { success: true, message: `Item "${item.productName}" cancelled successfully.`, order };
 };
 
-/**
- * 5. Return an entire order (allowed only when delivered)
- */
 const returnEntireOrder = async (userId, orderId, reason) => {
     const cleanReason = (reason || "").trim();
     if (!cleanReason) return { success: false, message: "A reason is mandatory for returns." };
@@ -208,9 +188,6 @@ const returnEntireOrder = async (userId, orderId, reason) => {
     return { success: true, message: "Return request submitted successfully.", order };
 };
 
-/**
- * 6. Return a specific item in an order
- */
 const returnOrderItem = async (userId, orderId, itemId, reason) => {
     const cleanReason = (reason || "").trim();
     if (!cleanReason) return { success: false, message: "A reason is mandatory for returns." };
@@ -238,9 +215,6 @@ const returnOrderItem = async (userId, orderId, itemId, reason) => {
     return { success: true, message: `Return request for "${item.productName}" submitted.`, order };
 };
 
-/**
- * 7. Background Job: Release stock for expired unpaid online reservations
- */
 const releaseExpiredReservations = async (expirationWindowMinutes = 30) => {
     const cutoffTime = new Date(Date.now() - expirationWindowMinutes * 60 * 1000);
     const expiredOrders = await Order.find({
@@ -289,24 +263,21 @@ const stopReservationExpiryCron = () => {
 };
 
 module.exports = {
-    // Listing & Details
+
     getUserOrders,
     getOrderDetails,
     generateInvoicePdf,
 
-    // Cancellation & Return
     cancelEntireOrder,
     cancelOrderItem,
     returnEntireOrder,
     returnOrderItem,
     PREDEFINED_CANCELLATION_REASONS,
 
-    // Cron & Reservation
     releaseExpiredReservations,
     startReservationExpiryCron,
     stopReservationExpiryCron,
 
-    // Re-exports from Placement & Payment Services
     getCheckoutDetails: placementService.getCheckoutDetails,
     placeOrder: placementService.placeOrder,
     placeCodOrder: placementService.placeCodOrder,

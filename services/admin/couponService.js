@@ -2,10 +2,6 @@ const mongoose = require("mongoose");
 const Coupon = require("../../models/order/couponModel");
 const escapeRegex = require("../../utils/escapeRegex");
 
-/**
- * Normalizes input date strings to Asia/Kolkata timezone boundaries.
- * Date-only strings ("YYYY-MM-DD") are set to 00:00:00.000+05:30 for start and 23:59:59.999+05:30 for end.
- */
 const parseDateBoundary = (dateStr, isEndOfDay = false) => {
     if (!dateStr) return null;
     if (dateStr instanceof Date) return dateStr;
@@ -87,7 +83,6 @@ const createCoupon = async (data) => {
         };
     }
 
-    // Case-insensitive / whitespace-normalized uniqueness check
     const existing = await Coupon.findOne({
         code: { $regex: new RegExp(`^${escapeRegex(normalizedCode)}$`, "i") },
     });
@@ -220,7 +215,6 @@ const updateCoupon = async (couponId, data = {}) => {
         endDate,
     } = data;
 
-    // Validate Code
     let normalizedCode = coupon.code;
     if (code !== undefined) {
         if (!code || typeof code !== "string" || !code.trim()) {
@@ -234,7 +228,6 @@ const updateCoupon = async (couponId, data = {}) => {
             };
         }
 
-        // Check duplicate code excluding this coupon
         const existing = await Coupon.findOne({
             _id: { $ne: couponId },
             code: { $regex: new RegExp(`^${escapeRegex(normalizedCode)}$`, "i") },
@@ -244,13 +237,11 @@ const updateCoupon = async (couponId, data = {}) => {
         }
     }
 
-    // Validate Discount Type
     const newDiscountType = discountType !== undefined ? discountType : coupon.discountType;
     if (!["PERCENTAGE", "FLAT"].includes(newDiscountType)) {
         return { success: false, message: "Invalid discount type. Must be PERCENTAGE or FLAT." };
     }
 
-    // Validate Discount Value
     const valToValidate = discountValue !== undefined ? discountValue : coupon.discountValue;
     const numValue = Number(valToValidate);
     if (!Number.isFinite(numValue) || numValue <= 0) {
@@ -260,7 +251,6 @@ const updateCoupon = async (couponId, data = {}) => {
         return { success: false, message: "Percentage discount cannot exceed 100%." };
     }
 
-    // Validate Min Purchase
     let numMinPurchase = coupon.minPurchase;
     if (minPurchase !== undefined) {
         const parsedMin = Number(minPurchase);
@@ -270,7 +260,6 @@ const updateCoupon = async (couponId, data = {}) => {
         numMinPurchase = Math.round(parsedMin * 100) / 100;
     }
 
-    // Validate Max Discount
     let parsedMaxDiscount = coupon.maxDiscount;
     if (newDiscountType === "FLAT") {
         parsedMaxDiscount = null;
@@ -286,7 +275,6 @@ const updateCoupon = async (couponId, data = {}) => {
         }
     }
 
-    // Validate Usage Limit
     let parsedUsageLimit = coupon.usageLimit;
     if (usageLimit !== undefined) {
         if (usageLimit !== null && String(usageLimit).trim() !== "") {
@@ -300,7 +288,6 @@ const updateCoupon = async (couponId, data = {}) => {
         }
     }
 
-    // Validate Per User Limit
     let parsedPerUser = coupon.perUserLimit;
     if (perUserLimit !== undefined) {
         if (perUserLimit !== null && String(perUserLimit).trim() !== "") {
@@ -314,7 +301,6 @@ const updateCoupon = async (couponId, data = {}) => {
         }
     }
 
-    // Validate Dates
     const start = startDate ? parseDateBoundary(startDate, false) : coupon.startDate;
     const end = endDate ? parseDateBoundary(endDate, true) : coupon.endDate;
 
@@ -405,14 +391,13 @@ const recordCouponUsage = async (couponId, userId, reservationKey = null) => {
 
     const perUserLimit = coupon.perUserLimit || 1;
 
-    // Check if user has already used this coupon
     const userUsage = (coupon.usersUsed || []).find((u) => u.userId.toString() === userId.toString());
     if (userUsage && userUsage.usageCount >= perUserLimit) {
         return { success: false, message: `You have reached the maximum allowed usage limit (${perUserLimit}) for this coupon.` };
     }
 
     if (userUsage) {
-        // Finding 53: bind both conditions to the SAME element using $elemMatch
+
         const query = {
             _id: couponId,
             isActive: true,
